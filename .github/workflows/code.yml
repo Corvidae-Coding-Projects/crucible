@@ -19,6 +19,8 @@ jobs:
     name: Verus, Rust, and TCB
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    env:
+      EVIDENCE_ROOT: target/crucible/evidence/${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
       - name: Check out repository
@@ -64,6 +66,62 @@ jobs:
       - name: Reproduce all Verus proofs
         run: cargo xtask verify --all
 
+      - name: Seal cold proof evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          report_dir=target/crucible/reports
+          proof_dir="$EVIDENCE_ROOT/proof"
+          mkdir -p "$proof_dir"
+          cp "$report_dir/verification.json" "$proof_dir/verification.json"
+          cp "$report_dir/verification.stdout.log" "$proof_dir/verification.stdout.log"
+          cp "$report_dir/verification.stderr.log" "$proof_dir/verification.stderr.log"
+          cp tools/verus-toolchain.lock "$proof_dir/verus-toolchain.lock"
+
+          source_tree=$(git rev-parse 'HEAD^{tree}')
+          tool_lock_sha256=$(sha256sum tools/verus-toolchain.lock | cut -d ' ' -f1)
+          verification_json_sha256=$(sha256sum "$proof_dir/verification.json" | cut -d ' ' -f1)
+          verification_stdout_sha256=$(sha256sum "$proof_dir/verification.stdout.log" | cut -d ' ' -f1)
+          verification_stderr_sha256=$(sha256sum "$proof_dir/verification.stderr.log" | cut -d ' ' -f1)
+          jq --null-input \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg head_sha "$GITHUB_SHA" \
+            --arg source_tree "$source_tree" \
+            --arg tool_lock_sha256 "$tool_lock_sha256" \
+            --arg verification_json_sha256 "$verification_json_sha256" \
+            --arg verification_stdout_sha256 "$verification_stdout_sha256" \
+            --arg verification_stderr_sha256 "$verification_stderr_sha256" \
+            '{
+              schema: "crucible.proof-evidence.v1",
+              run_id: $run_id,
+              run_attempt: $run_attempt,
+              head_sha: $head_sha,
+              source_tree: $source_tree,
+              tool_lock: {
+                path: "tools/verus-toolchain.lock",
+                sealed_copy: "verus-toolchain.lock",
+                sha256: $tool_lock_sha256
+              },
+              proof: {
+                scope: "workspace --locked --all-targets",
+                verification_json_sha256: $verification_json_sha256,
+                stdout_sha256: $verification_stdout_sha256,
+                stderr_sha256: $verification_stderr_sha256
+              }
+            }' > "$proof_dir/manifest.json"
+          (
+            cd "$proof_dir"
+            sha256sum \
+              manifest.json \
+              verification.json \
+              verification.stdout.log \
+              verification.stderr.log \
+              verus-toolchain.lock > SHA256SUMS
+          )
+          chmod -R a-w "$proof_dir"
+
       - name: Enforce trusted-boundary ledger and approved baseline
         run: cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
 
@@ -97,17 +155,53 @@ jobs:
         run: cargo test --all --locked
 
       - name: Validate machine-readable reports
+        shell: bash
         run: |
+          set -euo pipefail
           jq --exit-status '.status == "success" and .unregistered == 0 and .unapproved_growth == 0' target/crucible/reports/tcb-audit.json
-          cargo xtask verify --all
-          jq --exit-status '.status == "success" and .tool_lock == "tools/verus-toolchain.lock"' target/crucible/reports/verification.json
+
+          proof_dir="$EVIDENCE_ROOT/proof"
+          source_tree=$(git rev-parse 'HEAD^{tree}')
+          tool_lock_sha256=$(sha256sum tools/verus-toolchain.lock | cut -d ' ' -f1)
+          jq --exit-status \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_attempt "$GITHUB_RUN_ATTEMPT" \
+            --arg head_sha "$GITHUB_SHA" \
+            --arg source_tree "$source_tree" \
+            --arg tool_lock_sha256 "$tool_lock_sha256" \
+            '.schema == "crucible.proof-evidence.v1"
+              and .run_id == $run_id
+              and .run_attempt == $run_attempt
+              and .head_sha == $head_sha
+              and .source_tree == $source_tree
+              and .tool_lock.sha256 == $tool_lock_sha256
+              and .proof.scope == "workspace --locked --all-targets"' \
+            "$proof_dir/manifest.json"
+          (
+            cd "$proof_dir"
+            sha256sum --check SHA256SUMS
+            jq --exit-status '.status == "success" and .tool_lock == "tools/verus-toolchain.lock"' verification.json
+            test -s verification.stdout.log
+            test -f verification.stderr.log
+            cmp --silent verus-toolchain.lock "$GITHUB_WORKSPACE/tools/verus-toolchain.lock"
+          )
+
+          tcb_dir="$EVIDENCE_ROOT/tcb"
+          mkdir -p "$tcb_dir"
+          cp target/crucible/reports/tcb-audit.json "$tcb_dir/tcb-audit.json"
+          (
+            cd "$tcb_dir"
+            sha256sum tcb-audit.json > SHA256SUMS
+            sha256sum --check SHA256SUMS
+          )
+          chmod -R a-w "$tcb_dir"
 
       - name: Upload proof and trusted-boundary evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: proof-and-tcb-reports
-          path: target/crucible/reports/
+          path: target/crucible/evidence/
           if-no-files-found: error
 
       - name: Record final resources
