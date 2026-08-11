@@ -12,6 +12,13 @@ let run: RunId = target;
 
 use vstd::prelude::*;
 
+pub mod artifact;
+
+pub use artifact::{
+    parse_artifact_id, sha256, ArtifactIdParseError, ArtifactIdentityError, ArtifactRef,
+    ContentDigest, DigestAlgorithm, DigestDecodeError, HashError, Sha256Digest,
+};
+
 verus! {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -188,6 +195,9 @@ define_text_id!(EngineId, IdKind::Engine);
 define_text_id!(ArtifactId, IdKind::Artifact);
 define_text_id!(EvidenceId, IdKind::Evidence);
 define_text_id!(ProofArtifactId, IdKind::ProofArtifact);
+
+#[cfg(test)]
+mod artifact_runtime_tests;
 
 #[cfg(test)]
 mod unit_tests;

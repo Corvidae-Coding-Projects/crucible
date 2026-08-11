@@ -18,6 +18,7 @@ Current work establishes and extends:
 - implementation-ready acceptance criteria;
 - the pinned Verus/Rust/Z3/verusfmt workspace and reproducible proof command;
 - verified typed identifiers and versioned identity envelopes;
+- project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
