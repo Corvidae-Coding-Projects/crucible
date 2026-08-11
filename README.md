@@ -65,6 +65,7 @@ explicit Verus verification targets rather than delegated to an external YAML pa
 | Verus toolchain and workspace | Phase 0.1 implemented: pinned, digest-bound, and proof-checked |
 | Typed core identifiers | 16 distinct Verus types with versioned envelope round trips |
 | Content-addressed artifact identity | Verified SHA-256, complete canonical codec, typed algorithm dispatch, checksum-pinned NIST vectors, and integrity checks; object store pending |
+| Evidence and provenance graph | Verified structural admission, append-only/idempotent transitions, borrowed retries, normative edge direction, and atomic multi-input derivations; persistence pending |
 | Trusted-boundary enforcement | Verified scanner/reconciliation, approved baseline, and CI known-defect fixture |
 | Crucible YAML implementation | Not yet implemented |
 | Execution and evidence core | Not yet implemented |

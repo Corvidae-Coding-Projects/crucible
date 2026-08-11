@@ -13,10 +13,17 @@ let run: RunId = target;
 use vstd::prelude::*;
 
 pub mod artifact;
+pub mod provenance;
 
 pub use artifact::{
     parse_artifact_id, sha256, ArtifactIdParseError, ArtifactIdentityError, ArtifactRef,
     ContentDigest, DigestAlgorithm, DigestDecodeError, HashError, Sha256Digest,
+};
+pub use provenance::{
+    ActorIdentity, ActorKind, EvidenceEnvelope, EvidenceEnvelopeError, EvidenceField,
+    EvidenceGraph, EvidenceGraphError, EvidenceKind, EvidenceNode, EvidenceValidationError,
+    GraphInsertOutcome, ProducerIdentity, ProvenanceEdge, ProvenanceRelation, SchemaIdentity,
+    TimestampError, TransformationConfiguration, TransformationIdentity, UtcTimestamp,
 };
 
 verus! {
@@ -198,6 +205,9 @@ define_text_id!(ProofArtifactId, IdKind::ProofArtifact);
 
 #[cfg(test)]
 mod artifact_runtime_tests;
+
+#[cfg(test)]
+mod provenance_runtime_tests;
 
 #[cfg(test)]
 mod unit_tests;

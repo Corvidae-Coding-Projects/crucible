@@ -561,6 +561,28 @@ pub struct ArtifactRef {
     pub media_type: Option<String>,
 }
 
+#[verifier::ext_equal]
+pub struct ArtifactRefView {
+    pub id: Seq<char>,
+    pub size_bytes: u64,
+    pub media_type: Option<Seq<char>>,
+}
+
+impl View for ArtifactRef {
+    type V = ArtifactRefView;
+
+    open spec fn view(&self) -> ArtifactRefView {
+        ArtifactRefView {
+            id: self.id@,
+            size_bytes: self.size_bytes,
+            media_type: match &self.media_type {
+                Some(media_type) => Some(media_type@),
+                None => None,
+            },
+        }
+    }
+}
+
 fn artifact_id_for_digest(digest: &Sha256Digest) -> (id: ArtifactId)
     ensures
         id@ == artifact_id_spec(digest@),
@@ -1058,7 +1080,7 @@ pub open spec fn artifact_id_spec(digest: Seq<u8>) -> Seq<char> {
     seq!['s', 'h', 'a', '2', '5', '6', ':'] + hex_encode_spec(digest)
 }
 
-proof fn lemma_artifact_id_spec_is_canonical(digest: Seq<u8>)
+pub proof fn lemma_artifact_id_spec_is_canonical(digest: Seq<u8>)
     requires
         digest.len() == SHA256_DIGEST_BYTES,
     ensures

@@ -19,6 +19,8 @@ Current work establishes and extends:
 - the pinned Verus/Rust/Z3/verusfmt workspace and reproducible proof command;
 - verified typed identifiers and versioned identity envelopes;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
+- verified structurally valid append-only evidence/provenance transitions, atomic multi-input
+  derivations, retry-safe borrowed publication, and versioned evidence envelopes;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

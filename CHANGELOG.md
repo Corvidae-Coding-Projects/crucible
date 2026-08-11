@@ -19,5 +19,9 @@ begin.
 - Pinned Verus workspace, verified typed identifiers, strict trusted-boundary policy, and code CI.
 - Project-owned verified SHA-256, complete canonical digest decoding, algorithm-labeled artifact-ID
   parsing and dispatch, checksum-pinned NIST CAVP vectors, and content/size integrity checks.
+- Verified structurally validated append-only evidence/provenance publication, typed identity
+  conflicts and missing endpoints, constructor-only portable UTC timestamps, exhaustive stable-tag
+  equality, retry-safe borrowed payloads, normative relation direction, atomic multi-input derived
+  evidence, explicit no-configuration identity, and versioned envelopes.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main
