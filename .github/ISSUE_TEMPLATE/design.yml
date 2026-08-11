@@ -1,0 +1,56 @@
+name: Design change
+description: Propose a material architecture, schema, governance, or verification-policy change.
+title: "[Design]: "
+labels:
+  - "area: architecture"
+  - "status: needs design"
+body:
+  - type: input
+    id: sections
+    attributes:
+      label: Affected specification sections
+      placeholder: "For example: §§9, 14, 43, and 95"
+    validations:
+      required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Proposed decision
+      description: State the change precisely enough to evaluate and implement.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence and rationale
+    validations:
+      required: true
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Preserved and changed invariants
+      description: Include evidence meaning, compatibility, replay, isolation, and scope.
+    validations:
+      required: true
+  - type: textarea
+    id: verus
+    attributes:
+      label: Verus and trusted-boundary impact
+      description: Identify specifications, proofs, assumptions, and migration opportunities.
+    validations:
+      required: true
+  - type: textarea
+    id: migration
+    attributes:
+      label: Migration and acceptance plan
+    validations:
+      required: true
+  - type: checkboxes
+    id: governance
+    attributes:
+      label: Governance confirmation
+      options:
+        - label: I reviewed `GOVERNANCE.md` and the committed-scope rule.
+          required: true
+        - label: I described any capability reduction or trusted-boundary growth explicitly.
+          required: true

@@ -1,0 +1,31 @@
+# Rust and Verus build output
+/target/
+/target-verus/
+**/*.rs.bk
+
+# Crucible runtime state and generated evidence
+/.crucible/
+/objects/
+/findings/
+/reports/
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local tool caches
+.lycheecache
+.markdownlint-cli2-cache
+node_modules/
+
+# Coverage and profiling output
+coverage/
+*.profraw
+*.profdata

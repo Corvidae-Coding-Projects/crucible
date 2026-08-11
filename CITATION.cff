@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: >-
+  If you use Crucible in research or engineering work, please cite the repository and the exact
+  release or commit used.
+title: Crucible
+type: software
+authors:
+  - name: Corvidae Coding Projects
+abstract: >-
+  A universal software bug-finding, triage, repair, and verification harness designed around
+  reproducible evidence, minimized counterexamples, executable invariants, and adversarial patch
+  verification.
+repository-code: https://github.com/Corvidae-Coding-Projects/crucible
+url: https://github.com/Corvidae-Coding-Projects/crucible
+license: MIT
+version: 0.0.0-design
+keywords:
+  - software testing
+  - fuzzing
+  - formal verification
+  - Verus
+  - property-based testing
+  - symbolic execution
+  - concurrency testing
+  - program repair

@@ -1,0 +1,11 @@
+cache = true
+max_cache_age = "1d"
+max_retries = 3
+retry_wait_time = 2
+timeout = 20
+accept = [200, 203, 206, 429]
+exclude = [
+  "https://github.com/Corvidae-Coding-Projects/crucible/security/advisories/new",
+  "https://github.com/Corvidae-Coding-Projects/crucible/discussions",
+  "https://github.com/Corvidae-Coding-Projects/crucible/issues"
+]

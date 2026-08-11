@@ -1,0 +1,56 @@
+name: Capability proposal
+description: Propose a new engine, oracle, target, integration, or expansion of existing scope.
+title: "[Capability]: "
+labels:
+  - enhancement
+  - "status: needs design"
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and motivating evidence
+      description: Which defects, targets, users, or verification gaps are not adequately served?
+    validations:
+      required: true
+  - type: textarea
+    id: capability
+    attributes:
+      label: Proposed capability
+      description: Describe behavior, interfaces, inputs, outputs, evidence, and expected users.
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Evidence and scenario integration
+      description: Explain producers, observations, provenance, oracles, replay, and minimization.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification and testing strategy
+      description: Include Verus properties, trusted boundaries, fixtures, and acceptance tests.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Security, privacy, performance, and compatibility impact
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope confirmation
+      options:
+        - label: This proposal does not require an unacknowledged reduction of committed scope.
+          required: true
+        - label: I identified new assumptions and unverified boundaries.
+          required: true

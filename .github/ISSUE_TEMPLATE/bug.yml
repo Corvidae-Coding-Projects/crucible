@@ -1,0 +1,79 @@
+name: Reproducible defect
+description: Report a defect in the repository, specification, tooling, or implemented behavior.
+title: "[Bug]: "
+labels:
+  - bug
+  - "status: needs triage"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for providing evidence. Do not include vulnerabilities, secrets, private target
+        data, or exploit details here; use the private security reporting form instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Design specification
+        - Repository and documentation
+        - Verus proof or trusted boundary
+        - Configuration and Crucible YAML
+        - Execution and isolation
+        - Evidence, storage, or replay
+        - Oracle, finding, or minimization
+        - Engine or target adapter
+        - CI, release, or supply chain
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: revision
+    attributes:
+      label: Affected revision or version
+      description: Commit SHA, tag, document section, or artifact identity.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: State exactly what happened and include sanitized evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior or invariant
+      description: State what should have held and why.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include deterministic steps, inputs, environment, seed, and failure predicate.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment and capability evidence
+      description: OS, architecture, toolchain, Verus/solver, adapter, isolation, and limitations.
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Related findings, logs, screenshots, hypotheses, or attempted fixes.
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I searched existing issues and discussions for duplicates.
+          required: true
+        - label: I removed secrets and private or unauthorized target data.
+          required: true
+        - label: This report does not contain a security vulnerability or exploit details.
+          required: true
