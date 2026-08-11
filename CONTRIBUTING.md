@@ -13,8 +13,8 @@ fixtures, adapters, documentation, and adversarial review.
    change.
 4. Report security-sensitive matters privately as described in [SECURITY.md](SECURITY.md).
 
-The repository is currently specification-first. Do not present an unimplemented capability as
-available, and do not reduce the declared end-state scope merely to simplify an early phase.
+The repository is in active Phase 0 implementation. Do not present an unimplemented capability
+as available, and do not reduce the declared end-state scope merely to simplify an early phase.
 
 ## Contribution principles
 
@@ -76,23 +76,27 @@ A proposal should include:
 6. Open a pull request using the repository template.
 7. Respond to review and keep the branch current without rewriting other contributors' work.
 
-For the current documentation-only phase, run:
+For documentation changes, run:
 
 ```bash
 bash scripts/check-docs.sh
 npx --yes markdownlint-cli2@0.23.2 '**/*.md' '#node_modules'
 ```
 
-Once the Verus workspace exists, the mandatory project interface will include:
+For every code change, run the mandatory project interfaces:
 
 ```bash
-verusfmt --check
+cargo xtask format --check
 cargo xtask verify --all
 cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
 cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all
 ```
+
+The xtask commands consume `tools/verus-toolchain.lock`, resolve absolute tools, validate exact
+versions and binary digests, use `--locked` proof builds, and invalidate their own stale reports
+before publishing new machine-readable evidence.
 
 ## Pull-request expectations
 

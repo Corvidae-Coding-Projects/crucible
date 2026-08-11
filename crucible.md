@@ -4602,7 +4602,7 @@ Do not attempt to build the entire system in one uncontrolled change.
 At the end of every logical change, run:
 
 ```bash
-verusfmt --check
+cargo xtask format --check
 cargo xtask verify --all
 cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
 cargo fmt --check
@@ -4615,6 +4615,10 @@ All should pass unless the current task explicitly documents a temporary expecte
 The workspace `xtask` commands are mandatory project interfaces. They pin and invoke the
 correct Verus and solver versions, reproduce proofs, validate proof-artifact identities, and
 emit machine-readable proof and trusted-boundary reports.
+
+The formatting interface performs deterministic workspace source discovery and invokes the
+pinned `verusfmt` on each source separately. This avoids the formatter's invalid zero-argument
+form and shell expansion or command-line-length dependence.
 
 ### 93.2.1 Start in Verus
 

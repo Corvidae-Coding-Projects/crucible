@@ -1,0 +1,17 @@
+[workspace]
+members = ["crates/crucible-core", "crates/crucible-xtask"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Corvidae-Coding-Projects/crucible"
+rust-version = "1.97.1"
+
+[workspace.dependencies]
+vstd = { git = "https://github.com/verus-lang/verus.git", rev = "92f466f247f45128c630d1c843fd6e27d2115587" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(verus_only)'] }

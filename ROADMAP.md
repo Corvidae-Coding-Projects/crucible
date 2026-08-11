@@ -6,18 +6,22 @@ repository milestone; it does not replace or narrow the specification.
 
 No dates are promised until implementation velocity and Verus/toolchain constraints are measured.
 
-## Current milestone: repository and specification foundation
+## Current milestone: Phase 0 implementation foundation
 
-Current work establishes:
+Current work establishes and extends:
 
 - public project governance and contribution processes;
 - the complete architectural specification;
 - explicit Verus-first and trusted-boundary policy;
 - the project-owned Crucible YAML requirements;
 - evidence, provenance, scenario, build, plugin, proof, and capability identities;
-- implementation-ready acceptance criteria.
+- implementation-ready acceptance criteria;
+- the pinned Verus/Rust/Z3/verusfmt workspace and reproducible proof command;
+- verified typed identifiers and versioned identity envelopes;
+- verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
-Exit requires an accepted repository baseline and actionable Phase 0 implementation plan.
+Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
+the completed Phase 0.1 slice is a dependency checkpoint, not a reduction of that exit standard.
 
 ## Delivery groups
 

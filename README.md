@@ -1,6 +1,7 @@
 # Crucible
 
 [![Documentation](https://github.com/Corvidae-Coding-Projects/crucible/actions/workflows/docs.yml/badge.svg)](https://github.com/Corvidae-Coding-Projects/crucible/actions/workflows/docs.yml)
+[![Code verification](https://github.com/Corvidae-Coding-Projects/crucible/actions/workflows/code.yml/badge.svg)](https://github.com/Corvidae-Coding-Projects/crucible/actions/workflows/code.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/Corvidae-Coding-Projects/crucible/badge)](https://scorecard.dev/viewer/?uri=github.com/Corvidae-Coding-Projects/crucible)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
@@ -9,9 +10,9 @@ designed to turn failures into reproducible evidence, minimized counterexamples,
 invariants, verified repairs, and permanent regression knowledge.
 
 > [!IMPORTANT]
-> Crucible is currently a design specification, not a production-ready executable. The
-> repository is establishing its architecture, verification requirements, and implementation
-> plan before the first code phase begins.
+> Crucible is under active Phase 0 implementation and is not yet a production-ready executable.
+> The pinned Verus workspace, verified identity types, proof-reproduction interface, and strict
+> trusted-boundary policy are present; later Phase 0–22 capabilities remain committed work.
 
 Crucible is not an exploit framework. It is intended for software that the operator owns or is
 authorized to test, with local and isolated execution as the default.
@@ -43,12 +44,12 @@ replacements for it.
 
 ## Verus-first implementation
 
-Crucible will be written in Verus Rust wherever the pinned Verus toolchain can express the
+Crucible is written in Verus Rust wherever the pinned Verus toolchain can express the
 required code. This applies to ordinary glue and transformations as well as traditionally
 high-assurance algorithms.
 
-Unavoidable unverified boundaries must be narrow, specified, tested, and registered in a
-versioned trusted-boundary ledger. CI will reject unregistered assumptions and unapproved
+Unavoidable unverified boundaries are narrow, specified, tested, and registered in a
+versioned trusted-boundary ledger. CI rejects unregistered assumptions and unapproved
 growth of the trusted computing base.
 
 Crucible also owns its YAML-compatible configuration implementation. The lexer, parser,
@@ -61,7 +62,9 @@ explicit Verus verification targets rather than delegated to an external YAML pa
 | --- | --- |
 | Architecture and complete product scope | Draft specification available |
 | Repository governance and contribution process | Established |
-| Verus toolchain and workspace | Not yet implemented |
+| Verus toolchain and workspace | Phase 0.1 implemented: pinned, digest-bound, and proof-checked |
+| Typed core identifiers | 16 distinct Verus types with versioned envelope round trips |
+| Trusted-boundary enforcement | Verified scanner/reconciliation, approved baseline, and CI known-defect fixture |
 | Crucible YAML implementation | Not yet implemented |
 | Execution and evidence core | Not yet implemented |
 | Bug-finding engines and target adapters | Planned in staged phases |

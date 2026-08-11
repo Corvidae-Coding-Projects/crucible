@@ -1,0 +1,119 @@
+name: Code verification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-verification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verus, Rust, and TCB
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Record initial resources
+        run: |
+          df -h .
+          free -h
+          ps -eo pid,pcpu,pmem,rss,comm --sort=-rss | head -20
+
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal --component clippy --component rustfmt
+
+      - name: Install digest-checked Verus toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_root="$RUNNER_TEMP/crucible-tools"
+          mkdir -p "$tool_root/verus" "$tool_root/verusfmt"
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/verus.zip" \
+            https://github.com/verus-lang/verus/releases/download/release/0.2026.08.09.92f466f/verus-0.2026.08.09.92f466f-x86-linux.zip
+          printf '%s  %s\n' \
+            2f5a41c553f424aacdd732339e9d125563716a0b003c27730f75d6f81a282cef \
+            "$RUNNER_TEMP/verus.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/verus.zip" -d "$tool_root/verus"
+
+          curl --fail --location --retry 3 \
+            --output "$RUNNER_TEMP/verusfmt.tar.xz" \
+            https://github.com/verus-lang/verusfmt/releases/download/v0.7.2/verusfmt-x86_64-unknown-linux-gnu.tar.xz
+          printf '%s  %s\n' \
+            c5e0a8e07337055b2469d2878ddcc589da1f4be91348bb1917ce122ea46d4015 \
+            "$RUNNER_TEMP/verusfmt.tar.xz" | sha256sum --check --strict
+          tar -xJf "$RUNNER_TEMP/verusfmt.tar.xz" -C "$tool_root/verusfmt" --strip-components=1
+
+          printf '%s\n' "$tool_root/verus/verus-x86-linux" >> "$GITHUB_PATH"
+          printf '%s\n' "$tool_root/verusfmt" >> "$GITHUB_PATH"
+
+      - name: Verify formatting through pinned project interface
+        run: cargo xtask format --check
+
+      - name: Reproduce all Verus proofs
+        run: cargo xtask verify --all
+
+      - name: Enforce trusted-boundary ledger and approved baseline
+        run: cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
+
+      - name: Demonstrate rejection of an unregistered boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture=crates/crucible-xtask/tcb-known-defect/unregistered.rs
+          mkdir -p "$(dirname "$fixture")"
+          trap 'rm -f "$fixture"' EXIT
+          printf '%s\n' \
+            'use vstd::prelude::*;' \
+            'verus! {' \
+            '#[verifier::external_body]' \
+            'fn intentionally_unregistered() {}' \
+            '}' > "$fixture"
+          if cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth; then
+            echo 'strict TCB audit accepted the known-defect fixture' >&2
+            exit 1
+          fi
+          rm -f "$fixture"
+          trap - EXIT
+          cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
+
+      - name: Enforce Rust formatting and lints
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run all executable and documentation tests
+        run: cargo test --all --locked
+
+      - name: Validate machine-readable reports
+        run: |
+          jq --exit-status '.status == "success" and .unregistered == 0 and .unapproved_growth == 0' target/crucible/reports/tcb-audit.json
+          cargo xtask verify --all
+          jq --exit-status '.status == "success" and .tool_lock == "tools/verus-toolchain.lock"' target/crucible/reports/verification.json
+
+      - name: Upload proof and trusted-boundary evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: proof-and-tcb-reports
+          path: target/crucible/reports/
+          if-no-files-found: error
+
+      - name: Record final resources
+        if: always()
+        run: |
+          du -sh target || true
+          df -h .
+          free -h
+          ps -eo pid,pcpu,pmem,rss,comm --sort=-rss | head -20
