@@ -8,6 +8,7 @@ pub mod layout;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
+pub mod resolve_float;
 pub mod resolve_integer;
 pub mod structural;
 pub mod token;
@@ -60,6 +61,12 @@ pub use resolve::{
 pub use resolve_integer::{
     convert_core_integer, CoreInteger, CoreIntegerError, CoreIntegerErrorKind, CoreIntegerLimits,
     CORE_INTEGER_CONVERSION_VERSION, CORE_INTEGER_MAGNITUDE_RADIX, MAX_PROFILE1_CORE_INTEGER_LIMBS,
+};
+
+pub use resolve_float::{
+    convert_core_finite_float, CoreFiniteFloat, CoreFiniteFloatError, CoreFiniteFloatErrorKind,
+    CoreFiniteFloatLimits, CORE_FINITE_FLOAT_CONVERSION_VERSION,
+    MAX_PROFILE1_CORE_FLOAT_COEFFICIENT_DIGITS, MAX_PROFILE1_CORE_FLOAT_EXPONENT_DIGITS,
 };
 
 pub use plain::{

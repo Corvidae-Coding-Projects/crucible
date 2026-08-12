@@ -6,6 +6,7 @@
 #![allow(clippy::needless_lifetimes)]
 #![allow(clippy::question_mark)]
 #![allow(clippy::too_many_arguments)]
+#![allow(clippy::vec_init_then_push)]
 
 use vstd::prelude::*;
 

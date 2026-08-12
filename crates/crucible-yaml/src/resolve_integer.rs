@@ -1,3 +1,4 @@
+#![allow(clippy::vec_init_then_push)]
 //! Verified arbitrary-width conversion of YAML 1.2.2 Core integers.
 //!
 //! Magnitudes use canonical little-endian base-1,000,000,000 limbs.  Conversion never passes

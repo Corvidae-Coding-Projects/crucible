@@ -1783,10 +1783,17 @@ arbitrary-length magnitude stored as little-endian base-1,000,000,000 limbs, and
 `0o` octal, and `0x` hexadecimal spellings convert by a bespoke verified multiply-add machine.
 Leading magnitude zeroes are removed, every zero has one positive canonical form, and a lowered
 limb cap fails at the exact first source digit whose canonical per-digit result needs the excluded
-limb. Finite floats are represented exactly as a sign, an arbitrary-length base-10 coefficient,
-and a normalized arbitrary-length signed decimal exponent; equivalent
-spellings such as `1.0`, `1e0`, and `10e-1` normalize to one value without an intermediate
-IEEE-754 rounding step. Positive
+limb. Finite floats are represented exactly as a sign, a canonical arbitrary-length coefficient
+stored as little-endian decimal digits, and a canonical arbitrary-length signed exponent stored as
+little-endian decimal digits. Leading coefficient zeroes and value-preserving trailing coefficient
+zeroes are removed in linear time, with the removed scale applied by a bespoke verified signed
+decimal add/subtract machine. Exponent zero has one positive canonical form; coefficient zero
+retains the source sign so negative zero remains distinct. Equivalent spellings such as `1.0`,
+`1e0`, and `10e-1` normalize to one value without an intermediate IEEE-754 rounding step. A
+caller-lowered coefficient- or exponent-digit limit reports the exact first source digit requiring
+the excluded canonical digit; when normalization creates the excluded exponent digit, the error
+uses the exact coefficient, fraction, or exponent source anchor responsible for that scale.
+Positive
 and negative infinity are distinct values, every accepted NaN spelling has one canonical semantic
 value, and negative zero remains distinguishable until schema lowering explicitly chooses
 otherwise. Later lowering performs checked conversion to any required fixed-width integer or
@@ -1839,8 +1846,9 @@ after that same exact equality check and never hides a duplicate among the recei
 explicit entries.
 
 The absolute semantic-node, sequence-edge, mapping-entry, anchor, alias, tag-byte, per-scalar decoded
-code-point, aggregate decoded code-point, integer-magnitude-limb, expanded-reference,
-canonical-key-byte, and work-stack caps are each 1,048,576; the absolute semantic depth is 4,096.
+code-point, aggregate decoded code-point, integer-magnitude-limb, finite-float coefficient-digit,
+finite-float exponent-digit, expanded-reference, canonical-key-byte, and work-stack caps are each
+1,048,576; the absolute semantic depth is 4,096.
 Callers MAY lower every cap but cannot raise it. Expanded-reference cost counts each node occurrence that a fully materialized tree
 would visit, including repeated visits through aliases and merges, even though the public graph
 retains sharing; checked addition rejects exponential alias or merge amplification before

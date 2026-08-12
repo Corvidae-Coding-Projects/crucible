@@ -69,6 +69,10 @@ Current work establishes and extends:
   base-1,000,000,000 limbs, with decimal/octal/hex equivalence, positive-zero normalization,
   per-digit canonicalization, caller-lowered absolute limb limits, overflow proofs, and exact
   executable-to-pure correspondence;
+- verified exact Core finite-decimal conversion into canonical little-endian decimal coefficient
+  and signed-exponent digits, with equivalent-spelling normalization, distinct negative zero,
+  linear-time arbitrary-width handling, caller-lowered coefficient/exponent limits at exact source
+  anchors, no IEEE-754 intermediate, and exact executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

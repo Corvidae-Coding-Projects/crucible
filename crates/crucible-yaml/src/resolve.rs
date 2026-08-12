@@ -196,6 +196,44 @@ pub open spec fn core_digit_run_end_spec(
     }
 }
 
+pub proof fn lemma_core_digit_run_to_target_has_only_digits(
+    input: Seq<u32>,
+    index: int,
+    target: int,
+    base: CoreIntegerBase,
+    fuel: nat,
+)
+    requires
+        0 <= index <= target <= input.len(),
+        fuel >= (target - index) as nat,
+        core_digit_run_end_spec(input, index, base, fuel) == target,
+    ensures
+        forall|candidate: int|
+            index <= candidate < target ==> core_digit_for_base_spec(input[candidate], base),
+    decreases fuel,
+{
+    if index < target {
+        assert(fuel > 0);
+        reveal(core_digit_run_end_spec);
+        assert(core_digit_for_base_spec(input[index], base));
+        lemma_core_digit_run_to_target_has_only_digits(
+            input,
+            index + 1,
+            target,
+            base,
+            (fuel - 1) as nat,
+        );
+        assert forall|candidate: int| index <= candidate < target implies core_digit_for_base_spec(
+            input[candidate],
+            base,
+        ) by {
+            if candidate > index {
+                assert(index + 1 <= candidate);
+            }
+        }
+    }
+}
+
 pub proof fn lemma_core_digit_run_to_end_has_only_digits(
     input: Seq<u32>,
     index: int,
@@ -209,23 +247,8 @@ pub proof fn lemma_core_digit_run_to_end_has_only_digits(
     ensures
         forall|candidate: int|
             index <= candidate < input.len() ==> core_digit_for_base_spec(input[candidate], base),
-    decreases fuel,
 {
-    if index < input.len() {
-        assert(fuel > 0);
-        reveal(core_digit_run_end_spec);
-        assert(core_digit_for_base_spec(input[index], base));
-        lemma_core_digit_run_to_end_has_only_digits(input, index + 1, base, (fuel - 1) as nat);
-        assert forall|candidate: int|
-            index <= candidate < input.len() implies core_digit_for_base_spec(
-            input[candidate],
-            base,
-        ) by {
-            if candidate > index {
-                assert(index + 1 <= candidate);
-            }
-        }
-    }
+    lemma_core_digit_run_to_target_has_only_digits(input, index, input.len() as int, base, fuel);
 }
 
 fn core_digit_run_end(input: &[u32], start: usize, base: CoreIntegerBase) -> (end: usize)
@@ -498,6 +521,167 @@ pub open spec fn core_finite_float_spec(input: Seq<u32>) -> Option<CorePlainScal
     }
 }
 
+pub proof fn lemma_core_finite_float_has_exact_digits(
+    input: Seq<u32>,
+    negative: bool,
+    whole: CoreScalarRange,
+    fraction: Option<CoreScalarRange>,
+    exponent_negative: bool,
+    exponent: Option<CoreScalarRange>,
+)
+    requires
+        input.len() <= MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS,
+        core_finite_float_spec(input) == Some(
+            CorePlainScalarClass::FiniteFloat {
+                negative,
+                whole,
+                fraction,
+                exponent_negative,
+                exponent,
+            },
+        ),
+    ensures
+        whole.start <= whole.end <= input.len(),
+        forall|index: int|
+            whole.start <= index < whole.end ==> core_digit_for_base_spec(
+                input[index],
+                CoreIntegerBase::Decimal,
+            ),
+        match fraction {
+            Some(range) => {
+                range.start <= range.end <= input.len() && forall|index: int|
+                    range.start <= index < range.end ==> core_digit_for_base_spec(
+                        input[index],
+                        CoreIntegerBase::Decimal,
+                    )
+            },
+            None => true,
+        },
+        match exponent {
+            Some(range) => {
+                range.start < range.end <= input.len() && forall|index: int|
+                    range.start <= index < range.end ==> core_digit_for_base_spec(
+                        input[index],
+                        CoreIntegerBase::Decimal,
+                    )
+            },
+            None => true,
+        },
+        whole.start < whole.end || match fraction {
+            Some(range) => range.start < range.end,
+            None => false,
+        },
+{
+    let start = core_sign_body_start_spec(input);
+    let whole_end = core_digit_run_end_spec(
+        input,
+        start,
+        CoreIntegerBase::Decimal,
+        (input.len() - start) as nat,
+    );
+    let has_dot = whole_end < input.len() && input[whole_end] == 0x2e;
+    let fraction_start = if has_dot {
+        whole_end + 1
+    } else {
+        whole_end
+    };
+    let fraction_end = if has_dot {
+        core_digit_run_end_spec(
+            input,
+            fraction_start,
+            CoreIntegerBase::Decimal,
+            (input.len() - fraction_start) as nat,
+        )
+    } else {
+        whole_end
+    };
+    let exponent_marker = if has_dot {
+        fraction_end
+    } else {
+        whole_end
+    };
+    let has_exponent = exponent_marker < input.len() && (input[exponent_marker] == 0x65
+        || input[exponent_marker] == 0x45);
+    let exponent_start = if has_exponent && exponent_marker + 1 < input.len() && (
+    input[exponent_marker + 1] == 0x2d || input[exponent_marker + 1] == 0x2b) {
+        exponent_marker + 2
+    } else if has_exponent {
+        exponent_marker + 1
+    } else {
+        exponent_marker
+    };
+    reveal(core_finite_float_spec);
+    assert(0 <= start <= whole_end <= input.len());
+    assert(whole.start == start as u64);
+    assert(whole.end == whole_end as u64);
+    lemma_core_digit_run_to_target_has_only_digits(
+        input,
+        start,
+        whole_end,
+        CoreIntegerBase::Decimal,
+        (input.len() - start) as nat,
+    );
+    assert forall|index: int| whole.start <= index < whole.end implies core_digit_for_base_spec(
+        input[index],
+        CoreIntegerBase::Decimal,
+    ) by {
+        assert(start <= index < whole_end);
+    }
+    if has_dot {
+        let range = fraction.unwrap();
+        assert(fraction == Some(range));
+        assert(range.start == fraction_start as u64);
+        assert(range.end == fraction_end as u64);
+        assert(0 <= fraction_start <= fraction_end <= input.len());
+        assert(core_digit_run_end_spec(
+            input,
+            fraction_start,
+            CoreIntegerBase::Decimal,
+            (input.len() - fraction_start) as nat,
+        ) == fraction_end);
+        lemma_core_digit_run_to_target_has_only_digits(
+            input,
+            fraction_start,
+            fraction_end,
+            CoreIntegerBase::Decimal,
+            (input.len() - fraction_start) as nat,
+        );
+        assert forall|index: int| range.start <= index < range.end implies core_digit_for_base_spec(
+            input[index],
+            CoreIntegerBase::Decimal,
+        ) by {
+            assert(fraction_start <= index < fraction_end);
+        }
+    }
+    if has_exponent {
+        let range = exponent.unwrap();
+        let exponent_end = input.len() as int;
+        assert(exponent == Some(range));
+        assert(range.start == exponent_start as u64);
+        assert(range.end == exponent_end as u64);
+        assert(0 <= exponent_start < exponent_end <= input.len());
+        assert(core_digit_run_end_spec(
+            input,
+            exponent_start,
+            CoreIntegerBase::Decimal,
+            (input.len() - exponent_start) as nat,
+        ) == exponent_end);
+        lemma_core_digit_run_to_target_has_only_digits(
+            input,
+            exponent_start,
+            exponent_end,
+            CoreIntegerBase::Decimal,
+            (input.len() - exponent_start) as nat,
+        );
+        assert forall|index: int| range.start <= index < range.end implies core_digit_for_base_spec(
+            input[index],
+            CoreIntegerBase::Decimal,
+        ) by {
+            assert(exponent_start <= index < exponent_end);
+        }
+    }
+}
+
 fn core_finite_float(input: &[u32]) -> (class: Option<CorePlainScalarClass>)
     ensures
         class == core_finite_float_spec(input@),
@@ -691,6 +875,8 @@ pub proof fn lemma_classified_core_integer_has_exact_digits(
             digits.start <= index < digits.end ==> core_digit_for_base_spec(input[index], base),
 {
     reveal(classify_core_plain_scalar_spec);
+    reveal(effective_core_scalar_limit_spec);
+    assert(input.len() <= MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS);
     reveal(classify_core_plain_scalar_unbounded_spec);
     assert(!core_null_spec(input));
     assert(!core_true_spec(input));
@@ -735,6 +921,78 @@ pub proof fn lemma_classified_core_integer_has_exact_digits(
             (input.len() - 2) as nat,
         );
     }
+}
+
+pub proof fn lemma_classified_core_finite_float_has_exact_digits(
+    input: Seq<u32>,
+    limits: CoreScalarLimitsView,
+    negative: bool,
+    whole: CoreScalarRange,
+    fraction: Option<CoreScalarRange>,
+    exponent_negative: bool,
+    exponent: Option<CoreScalarRange>,
+)
+    requires
+        classify_core_plain_scalar_spec(input, limits) == Ok(
+            CorePlainScalarClass::FiniteFloat {
+                negative,
+                whole,
+                fraction,
+                exponent_negative,
+                exponent,
+            },
+        ),
+    ensures
+        whole.start <= whole.end <= input.len(),
+        forall|index: int|
+            whole.start <= index < whole.end ==> core_digit_for_base_spec(
+                input[index],
+                CoreIntegerBase::Decimal,
+            ),
+        match fraction {
+            Some(range) => {
+                range.start <= range.end <= input.len() && forall|index: int|
+                    range.start <= index < range.end ==> core_digit_for_base_spec(
+                        input[index],
+                        CoreIntegerBase::Decimal,
+                    )
+            },
+            None => true,
+        },
+        match exponent {
+            Some(range) => {
+                range.start < range.end <= input.len() && forall|index: int|
+                    range.start <= index < range.end ==> core_digit_for_base_spec(
+                        input[index],
+                        CoreIntegerBase::Decimal,
+                    )
+            },
+            None => true,
+        },
+        whole.start < whole.end || match fraction {
+            Some(range) => range.start < range.end,
+            None => false,
+        },
+{
+    reveal(classify_core_plain_scalar_spec);
+    reveal(classify_core_plain_scalar_unbounded_spec);
+    assert(core_finite_float_spec(input) == Some(
+        CorePlainScalarClass::FiniteFloat {
+            negative,
+            whole,
+            fraction,
+            exponent_negative,
+            exponent,
+        },
+    ));
+    lemma_core_finite_float_has_exact_digits(
+        input,
+        negative,
+        whole,
+        fraction,
+        exponent_negative,
+        exponent,
+    );
 }
 
 fn classify_core_plain_scalar_unbounded(input: &[u32]) -> (class: CorePlainScalarClass)
