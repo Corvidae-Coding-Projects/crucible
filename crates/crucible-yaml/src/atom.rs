@@ -354,6 +354,30 @@ pub closed spec fn atomized_source_well_formed_spec(
     )
 }
 
+/// Intrinsic validity of an atomized source, witnessed by some valid decoded source.
+pub closed spec fn atomized_source_intrinsically_well_formed_spec(
+    atomized: AtomizedSourceView,
+) -> bool {
+    exists|decoded: DecodedSourceView| atomized_source_well_formed_spec(decoded, atomized)
+}
+
+/// Forget the decoded-source witness while retaining intrinsic atom-source validity.
+pub proof fn lemma_atomized_well_formed_is_intrinsic(
+    decoded: DecodedSourceView,
+    atomized: AtomizedSourceView,
+)
+    requires
+        atomized_source_well_formed_spec(decoded, atomized),
+    ensures
+        atomized_source_intrinsically_well_formed_spec(atomized),
+{
+    reveal(atomized_source_intrinsically_well_formed_spec);
+    assert(exists|candidate: DecodedSourceView|
+        atomized_source_well_formed_spec(candidate, atomized)) by {
+        assert(atomized_source_well_formed_spec(decoded, atomized));
+    }
+}
+
 /// Valid decoded input plus exact atom correspondence yields a semantically valid atom source.
 pub proof fn lemma_atomized_correspondence_preserves_validity(
     decoded: DecodedSourceView,
@@ -395,6 +419,32 @@ pub proof fn lemma_atomized_well_formed_scalar_is_normalized(
 {
     lemma_atomized_well_formed_has_valid_decoded_source(decoded, atomized);
     crate::utf8::lemma_decoded_source_well_formed_scalar_is_normalized(decoded, index);
+}
+
+/// Every atom in an intrinsically valid source denotes a normalized Unicode scalar and span.
+pub proof fn lemma_intrinsic_atomized_scalar_is_normalized(atomized: AtomizedSourceView, index: int)
+    requires
+        atomized_source_intrinsically_well_formed_spec(atomized),
+        0 <= index < atomized.atoms.len(),
+    ensures
+        crate::utf8::normalized_scalar_view_spec(
+            DecodedScalarView {
+                code_point: atomized.atoms[index].code_point,
+                span: atomized.atoms[index].span,
+            },
+        ),
+{
+    reveal(atomized_source_intrinsically_well_formed_spec);
+    let decoded = choose|candidate: DecodedSourceView|
+        atomized_source_well_formed_spec(candidate, atomized);
+    assert(atomized_source_well_formed_spec(decoded, atomized));
+    reveal(atomized_source_well_formed_spec);
+    reveal(atomized_source_corresponds_spec);
+    assert(atomized.atoms == lexical_atoms_for_scalars_spec(decoded.scalars));
+    assert(atomized.atoms.len() == decoded.scalars.len());
+    lemma_atomized_well_formed_scalar_is_normalized(decoded, atomized, index);
+    reveal(lexical_atoms_for_scalars_spec);
+    reveal(lexical_atom_for_scalar_spec);
 }
 
 pub closed spec fn atomize_profile1_spec(

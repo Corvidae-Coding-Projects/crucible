@@ -30,5 +30,9 @@ begin.
 - Verified profile-1 lexical atomization with exhaustive YAML-indicator classification, one-to-one
   decoded-scalar and source-span preservation, private constructors, bounded all-or-error output,
   exhaustive Unicode tests, and total executable-to-pure correspondence.
+- Verified profile-1 line-layout analysis with exact atom and byte ranges, space-only indentation
+  measurement, lossless leading-tab preservation for contextual scalar/separation decisions,
+  deterministic resource-limit diagnostics, iterative progress, maximum-boundary fixtures, and
+  total executable-to-pure correspondence.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

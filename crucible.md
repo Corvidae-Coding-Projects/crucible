@@ -1268,6 +1268,8 @@ untrusted bytes
 normalized decoded scalars with exact source spans
     ↓ verified lexical atomization
 scalar-preserving lexical atoms
+    ↓ verified line and indentation layout
+exact line descriptors over atom ranges
     ↓ verified context-sensitive lexer
 tokens with exact spans
     ↓ verified parser
@@ -1349,6 +1351,33 @@ requires a well-formed decoded source; downstream proofs can recover that obliga
 silently laundering forged decoded views. Lexical atomization does not replace context-sensitive
 token formation: indentation, comments, directives, document markers, flow delimiters, and plain,
 quoted, and block scalar boundaries remain mandatory verified lexer behavior.
+
+Profile 1's line-layout transformation is version 1. It consumes lexical atoms and emits one exact
+descriptor for every non-phantom source line: an empty atom stream, including a stripped-BOM-only
+source, has no line; a final line feed terminates its line without creating an extra trailing empty
+line; and a nonempty unterminated tail is its own line. Each descriptor records its zero-based line
+number, half-open atom range excluding the optional line feed, first non-space atom, leading-space
+width, termination state, and byte offsets for the line start, content-candidate start, and consumed
+end. CR and CRLF already normalized by the decoder therefore remain one line-feed atom while their
+original byte widths remain visible.
+
+Only spaces contribute leading indentation columns. The layout stage MUST preserve a tab as the
+first non-space atom rather than reject it: tab legality depends on context that this pre-pass does
+not yet possess. In particular, a tab can be scalar content after required block-scalar indentation
+or in a multiline flow scalar even though it cannot serve as structural indentation. The verified
+context-sensitive token scanner therefore decides whether each preserved tab is scalar content,
+valid separation, or an indentation violation and reports the contextual diagnostic. This deferral
+is lossless and is not permission for the completed lexer to accept a tab where YAML forbids one.
+
+The absolute profile caps are 1,048,576 line descriptors and 4,096 leading-space columns per line.
+Callers MAY lower either cap but cannot raise it. A line-limit error identifies the first atom of the
+first excluded line, and an indentation-limit error identifies the first excluded leading space. A
+defensive atom-count check rejects a forged over-cap atom source before indexing it. Error precedence
+is atom-count cap, then admission of a new line under the line cap, then left-to-right leading-space
+validation within that admitted line. The transformation is iterative in executable code, total in
+its pure Verus model, constructs no partial public result on error, and preserves a semantic validity
+witness from the atomized input. It is a proof-carrying substage of the full lexer, not a substitute
+for comments, directives, flow state, or scalar token formation.
 
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions

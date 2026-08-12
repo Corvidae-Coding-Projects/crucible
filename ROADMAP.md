@@ -26,6 +26,9 @@ Current work establishes and extends:
   total-result correspondence proofs;
 - bounded verified lexical atomization with exhaustive indicator classification and one-to-one
   decoded-scalar/span preservation as the context-free foundation of the remaining YAML lexer;
+- verified line and indentation layout with exact atom ranges, original byte offsets, lossless
+  leading-tab preservation, and caller-lowered absolute resource caps for the context-sensitive
+  lexer that decides tab legality from scalar and separation context;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

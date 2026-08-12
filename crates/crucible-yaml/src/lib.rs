@@ -2,12 +2,19 @@
 //! Project-owned, Verus-authored Crucible YAML profile implementation.
 
 pub mod atom;
+pub mod layout;
 pub mod utf8;
 
 pub use atom::{
     atomize_profile1, classify_lexical_atom, AtomizeError, AtomizeErrorKind, AtomizeLimits,
     AtomizedSource, LexicalAtom, LexicalAtomKind, YamlIndicator,
     LEXICAL_ATOM_TRANSFORMATION_VERSION, MAX_PROFILE1_LEXICAL_ATOMS,
+};
+
+pub use layout::{
+    analyze_profile1_layout, LayoutError, LayoutErrorKind, LayoutLimits, LayoutLine, LayoutSource,
+    LINE_LAYOUT_TRANSFORMATION_VERSION, MAX_PROFILE1_INDENTATION_COLUMNS,
+    MAX_PROFILE1_LAYOUT_LINES,
 };
 
 pub use utf8::{
