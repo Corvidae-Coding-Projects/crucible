@@ -9590,6 +9590,69 @@ pub open spec fn cst_step_flow_sequence_state_one_spec(
     }
 }
 
+pub open spec fn cst_step_flow_sequence_state_three_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::FlowSequence || task.state != 3 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        match cst_machine_take_completed_spec(machine) {
+            None => Err(cst_step_node_internal_error_spec()),
+            Some((taken, child)) => {
+                if child.next_token > task.end {
+                    Err(cst_step_node_internal_error_spec())
+                } else {
+                    let cursor = cst_skip_trivia_spec(
+                        tokens,
+                        child.next_token as int,
+                        task.end as int,
+                        (task.end - child.next_token) as nat + 1,
+                    );
+                    let positioned = cst_task_set_cursor_spec(task, cursor as u64);
+                    if task.entry_token_start > cursor {
+                        Err(cst_step_node_internal_error_spec())
+                    } else {
+                        match cst_single_pair_mapping_spec(
+                            builder,
+                            tokens,
+                            task.key_node_index,
+                            child.node_index,
+                            task.entry_token_start,
+                            cursor as u64,
+                            if task.explicit_key {
+                                Some(task.entry_token_start)
+                            } else {
+                                None
+                            },
+                            Some(task.colon_token),
+                        ) {
+                            Err(error) => Err(error),
+                            Ok((next_builder, pair)) => {
+                                let entry = CstSequenceEntryView {
+                                    node_index: pair,
+                                    token_start: task.entry_token_start,
+                                    token_end: cursor as u64,
+                                    indicator_token: None,
+                                };
+                                let appended = cst_task_push_sequence_entry_spec(
+                                    positioned,
+                                    entry,
+                                );
+                                let waiting = cst_task_set_state_spec(appended, 4);
+                                Ok((cst_machine_resume_task_spec(taken, waiting), next_builder))
+                            },
+                        }
+                    }
+                }
+            },
+        }
+    }
+}
+
 pub open spec fn cst_step_flow_sequence_state_four_spec(
     tokens: Seq<crate::token::CompletedTokenView>,
     task: ParseTaskView,
@@ -10614,6 +10677,159 @@ fn step_flow_sequence_state_one(
 }
 
 #[verifier::rlimit(500)]
+fn step_flow_sequence_state_three(
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::FlowSequence,
+        task@.state == 3,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+    ensures
+        cst_step_flow_sequence_state_three_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_flow_sequence_state_three_spec(
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_flow_sequence_state_three_spec);
+    }
+    let child = match machine_take_completed(machine) {
+        Some(parsed) => parsed,
+        None => {
+            proof {
+                reveal(cst_step_node_internal_error_spec);
+                assert(expected == Err(
+                    CstErrorView {
+                        kind: CstErrorKind::InternalInvariantViolation,
+                        byte_offset: 0,
+                    },
+                ));
+            }
+            return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+        },
+    };
+    let ghost taken = machine@;
+    if child.next_token > task.end {
+        proof {
+            reveal(cst_step_node_internal_error_spec);
+            assert(expected == Err(
+                CstErrorView {
+                    kind: CstErrorKind::InternalInvariantViolation,
+                    byte_offset: 0,
+                },
+            ));
+        }
+        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+    }
+    let cursor = skip_trivia(tokens, child.next_token, task.end);
+    task_set_cursor(cursor, &mut task);
+    let ghost positioned = task@;
+    if task.entry_token_start > task.cursor {
+        proof {
+            reveal(cst_step_node_internal_error_spec);
+            assert(expected == Err(
+                CstErrorView {
+                    kind: CstErrorKind::InternalInvariantViolation,
+                    byte_offset: 0,
+                },
+            ));
+        }
+        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+    }
+    let ghost prior_builder = builder@;
+    let pair = match single_pair_mapping(
+        tokens,
+        task.key_node_index,
+        child.node_index,
+        task.entry_token_start,
+        task.cursor,
+        if task.explicit_key {
+            Some(task.entry_token_start as u64)
+        } else {
+            None
+        },
+        Some(task.colon_token as u64),
+        builder,
+    ) {
+        Ok(node) => node,
+        Err(error) => {
+            proof {
+                assert(cst_single_pair_mapping_spec(
+                    prior_builder,
+                    token_views,
+                    task_view.key_node_index,
+                    child@.node_index,
+                    task_view.entry_token_start,
+                    positioned.cursor,
+                    if task_view.explicit_key {
+                        Some(task_view.entry_token_start)
+                    } else {
+                        None
+                    },
+                    Some(task_view.colon_token),
+                ) == Err(error@));
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        },
+    };
+    let entry = CstSequenceEntry {
+        node_index: pair,
+        token_start: task.entry_token_start as u64,
+        token_end: task.cursor as u64,
+        indicator_token: None,
+    };
+    task_push_sequence_entry(entry, &mut task);
+    task_set_state(&mut task, 4);
+    machine_resume_task(task, machine);
+    proof {
+        assert(cst_single_pair_mapping_spec(
+            prior_builder,
+            token_views,
+            task_view.key_node_index,
+            child@.node_index,
+            task_view.entry_token_start,
+            positioned.cursor,
+            if task_view.explicit_key {
+                Some(task_view.entry_token_start)
+            } else {
+                None
+            },
+            Some(task_view.colon_token),
+        ) == Ok((builder@, pair)));
+        assert(expected == Ok((machine@, builder@)));
+    }
+    Ok(())
+}
+
+#[verifier::rlimit(500)]
 fn step_flow_sequence_state_four(
     tokens: &[CompletedToken],
     mut task: ParseTask,
@@ -10932,46 +11148,10 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 3 {
-                let child = match machine_take_completed(&mut machine) {
-                    Some(parsed) => parsed,
-                    None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
-                };
-                if child.next_token > task.end {
-                    return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
-                }
-                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
-                if task.entry_token_start > task.cursor {
-                    return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
-                }
-                let pair = match single_pair_mapping(
-                    tokens,
-                    task.key_node_index,
-                    child.node_index,
-                    task.entry_token_start,
-                    task.cursor,
-                    if task.explicit_key {
-                        Some(task.entry_token_start as u64)
-                    } else {
-                        None
-                    },
-                    Some(task.colon_token as u64),
-                    builder,
-                ) {
-                    Ok(node) => node,
+                match step_flow_sequence_state_three(tokens, task, &mut machine, builder) {
+                    Ok(()) => continue,
                     Err(error) => return Err(error),
-                };
-                task_push_sequence_entry(
-                    CstSequenceEntry {
-                        node_index: pair,
-                        token_start: task.entry_token_start as u64,
-                        token_end: task.cursor as u64,
-                        indicator_token: None,
-                    },
-                    &mut task,
-                );
-                task_set_state(&mut task, 4);
-                machine_resume_task(task, &mut machine);
-                continue;
+                }
             }
             proof {
                 assert(task.state == 4);
