@@ -156,6 +156,24 @@ fn pure_parser_frame_state_domains_and_updates_are_exact() {
 }
 
 #[test]
+fn pure_parser_frame_cursor_bounds_and_updates_are_exact() {
+    proof {
+        let base = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4);
+        let out_of_bounds = crucible_yaml::cst::ParseTaskView { cursor: 9, ..base };
+        let invalid_range = crucible_yaml::cst::ParseTaskView { token_start: 9, ..base };
+        reveal(crucible_yaml::cst::cst_parse_task_cursor_is_in_bounds_spec);
+        reveal(crucible_yaml::cst::cst_task_set_cursor_spec);
+        assert(crucible_yaml::cst::cst_parse_task_cursor_is_in_bounds_spec(base));
+        assert(!crucible_yaml::cst::cst_parse_task_cursor_is_in_bounds_spec(out_of_bounds));
+        assert(!crucible_yaml::cst::cst_parse_task_cursor_is_in_bounds_spec(invalid_range));
+        let advanced = crucible_yaml::cst::cst_task_set_cursor_spec(base, 6);
+        assert(advanced.cursor == 6);
+        assert(advanced.kind == base.kind && advanced.state == base.state);
+        assert(advanced.end == base.end && advanced.pending_mapping == base.pending_mapping);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

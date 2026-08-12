@@ -7349,6 +7349,14 @@ pub open spec fn cst_task_set_state_spec(task: ParseTaskView, state: u8) -> Pars
     ParseTaskView { state, ..task }
 }
 
+pub open spec fn cst_parse_task_cursor_is_in_bounds_spec(task: ParseTaskView) -> bool {
+    task.token_start <= task.end && task.cursor <= task.end
+}
+
+pub open spec fn cst_task_set_cursor_spec(task: ParseTaskView, cursor: u64) -> ParseTaskView {
+    ParseTaskView { cursor, ..task }
+}
+
 fn task_set_state(task: &mut ParseTask, state: u8)
     requires
         cst_parse_task_state_is_valid_spec(old(task)@.kind, state),
@@ -7360,6 +7368,21 @@ fn task_set_state(task: &mut ParseTask, state: u8)
     proof {
         reveal(cst_parse_task_state_is_valid_spec);
         reveal(cst_task_set_state_spec);
+    }
+}
+
+fn task_set_cursor(cursor: usize, task: &mut ParseTask)
+    requires
+        old(task)@.token_start <= old(task)@.end,
+        cursor as u64 <= old(task)@.end,
+    ensures
+        final(task)@ == cst_task_set_cursor_spec(old(task)@, cursor as u64),
+        cst_parse_task_cursor_is_in_bounds_spec(final(task)@),
+{
+    task.cursor = cursor;
+    proof {
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
+        reveal(cst_task_set_cursor_spec);
     }
 }
 
@@ -9038,7 +9061,7 @@ fn parse_node_iterative(
         }
         if task.kind == ParseTaskKind::FlowSequence {
             if task.state == 0 {
-                task.cursor = skip_trivia(tokens, task.cursor, task.end);
+                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
                 if task.cursor >= task.end {
                     return Err(
                         CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes),
@@ -9067,7 +9090,7 @@ fn parse_node_iterative(
                 task.explicit_key = tokens[task.cursor].kind()
                     == CompletedTokenKind::ExplicitMappingKey;
                 if task.explicit_key {
-                    task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
                 }
                 if task.cursor >= task.end || tokens[task.cursor].kind()
                     == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
@@ -9104,7 +9127,7 @@ fn parse_node_iterative(
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
                 task.key_node_index = child.node_index;
-                task.cursor = skip_trivia(tokens, child.next_token, task.end);
+                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9125,7 +9148,7 @@ fn parse_node_iterative(
                         );
                     }
                     task.colon_token = task.cursor;
-                    task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
                     if task.cursor >= task.end || tokens[task.cursor].kind()
                         == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
                         == CompletedTokenKind::FlowSequenceEnd {
@@ -9235,7 +9258,7 @@ fn parse_node_iterative(
                 if child.next_token > task.end {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
-                task.cursor = skip_trivia(tokens, child.next_token, task.end);
+                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 if task.entry_token_start > task.cursor {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
@@ -9292,7 +9315,7 @@ fn parse_node_iterative(
             }
             let entry_token = task.cursor as u64;
             task_push_flow_entry(&mut task, entry_token);
-            task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+            task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
             if task.cursor < task.end && tokens[task.cursor].kind()
                 == CompletedTokenKind::FlowEntry {
                 return Err(
@@ -9308,7 +9331,7 @@ fn parse_node_iterative(
         }
         if task.kind == ParseTaskKind::FlowMapping {
             if task.state == 0 {
-                task.cursor = skip_trivia(tokens, task.cursor, task.end);
+                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
                 if task.cursor >= task.end {
                     return Err(
                         CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes),
@@ -9337,7 +9360,7 @@ fn parse_node_iterative(
                 task.explicit_key = tokens[task.cursor].kind()
                     == CompletedTokenKind::ExplicitMappingKey;
                 if task.explicit_key {
-                    task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
                 }
                 if task.cursor >= task.end || tokens[task.cursor].kind()
                     == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
@@ -9374,7 +9397,7 @@ fn parse_node_iterative(
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
                 task.key_node_index = child.node_index;
-                task.cursor = skip_trivia(tokens, child.next_token, task.end);
+                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9395,7 +9418,7 @@ fn parse_node_iterative(
                         );
                     }
                     task.colon_token = task.cursor;
-                    task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
                     if task.cursor >= task.end || tokens[task.cursor].kind()
                         == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
                         == CompletedTokenKind::FlowMappingEnd {
@@ -9467,7 +9490,7 @@ fn parse_node_iterative(
                 if child.next_token > task.end {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
-                task.cursor = skip_trivia(tokens, child.next_token, task.end);
+                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_push_mapping_entry(
                     CstMappingEntry {
                         key_node_index: task.key_node_index,
@@ -9510,7 +9533,7 @@ fn parse_node_iterative(
             }
             let entry_token = task.cursor as u64;
             task_push_flow_entry(&mut task, entry_token);
-            task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+            task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
             if task.cursor < task.end && tokens[task.cursor].kind()
                 == CompletedTokenKind::FlowEntry {
                 return Err(
@@ -9526,7 +9549,7 @@ fn parse_node_iterative(
         }
         if task.kind == ParseTaskKind::BlockSequence {
             if task.state == 0 {
-                task.cursor = skip_trivia(tokens, task.cursor, task.end);
+                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
                 if task.cursor >= task.end || tokens[task.cursor].kind()
                     != CompletedTokenKind::BlockSequenceEntry || token_column(
                     atoms,
@@ -9551,7 +9574,7 @@ fn parse_node_iterative(
                 }
                 let dash = task.cursor;
                 let dash_line = tokens[dash].start_line_number();
-                task.cursor = skip_trivia(tokens, dash + 1, task.end);
+                task_set_cursor(skip_trivia(tokens, dash + 1, task.end), &mut task);
                 task.entry_token_start = dash;
                 task.entry_token_end = dash + 1;
                 if task.cursor >= task.end || tokens[task.cursor].start_line_number() > dash_line
@@ -9611,7 +9634,7 @@ fn parse_node_iterative(
                 if child.next_token > task.end || task.colon_token >= task.end {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
-                task.cursor = child.next_token;
+                task_set_cursor(child.next_token, &mut task);
                 task.entry_token_end = child.next_token;
                 if task.entry_token_end > task.node_token_end {
                     task.node_token_end = task.entry_token_end;
@@ -9631,7 +9654,7 @@ fn parse_node_iterative(
             }
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
-                task.cursor = next;
+                task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9639,7 +9662,7 @@ fn parse_node_iterative(
             let next_column = token_column(atoms, &tokens[next]);
             if tokens[next].kind() == CompletedTokenKind::BlockSequenceEntry && next_column
                 == task.indentation {
-                task.cursor = next;
+                task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9649,14 +9672,14 @@ fn parse_node_iterative(
                     CstError::at(CstErrorKind::InvalidIndentation, tokens[next].byte_start()),
                 );
             }
-            task.cursor = next;
+            task_set_cursor(next, &mut task);
             task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::BlockMapping {
             if task.state == 0 {
-                task.cursor = skip_trivia(tokens, task.cursor, task.end);
+                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
                 if task.cursor >= task.end || token_column(atoms, &tokens[task.cursor])
                     != task.indentation {
                     if task.pending_mapping.len() == 0 {
@@ -9680,7 +9703,7 @@ fn parse_node_iterative(
                 task.explicit_key = tokens[task.cursor].kind()
                     == CompletedTokenKind::ExplicitMappingKey;
                 if task.explicit_key {
-                    task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
                 }
                 let colon = if task.explicit_key {
                     find_explicit_mapping_value(
@@ -9808,7 +9831,7 @@ fn parse_node_iterative(
                 if task.colon_token >= task.end {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
-                task.cursor = skip_trivia(tokens, task.colon_token + 1, task.end);
+                task_set_cursor(skip_trivia(tokens, task.colon_token + 1, task.end), &mut task);
                 let indentationless_sequence = task.cursor < task.end
                     && tokens[task.cursor].start_line_number()
                     > tokens[task.colon_token].start_line_number() && tokens[task.cursor].kind()
@@ -9893,7 +9916,7 @@ fn parse_node_iterative(
                 if child.next_token > task.end || task.colon_token >= task.end {
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
-                task.cursor = child.next_token;
+                task_set_cursor(child.next_token, &mut task);
                 task.entry_token_end = if task.cursor > task.colon_token + 1 {
                     task.cursor
                 } else {
@@ -9927,7 +9950,7 @@ fn parse_node_iterative(
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
                 task.key_node_index = child.node_index;
-                task.cursor = skip_trivia(tokens, child.next_token, task.end);
+                task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 5);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9965,7 +9988,7 @@ fn parse_node_iterative(
             }
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
-                task.cursor = next;
+                task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9977,7 +10000,7 @@ fn parse_node_iterative(
                 next,
                 task.end,
             ).is_some()) {
-                task.cursor = next;
+                task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
@@ -9987,7 +10010,7 @@ fn parse_node_iterative(
                     CstError::at(CstErrorKind::InvalidIndentation, tokens[next].byte_start()),
                 );
             }
-            task.cursor = next;
+            task_set_cursor(next, &mut task);
             task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
