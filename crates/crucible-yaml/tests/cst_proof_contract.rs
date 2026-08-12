@@ -15,6 +15,124 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_compact_single_pair_mapping_is_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 3,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let key_token = CompletedTokenView {
+            kind: CompletedTokenKind::ExplicitMappingKey,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let value_token = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            ..key_token
+        };
+        let tokens = Seq::empty().push(key_token).push(value_token);
+        let child0 = CstNodeView {
+            kind: CstNodeKind::Empty,
+            style: CstNodeStyle::Empty,
+            token_start: 0,
+            token_end: 0,
+            byte_start: 0,
+            byte_end: 0,
+            anchor_property_token: None,
+            tag_property_token: None,
+            scalar_or_alias_token: None,
+            collection_start_token: None,
+            collection_end_token: None,
+            entry_start: 0,
+            entry_end: 0,
+            empty_anchor_token: Some(0),
+            empty_anchor_byte: Some(0),
+        };
+        let child1 = CstNodeView {
+            token_start: 1,
+            token_end: 1,
+            byte_start: 1,
+            byte_end: 1,
+            empty_anchor_token: Some(1),
+            empty_anchor_byte: Some(1),
+            ..child0
+        };
+        let empty_builder = crucible_yaml::cst::cst_empty_builder_spec(2, limits, 2);
+        let initial = crucible_yaml::cst::CstBuilderView {
+            nodes: Seq::empty().push(child0).push(child1),
+            ..empty_builder
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_single_pair_mapping_spec);
+        reveal(crucible_yaml::cst::cst_byte_at_spec);
+        reveal(crucible_yaml::cst::cst_push_mapping_entry_spec);
+        reveal(crucible_yaml::cst::cst_claim_mapping_entry_references_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let result = crucible_yaml::cst::cst_single_pair_mapping_spec(
+            initial,
+            tokens,
+            0,
+            1,
+            0,
+            2,
+            Some(0),
+            Some(1),
+        );
+        assert(result.is_ok());
+        let (built, node_index) = match result {
+            Ok(value) => value,
+            Err(_) => (initial, 99),
+        };
+        assert(node_index == 2);
+        assert(built.mapping_entries.len() == 1 && built.nodes.len() == 3);
+        let entry = built.mapping_entries[0];
+        assert(entry.key_node_index == 0 && entry.value_node_index == 1);
+        assert(entry.explicit_key_token == Some(0) && entry.mapping_value_token == Some(1));
+        let node = built.nodes[2];
+        assert(node.kind == CstNodeKind::Mapping && node.style == CstNodeStyle::FlowPair);
+        assert(node.token_start == 0 && node.token_end == 2);
+        assert(node.byte_start == 0 && node.byte_end == 2);
+        assert(node.entry_start == 0 && node.entry_end == 1);
+        assert(crucible_yaml::cst::cst_single_pair_mapping_spec(
+            built,
+            tokens,
+            0,
+            1,
+            0,
+            2,
+            Some(0),
+            Some(1),
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::MappingEntryLimitExceeded,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_flow_mapping_completion_is_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {

@@ -5583,6 +5583,63 @@ fn empty_node(builder: &mut CstBuilder, tokens: &[CompletedToken], anchor: usize
     result
 }
 
+pub open spec fn cst_single_pair_mapping_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    key: u64,
+    value: u64,
+    token_start: u64,
+    token_end: u64,
+    explicit_key_token: Option<u64>,
+    mapping_value_token: Option<u64>,
+) -> Result<(CstBuilderView, u64), CstErrorView> {
+    if token_start > token_end || token_end > tokens.len() {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        let entry_start = builder.mapping_entries.len() as u64;
+        let entry = CstMappingEntryView {
+            key_node_index: key,
+            value_node_index: value,
+            token_start,
+            token_end,
+            explicit_key_token,
+            mapping_value_token,
+        };
+        let offset = cst_byte_at_spec(tokens, token_start, builder.source_len_bytes);
+        match cst_push_mapping_entry_spec(builder, entry, offset) {
+            Err(error) => Err(error),
+            Ok(after_entry) => {
+                let byte_end = if token_end > token_start {
+                    tokens[(token_end - 1) as int].byte_end
+                } else {
+                    offset
+                };
+                cst_push_node_spec(
+                    after_entry,
+                    CstNodeView {
+                        kind: CstNodeKind::Mapping,
+                        style: CstNodeStyle::FlowPair,
+                        token_start,
+                        token_end,
+                        byte_start: offset,
+                        byte_end,
+                        anchor_property_token: None,
+                        tag_property_token: None,
+                        scalar_or_alias_token: None,
+                        collection_start_token: None,
+                        collection_end_token: None,
+                        entry_start,
+                        entry_end: after_entry.mapping_entries.len() as u64,
+                        empty_anchor_token: None,
+                        empty_anchor_byte: None,
+                    },
+                    offset,
+                )
+            },
+        }
+    }
+}
+
 fn single_pair_mapping(
     tokens: &[CompletedToken],
     key: u64,
@@ -5598,7 +5655,23 @@ fn single_pair_mapping(
     ensures
         result.is_ok() ==> result.unwrap() < final(builder).nodes.len(),
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_single_pair_mapping_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            key,
+            value,
+            token_start as u64,
+            token_end as u64,
+            explicit_key_token,
+            mapping_value_token,
+        ) == match result {
+            Ok(index) => Ok((final(builder)@, index)),
+            Err(error) => Err(error@),
+        },
 {
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+    }
     let entry_start = builder.mapping_entries.len() as u64;
     let entry = CstMappingEntry {
         key_node_index: key,
@@ -5611,32 +5684,48 @@ fn single_pair_mapping(
     let offset = byte_at(tokens, token_start, builder.source_len_bytes);
     match builder.push_mapping_entry(entry, offset) {
         Ok(()) => {},
-        Err(error) => return Err(error),
-    }
-    builder.push_node(
-        CstNode {
-            kind: CstNodeKind::Mapping,
-            style: CstNodeStyle::FlowPair,
-            token_start: token_start as u64,
-            token_end: token_end as u64,
-            byte_start: offset,
-            byte_end: if token_end > token_start {
-                tokens[token_end - 1].byte_end()
-            } else {
-                offset
-            },
-            anchor_property_token: None,
-            tag_property_token: None,
-            scalar_or_alias_token: None,
-            collection_start_token: None,
-            collection_end_token: None,
-            entry_start,
-            entry_end: builder.mapping_entries.len() as u64,
-            empty_anchor_token: None,
-            empty_anchor_byte: None,
+        Err(error) => {
+            proof {
+                reveal(cst_single_pair_mapping_spec);
+            }
+            return Err(error);
         },
-        offset,
-    )
+    }
+    let ghost after_entry = builder@;
+    let byte_end = if token_end > token_start {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, (token_end - 1) as int);
+        }
+        tokens[token_end - 1].byte_end()
+    } else {
+        offset
+    };
+    let node = CstNode {
+        kind: CstNodeKind::Mapping,
+        style: CstNodeStyle::FlowPair,
+        token_start: token_start as u64,
+        token_end: token_end as u64,
+        byte_start: offset,
+        byte_end,
+        anchor_property_token: None,
+        tag_property_token: None,
+        scalar_or_alias_token: None,
+        collection_start_token: None,
+        collection_end_token: None,
+        entry_start,
+        entry_end: builder.mapping_entries.len() as u64,
+        empty_anchor_token: None,
+        empty_anchor_byte: None,
+    };
+    let result = builder.push_node(node, offset);
+    proof {
+        assert(cst_push_node_spec(after_entry, node@, offset) == match result {
+            Ok(index) => Ok((builder@, index)),
+            Err(error) => Err(error@),
+        });
+        reveal(cst_single_pair_mapping_spec);
+    }
+    result
 }
 
 pub open spec fn cst_find_mapping_value_on_line_from_spec(
