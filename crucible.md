@@ -1769,7 +1769,9 @@ evidence even though anchor names are not part of semantic node equality.
 The default implicit scalar policy is YAML 1.2.2 Core Schema, not YAML 1.1 compatibility
 coercion. An untagged plain scalar resolves only as Core null, boolean, integer, finite decimal,
 infinity, not-a-number, or string; `yes`, `no`, `on`, `off`, sexagesimal numbers, and legacy
-leading-zero octal remain strings. Non-plain scalars without a specific tag resolve as strings.
+single-letter booleans such as `y` and `n` remain strings. A leading-zero decimal such as `0123`
+is a Core decimal integer and is never interpreted as YAML 1.1 octal; octal requires the Core `0o`
+prefix. Non-plain scalars without a specific tag resolve as strings.
 Empty scalar nodes resolve as null only when they have the `?` non-specific tag; an explicitly
 quoted empty scalar is a string. Explicit standard tags `!!null`, `!!bool`, `!!int`, `!!float`,
 `!!str`, `!!seq`, and `!!map` require a compatible node kind and a spelling valid for that tag.

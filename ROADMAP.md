@@ -61,6 +61,10 @@ Current work establishes and extends:
   entry, directive, warning, and depth caps; typed first-impossible diagnostics; a total fueled pure
   parser; strict machine progress; deterministic results; and exact executable-to-pure
   correspondence with adversarial forgery proof fixtures;
+- verified YAML 1.2.2 Core plain-scalar classification with exact null, boolean, decimal/octal/hex
+  integer, finite decimal, infinity, and NaN spellings; explicit exclusion of YAML 1.1 boolean and
+  octal coercions; exact numeric digit subranges; caller-lowered absolute scalar limits; and exact
+  executable-to-pure correspondence as the first semantic-resolution submachine;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

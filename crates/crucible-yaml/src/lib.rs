@@ -7,6 +7,7 @@ pub mod cst;
 pub mod layout;
 pub mod plain;
 pub mod quoted;
+pub mod resolve;
 pub mod structural;
 pub mod token;
 pub mod utf8;
@@ -47,6 +48,12 @@ pub use quoted::{
     QuotedScalarErrorKind, QuotedScalarScanLimits, QuotedScalarSource, QuotedScalarStyle,
     MAX_PROFILE1_QUOTED_SCALARS, MAX_PROFILE1_QUOTED_SCALAR_ATOMS,
     QUOTED_SCALAR_TRANSFORMATION_VERSION,
+};
+
+pub use resolve::{
+    classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarError,
+    CoreScalarErrorKind, CoreScalarLimits, CoreScalarRange, CORE_SCALAR_CLASSIFIER_VERSION,
+    MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS,
 };
 
 pub use plain::{
