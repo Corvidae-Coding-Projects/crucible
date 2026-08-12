@@ -48,6 +48,19 @@ fn pure_parser_parent_frame_resumption_is_exact() {
 }
 
 #[test]
+fn pure_parser_completed_child_channel_is_exact_and_consuming() {
+    proof {
+        let child = crucible_yaml::cst::ParsedNodeView { node_index: 4, next_token: 9 };
+        reveal(crucible_yaml::cst::cst_store_completed_node_spec);
+        reveal(crucible_yaml::cst::cst_take_completed_node_spec);
+        let stored = crucible_yaml::cst::cst_store_completed_node_spec(child);
+        assert(stored == Some(child));
+        assert(crucible_yaml::cst::cst_take_completed_node_spec(stored) == Some((None, child)));
+        assert(crucible_yaml::cst::cst_take_completed_node_spec(None).is_none());
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

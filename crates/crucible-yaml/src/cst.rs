@@ -4618,6 +4618,55 @@ impl View for ParsedNode {
     }
 }
 
+closed spec fn cst_completed_node_view_spec(completed: Option<ParsedNode>) -> Option<
+    ParsedNodeView,
+> {
+    match completed {
+        Some(parsed) => Some(parsed@),
+        None => None,
+    }
+}
+
+pub open spec fn cst_store_completed_node_spec(parsed: ParsedNodeView) -> Option<ParsedNodeView> {
+    Some(parsed)
+}
+
+fn store_completed_node(parsed: ParsedNode) -> (completed: Option<ParsedNode>)
+    ensures
+        cst_completed_node_view_spec(completed) == cst_store_completed_node_spec(parsed@),
+{
+    proof {
+        reveal(cst_completed_node_view_spec);
+        reveal(cst_store_completed_node_spec);
+    }
+    Some(parsed)
+}
+
+pub open spec fn cst_take_completed_node_spec(completed: Option<ParsedNodeView>) -> Option<
+    (Option<ParsedNodeView>, ParsedNodeView),
+> {
+    match completed {
+        Some(parsed) => Some((None, parsed)),
+        None => None,
+    }
+}
+
+fn take_completed_node(completed: &mut Option<ParsedNode>) -> (result: Option<ParsedNode>)
+    ensures
+        cst_take_completed_node_spec(cst_completed_node_view_spec(*old(completed)))
+            == match result {
+            Some(parsed) => Some((cst_completed_node_view_spec(*final(completed)), parsed@)),
+            None => None,
+        },
+{
+    let result = completed.take();
+    proof {
+        reveal(cst_completed_node_view_spec);
+        reveal(cst_take_completed_node_spec);
+    }
+    result
+}
+
 #[derive(Clone, Copy)]
 struct NodeProperties {
     next_token: usize,
@@ -8694,7 +8743,9 @@ fn parse_node_iterative(
             if index >= task.end {
                 completed =
                 match empty_node(builder, tokens, index) {
-                    Ok(node_index) => Some(ParsedNode { node_index, next_token: index }),
+                    Ok(node_index) => store_completed_node(
+                        ParsedNode { node_index, next_token: index },
+                    ),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -8717,7 +8768,7 @@ fn parse_node_iterative(
                     anchor_property_token,
                     tag_property_token,
                 ) {
-                    Ok(parsed) => Some(parsed),
+                    Ok(parsed) => store_completed_node(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -8734,7 +8785,7 @@ fn parse_node_iterative(
                 }
                 completed =
                 match finish_alias_node(builder, tokens, token_start, index) {
-                    Ok(parsed) => Some(parsed),
+                    Ok(parsed) => store_completed_node(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -8781,7 +8832,7 @@ fn parse_node_iterative(
                     anchor_property_token,
                     tag_property_token,
                 ) {
-                    Ok(parsed) => Some(parsed),
+                    Ok(parsed) => store_completed_node(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -8841,7 +8892,7 @@ fn parse_node_iterative(
                 if tokens[task.cursor].kind() == CompletedTokenKind::FlowSequenceEnd {
                     let closer = task.cursor;
                     completed =
-                    Some(
+                    store_completed_node(
                         match finish_iterative_sequence(tokens, task, Some(closer), builder) {
                             Ok(parsed) => parsed,
                             Err(error) => return Err(error),
@@ -8890,7 +8941,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9022,7 +9073,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 3 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9071,7 +9122,7 @@ fn parse_node_iterative(
             if tokens[task.cursor].kind() == CompletedTokenKind::FlowSequenceEnd {
                 let closer = task.cursor;
                 completed =
-                Some(
+                store_completed_node(
                     match finish_iterative_sequence(tokens, task, Some(closer), builder) {
                         Ok(parsed) => parsed,
                         Err(error) => return Err(error),
@@ -9111,7 +9162,7 @@ fn parse_node_iterative(
                 if tokens[task.cursor].kind() == CompletedTokenKind::FlowMappingEnd {
                     let closer = task.cursor;
                     completed =
-                    Some(
+                    store_completed_node(
                         match finish_iterative_mapping(tokens, task, Some(closer), builder) {
                             Ok(parsed) => parsed,
                             Err(error) => return Err(error),
@@ -9160,7 +9211,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9254,7 +9305,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 3 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9289,7 +9340,7 @@ fn parse_node_iterative(
             if tokens[task.cursor].kind() == CompletedTokenKind::FlowMappingEnd {
                 let closer = task.cursor;
                 completed =
-                Some(
+                store_completed_node(
                     match finish_iterative_mapping(tokens, task, Some(closer), builder) {
                         Ok(parsed) => parsed,
                         Err(error) => return Err(error),
@@ -9335,7 +9386,7 @@ fn parse_node_iterative(
                         );
                     }
                     completed =
-                    Some(
+                    store_completed_node(
                         match finish_iterative_sequence(tokens, task, None, builder) {
                             Ok(parsed) => parsed,
                             Err(error) => return Err(error),
@@ -9398,7 +9449,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9462,7 +9513,7 @@ fn parse_node_iterative(
                         );
                     }
                     completed =
-                    Some(
+                    store_completed_node(
                         match finish_iterative_mapping(tokens, task, None, builder) {
                             Ok(parsed) => parsed,
                             Err(error) => return Err(error),
@@ -9498,7 +9549,7 @@ fn parse_node_iterative(
                             );
                         }
                         completed =
-                        Some(
+                        store_completed_node(
                             match finish_iterative_mapping(tokens, task, None, builder) {
                                 Ok(parsed) => parsed,
                                 Err(error) => return Err(error),
@@ -9580,7 +9631,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9680,7 +9731,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 3 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9713,7 +9764,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 4 {
-                let child = match completed.take() {
+                let child = match take_completed_node(&mut completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
