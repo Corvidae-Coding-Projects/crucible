@@ -4618,6 +4618,32 @@ impl View for ParsedNode {
     }
 }
 
+#[derive(Clone, Copy)]
+struct NodeProperties {
+    next_token: usize,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+}
+
+#[verifier::ext_equal]
+pub struct NodePropertiesView {
+    pub next_token: u64,
+    pub anchor_property_token: Option<u64>,
+    pub tag_property_token: Option<u64>,
+}
+
+impl View for NodeProperties {
+    type V = NodePropertiesView;
+
+    closed spec fn view(&self) -> NodePropertiesView {
+        NodePropertiesView {
+            next_token: self.next_token as u64,
+            anchor_property_token: self.anchor_property_token,
+            tag_property_token: self.tag_property_token,
+        }
+    }
+}
+
 pub open spec fn cst_token_is_trivia_spec(kind: CompletedTokenKind) -> bool {
     kind == CompletedTokenKind::Indentation || kind == CompletedTokenKind::Separation || kind
         == CompletedTokenKind::Comment || kind == CompletedTokenKind::LineFeed || kind
@@ -4676,6 +4702,92 @@ pub open spec fn cst_same_line_spec(
     right: crate::token::CompletedTokenView,
 ) -> bool {
     left.start_line_number == right.start_line_number
+}
+
+pub open spec fn cst_scan_node_properties_from_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    index: int,
+    end: int,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+    fuel: nat,
+) -> Result<NodePropertiesView, CstErrorView>
+    decreases fuel,
+{
+    if index < 0 || end < index || end > tokens.len() || fuel == 0 {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else if index >= end {
+        Ok(
+            NodePropertiesView {
+                next_token: index as u64,
+                anchor_property_token,
+                tag_property_token,
+            },
+        )
+    } else {
+        let kind = tokens[index].kind;
+        let is_anchor = kind == CompletedTokenKind::AnchorProperty;
+        let is_tag = kind == CompletedTokenKind::TagProperty || kind
+            == CompletedTokenKind::VerbatimTagProperty;
+        if !is_anchor && !is_tag {
+            Ok(
+                NodePropertiesView {
+                    next_token: index as u64,
+                    anchor_property_token,
+                    tag_property_token,
+                },
+            )
+        } else if is_anchor && anchor_property_token.is_some() {
+            Err(
+                CstErrorView {
+                    kind: CstErrorKind::DuplicateAnchorProperty,
+                    byte_offset: tokens[index].byte_start,
+                },
+            )
+        } else if is_tag && tag_property_token.is_some() {
+            Err(
+                CstErrorView {
+                    kind: CstErrorKind::DuplicateTagProperty,
+                    byte_offset: tokens[index].byte_start,
+                },
+            )
+        } else {
+            let next_anchor = if is_anchor {
+                Some(index as u64)
+            } else {
+                anchor_property_token
+            };
+            let next_tag = if is_tag {
+                Some(index as u64)
+            } else {
+                tag_property_token
+            };
+            let after_property = index + 1;
+            let next = cst_skip_trivia_spec(
+                tokens,
+                after_property,
+                end,
+                (end - after_property) as nat + 1,
+            );
+            if next < end && next == after_property {
+                Err(
+                    CstErrorView {
+                        kind: CstErrorKind::MissingPropertySeparation,
+                        byte_offset: tokens[next].byte_start,
+                    },
+                )
+            } else {
+                cst_scan_node_properties_from_spec(
+                    tokens,
+                    next,
+                    end,
+                    next_anchor,
+                    next_tag,
+                    (fuel - 1) as nat,
+                )
+            }
+        }
+    }
 }
 
 fn is_trivia(kind: CompletedTokenKind) -> (result: bool)
@@ -4749,6 +4861,151 @@ fn skip_trivia(tokens: &[CompletedToken], index: usize, end: usize) -> (result: 
         reveal(cst_skip_trivia_spec);
     }
     cursor
+}
+
+fn scan_node_properties(
+    tokens: &[CompletedToken],
+    index: usize,
+    end: usize,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+) -> (result: Result<NodeProperties, CstError>)
+    requires
+        index <= end <= tokens.len(),
+    ensures
+        result.is_ok() ==> index <= result.unwrap().next_token <= end,
+        cst_scan_node_properties_from_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            index as int,
+            end as int,
+            anchor_property_token,
+            tag_property_token,
+            (end - index) as nat + 1,
+        ) == match result {
+            Ok(properties) => Ok(properties@),
+            Err(error) => Err(error@),
+        },
+{
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost expected = cst_scan_node_properties_from_spec(
+        token_views,
+        index as int,
+        end as int,
+        anchor_property_token,
+        tag_property_token,
+        (end - index) as nat + 1,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+    }
+    let mut cursor = index;
+    let mut anchor = anchor_property_token;
+    let mut tag = tag_property_token;
+    let ghost mut fuel: nat = (end - index) as nat + 1;
+    while cursor < end && (tokens[cursor].kind() == CompletedTokenKind::AnchorProperty
+        || tokens[cursor].kind() == CompletedTokenKind::TagProperty || tokens[cursor].kind()
+        == CompletedTokenKind::VerbatimTagProperty)
+        invariant
+            index <= cursor <= end,
+            end <= tokens.len(),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            fuel >= end - cursor + 1,
+            expected == cst_scan_node_properties_from_spec(
+                token_views,
+                index as int,
+                end as int,
+                anchor_property_token,
+                tag_property_token,
+                (end - index) as nat + 1,
+            ),
+            expected == cst_scan_node_properties_from_spec(
+                token_views,
+                cursor as int,
+                end as int,
+                anchor,
+                tag,
+                fuel,
+            ),
+        decreases end - cursor,
+    {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, cursor as int);
+            assert(token_views[cursor as int] == tokens@[cursor as int]@);
+        }
+        let kind = tokens[cursor].kind();
+        if kind == CompletedTokenKind::AnchorProperty {
+            if anchor.is_some() {
+                proof {
+                    reveal(cst_scan_node_properties_from_spec);
+                    assert(expected == Err(
+                        CstErrorView {
+                            kind: CstErrorKind::DuplicateAnchorProperty,
+                            byte_offset: token_views[cursor as int].byte_start,
+                        },
+                    ));
+                }
+                return Err(
+                    CstError::at(
+                        CstErrorKind::DuplicateAnchorProperty,
+                        tokens[cursor].byte_start(),
+                    ),
+                );
+            }
+            anchor = Some(cursor as u64);
+        } else {
+            if tag.is_some() {
+                proof {
+                    reveal(cst_scan_node_properties_from_spec);
+                    assert(expected == Err(
+                        CstErrorView {
+                            kind: CstErrorKind::DuplicateTagProperty,
+                            byte_offset: token_views[cursor as int].byte_start,
+                        },
+                    ));
+                }
+                return Err(
+                    CstError::at(CstErrorKind::DuplicateTagProperty, tokens[cursor].byte_start()),
+                );
+            }
+            tag = Some(cursor as u64);
+        }
+        let after_property = cursor + 1;
+        let next = skip_trivia(tokens, after_property, end);
+        if next < end && next == after_property {
+            proof {
+                crate::token::lemma_completed_token_view_at(tokens@, next as int);
+                reveal(cst_scan_node_properties_from_spec);
+                assert(expected == Err(
+                    CstErrorView {
+                        kind: CstErrorKind::MissingPropertySeparation,
+                        byte_offset: token_views[next as int].byte_start,
+                    },
+                ));
+            }
+            return Err(
+                CstError::at(CstErrorKind::MissingPropertySeparation, tokens[next].byte_start()),
+            );
+        }
+        proof {
+            reveal(cst_scan_node_properties_from_spec);
+            assert(fuel > 0);
+            fuel = (fuel - 1) as nat;
+        }
+        cursor = next;
+    }
+    let properties = NodeProperties {
+        next_token: cursor,
+        anchor_property_token: anchor,
+        tag_property_token: tag,
+    };
+    proof {
+        if cursor < end {
+            crate::token::lemma_completed_token_view_at(tokens@, cursor as int);
+        }
+        reveal(cst_scan_node_properties_from_spec);
+    }
+    Ok(properties)
 }
 
 fn byte_at(tokens: &[CompletedToken], index: usize, source_len_bytes: u64) -> (result: u64)
@@ -8194,49 +8451,13 @@ fn parse_node_iterative(
                 continue;
             }
             let token_start = index;
-            let mut anchor_property_token = None;
-            let mut tag_property_token = None;
-            while index < task.end && (tokens[index].kind() == CompletedTokenKind::AnchorProperty
-                || tokens[index].kind() == CompletedTokenKind::TagProperty || tokens[index].kind()
-                == CompletedTokenKind::VerbatimTagProperty)
-                invariant
-                    token_start <= index <= task.end,
-                    task.end <= tokens.len(),
-                    builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
-                decreases task.end - index,
-            {
-                if tokens[index].kind() == CompletedTokenKind::AnchorProperty {
-                    if anchor_property_token.is_some() {
-                        return Err(
-                            CstError::at(
-                                CstErrorKind::DuplicateAnchorProperty,
-                                tokens[index].byte_start(),
-                            ),
-                        );
-                    }
-                    anchor_property_token = Some(index as u64);
-                } else {
-                    if tag_property_token.is_some() {
-                        return Err(
-                            CstError::at(
-                                CstErrorKind::DuplicateTagProperty,
-                                tokens[index].byte_start(),
-                            ),
-                        );
-                    }
-                    tag_property_token = Some(index as u64);
-                }
-                let after_property = index + 1;
-                index = skip_trivia(tokens, after_property, task.end);
-                if index < task.end && index == after_property {
-                    return Err(
-                        CstError::at(
-                            CstErrorKind::MissingPropertySeparation,
-                            tokens[index].byte_start(),
-                        ),
-                    );
-                }
-            }
+            let properties = match scan_node_properties(tokens, index, task.end, None, None) {
+                Ok(properties) => properties,
+                Err(error) => return Err(error),
+            };
+            index = properties.next_token;
+            let anchor_property_token = properties.anchor_property_token;
+            let tag_property_token = properties.tag_property_token;
             if index >= task.end {
                 completed =
                 match finish_property_empty_node(

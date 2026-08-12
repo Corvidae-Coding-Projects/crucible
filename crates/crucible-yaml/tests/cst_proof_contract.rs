@@ -15,6 +15,101 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_node_property_scan_is_exact() {
+    proof {
+        let anchor = CompletedTokenView {
+            kind: CompletedTokenKind::AnchorProperty,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 2,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let separation = CompletedTokenView {
+            kind: CompletedTokenKind::Separation,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 2,
+            byte_end: 3,
+            ..anchor
+        };
+        let tag = CompletedTokenView {
+            kind: CompletedTokenKind::TagProperty,
+            start_atom_index: 2,
+            end_atom_index: 3,
+            byte_start: 3,
+            byte_end: 5,
+            ..anchor
+        };
+        let scalar = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_atom_index: 3,
+            end_atom_index: 4,
+            byte_start: 6,
+            byte_end: 7,
+            scalar_index: Some(0),
+            ..anchor
+        };
+        let tokens = Seq::empty().push(anchor).push(separation).push(tag).push(separation).push(
+            scalar,
+        );
+        reveal_with_fuel(crucible_yaml::cst::cst_scan_node_properties_from_spec, 8);
+        reveal_with_fuel(crucible_yaml::cst::cst_skip_trivia_spec, 8);
+        reveal(crucible_yaml::cst::cst_token_is_trivia_spec);
+        let result = crucible_yaml::cst::cst_scan_node_properties_from_spec(
+            tokens,
+            0,
+            5,
+            None,
+            None,
+            6,
+        );
+        assert(result == Ok(
+            crucible_yaml::cst::NodePropertiesView {
+                next_token: 4,
+                anchor_property_token: Some(0),
+                tag_property_token: Some(2),
+            },
+        ));
+        let duplicate = Seq::empty().push(anchor).push(separation).push(
+            CompletedTokenView { byte_start: 3, byte_end: 5, ..anchor },
+        );
+        assert(crucible_yaml::cst::cst_scan_node_properties_from_spec(
+            duplicate,
+            0,
+            3,
+            None,
+            None,
+            4,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::DuplicateAnchorProperty,
+                byte_offset: 3,
+            },
+        ));
+        let unseparated = Seq::empty().push(anchor).push(scalar);
+        assert(crucible_yaml::cst::cst_scan_node_properties_from_spec(
+            unseparated,
+            0,
+            2,
+            None,
+            None,
+            3,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::MissingPropertySeparation,
+                byte_offset: 6,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_leaf_node_constructors_are_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {
