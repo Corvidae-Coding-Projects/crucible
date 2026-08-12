@@ -4637,6 +4637,83 @@ fn find_mapping_value_on_line(tokens: &[CompletedToken], start: usize, end: usiz
     None
 }
 
+pub open spec fn cst_find_explicit_mapping_value_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    index: int,
+    end: int,
+    indentation: u64,
+    flow_depth: u64,
+    fuel: nat,
+) -> Option<int>
+    decreases fuel,
+{
+    if index < 0 || end < index || end > tokens.len() || fuel == 0 || index >= end {
+        None
+    } else {
+        let kind = tokens[index].kind;
+        if kind == CompletedTokenKind::MappingValue && flow_depth == 0 && cst_token_column_spec(
+            atoms,
+            tokens[index],
+        ) == indentation {
+            Some(index)
+        } else {
+            let next_depth = if kind == CompletedTokenKind::FlowSequenceStart || kind
+                == CompletedTokenKind::FlowMappingStart {
+                if flow_depth < u64::MAX {
+                    (flow_depth + 1) as u64
+                } else {
+                    flow_depth
+                }
+            } else if kind == CompletedTokenKind::FlowSequenceEnd || kind
+                == CompletedTokenKind::FlowMappingEnd {
+                if flow_depth > 0 {
+                    (flow_depth - 1) as u64
+                } else {
+                    flow_depth
+                }
+            } else {
+                flow_depth
+            };
+            cst_find_explicit_mapping_value_from_spec(
+                atoms,
+                tokens,
+                index + 1,
+                end,
+                indentation,
+                next_depth,
+                (fuel - 1) as nat,
+            )
+        }
+    }
+}
+
+pub open spec fn cst_find_explicit_mapping_value_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: int,
+    end: int,
+    indentation: u64,
+    fuel: nat,
+) -> Option<int> {
+    if start < 0 || end < start || end > tokens.len() {
+        None
+    } else {
+        match cst_find_mapping_value_on_line_spec(tokens, start, end, fuel) {
+            Some(index) => Some(index),
+            None => cst_find_explicit_mapping_value_from_spec(
+                atoms,
+                tokens,
+                start,
+                end,
+                indentation,
+                0,
+                fuel,
+            ),
+        }
+    }
+}
+
 fn find_explicit_mapping_value(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -4648,36 +4725,161 @@ fn find_explicit_mapping_value(
         start <= end <= tokens.len(),
     ensures
         result.is_some() ==> start <= result.unwrap() < end,
+        match result {
+            Some(index) => cst_find_explicit_mapping_value_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                crate::token::completed_token_views_spec(tokens@),
+                start as int,
+                end as int,
+                indentation,
+                (end - start) as nat + 1,
+            ) == Some(index as int),
+            None => cst_find_explicit_mapping_value_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                crate::token::completed_token_views_spec(tokens@),
+                start as int,
+                end as int,
+                indentation,
+                (end - start) as nat + 1,
+            ).is_none(),
+        },
 {
-    if let Some(same_line) = find_mapping_value_on_line(tokens, start, end) {
+    let same_line_result = find_mapping_value_on_line(tokens, start, end);
+    if let Some(same_line) = same_line_result {
+        proof {
+            reveal(cst_find_explicit_mapping_value_spec);
+        }
         return Some(same_line);
+    }
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    let ghost expected = cst_find_explicit_mapping_value_spec(
+        atom_views,
+        token_views,
+        start as int,
+        end as int,
+        indentation,
+        (end - start) as nat + 1,
+    );
+    proof {
+        reveal(cst_find_explicit_mapping_value_spec);
+        assert(cst_find_mapping_value_on_line_spec(
+            token_views,
+            start as int,
+            end as int,
+            (end - start) as nat + 1,
+        ).is_none());
+        assert(expected == cst_find_explicit_mapping_value_from_spec(
+            atom_views,
+            token_views,
+            start as int,
+            end as int,
+            indentation,
+            0,
+            (end - start) as nat + 1,
+        ));
     }
     let mut index = start;
     let mut flow_depth = 0u64;
+    let ghost mut fuel: nat = (end - start) as nat + 1;
     while index < end
         invariant
             start <= index <= end,
             end <= tokens.len(),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            atom_views.len() == atoms.len(),
+            fuel >= end - index + 1,
+            expected == cst_find_explicit_mapping_value_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                indentation,
+                (end - start) as nat + 1,
+            ),
+            expected == cst_find_explicit_mapping_value_from_spec(
+                atom_views,
+                token_views,
+                index as int,
+                end as int,
+                indentation,
+                flow_depth,
+                fuel,
+            ),
         decreases end - index,
     {
         let kind = tokens[index].kind();
-        if kind == CompletedTokenKind::FlowSequenceStart || kind
+        let column = token_column(atoms, &tokens[index]);
+        if kind == CompletedTokenKind::MappingValue && flow_depth == 0 && column == indentation {
+            proof {
+                crate::token::lemma_completed_token_view_at(tokens@, index as int);
+                assert(token_views[index as int] == tokens@[index as int]@);
+                assert(token_views[index as int].kind == kind);
+                assert(cst_token_column_spec(atom_views, token_views[index as int]) == column);
+                assert(fuel > 0);
+                reveal(cst_find_explicit_mapping_value_from_spec);
+                assert(expected == Some(index as int));
+            }
+            return Some(index);
+        }
+        let next_flow_depth = if kind == CompletedTokenKind::FlowSequenceStart || kind
             == CompletedTokenKind::FlowMappingStart {
             if flow_depth < u64::MAX {
-                flow_depth += 1;
+                flow_depth + 1
+            } else {
+                flow_depth
             }
         } else if kind == CompletedTokenKind::FlowSequenceEnd || kind
             == CompletedTokenKind::FlowMappingEnd {
             if flow_depth > 0 {
-                flow_depth -= 1;
+                flow_depth - 1
+            } else {
+                flow_depth
             }
-        } else if kind == CompletedTokenKind::MappingValue && flow_depth == 0 && token_column(
-            atoms,
-            &tokens[index],
-        ) == indentation {
-            return Some(index);
+        } else {
+            flow_depth
+        };
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, index as int);
+            assert(token_views[index as int] == tokens@[index as int]@);
+            assert(token_views[index as int].kind == kind);
+            assert(cst_token_column_spec(atom_views, token_views[index as int]) == column);
+            assert(fuel > 0);
+            reveal(cst_find_explicit_mapping_value_from_spec);
+            assert(expected == cst_find_explicit_mapping_value_from_spec(
+                atom_views,
+                token_views,
+                index as int + 1,
+                end as int,
+                indentation,
+                next_flow_depth,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
         }
+        flow_depth = next_flow_depth;
         index += 1;
+        proof {
+            assert(expected == cst_find_explicit_mapping_value_from_spec(
+                atom_views,
+                token_views,
+                index as int,
+                end as int,
+                indentation,
+                flow_depth,
+                fuel,
+            ));
+        }
+    }
+    proof {
+        assert(fuel > 0);
+        reveal(cst_find_explicit_mapping_value_from_spec);
     }
     None
 }

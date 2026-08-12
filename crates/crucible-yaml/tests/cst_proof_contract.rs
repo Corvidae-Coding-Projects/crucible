@@ -13,6 +13,67 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_explicit_mapping_lookahead_uses_exact_cross_line_indentation() {
+    proof {
+        let first_position = SourcePositionView { byte_offset: 0, line: 0, column: 2 };
+        let second_position = SourcePositionView { byte_offset: 4, line: 1, column: 4 };
+        let first_atom = LexicalAtomView {
+            kind: crucible_yaml::LexicalAtomKind::Content,
+            code_point: 0x61,
+            span: SourceSpanView { start: first_position, end: first_position },
+        };
+        let second_atom = LexicalAtomView {
+            kind: crucible_yaml::LexicalAtomKind::Indicator(
+                crucible_yaml::YamlIndicator::MappingValue,
+            ),
+            code_point: 0x3a,
+            span: SourceSpanView { start: second_position, end: second_position },
+        };
+        let key = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: Some(0),
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let colon = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_line_number: 1,
+            end_line_number: 1,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 4,
+            byte_end: 5,
+            scalar_index: None,
+            ..key
+        };
+        let atoms = Seq::empty().push(first_atom).push(second_atom);
+        let tokens = Seq::empty().push(key).push(colon);
+        reveal(crucible_yaml::cst::cst_find_explicit_mapping_value_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_find_explicit_mapping_value_from_spec, 4);
+        reveal(crucible_yaml::cst::cst_find_mapping_value_on_line_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_find_mapping_value_on_line_from_spec, 4);
+        reveal(crucible_yaml::cst::cst_token_column_spec);
+        assert(crucible_yaml::cst::cst_find_explicit_mapping_value_spec(atoms, tokens, 0, 2, 4, 3)
+            == Some(1));
+        assert(crucible_yaml::cst::cst_find_explicit_mapping_value_spec(
+            atoms,
+            tokens,
+            0,
+            2,
+            3,
+            3,
+        ).is_none());
+    }
+}
+
+#[test]
 fn pure_mapping_value_lookahead_skips_nested_flow_indicators() {
     proof {
         let base = CompletedTokenView {
