@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/crucible-core", "crates/crucible-xtask"]
+members = ["crates/crucible-core", "crates/crucible-xtask", "crates/crucible-yaml"]
 resolver = "2"
 
 [workspace.package]

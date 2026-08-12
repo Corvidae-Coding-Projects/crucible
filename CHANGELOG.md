@@ -23,5 +23,9 @@ begin.
   conflicts and missing endpoints, constructor-only portable UTC timestamps, exhaustive stable-tag
   equality, retry-safe borrowed payloads, normative relation direction, atomic multi-input derived
   evidence, explicit no-configuration identity, and versioned envelopes.
+- Project-owned Verus Crucible YAML profile-1 UTF-8 decoding with exact original-byte spans,
+  explicit BOM policy, CR/CRLF normalization, typed malformed-input diagnostics, absolute and
+  caller-lowered resource caps, private invariant-bearing constructors, a total pure success-or-error
+  specification, and exact executable correspondence proofs.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

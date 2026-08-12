@@ -1296,6 +1296,38 @@ At minimum it defines:
 - diagnostic stability and recovery behavior,
 - canonical serialization used for configuration and campaign digests.
 
+Profile 1's byte-decoding transformation is version 1. It accepts only shortest-form UTF-8 that
+decodes to Unicode scalar values, with distinct diagnostics for unexpected or invalid continuation
+bytes, invalid leaders, truncation, overlong forms, surrogate code points, and values above
+`U+10FFFF`. A leading UTF-8 byte-order mark is either explicitly forbidden or stripped under an
+explicit `AllowAndStrip` policy; `U+FEFF` anywhere else remains data. CRLF and standalone CR are
+normalized to LF. Every decoded scalar retains a half-open span over the original source bytes,
+including both bytes of CRLF, with zero-based lines and scalar columns. A stripped BOM consumes
+bytes 0 through 2 without incrementing the first scalar's line or column.
+
+The version-1 absolute decoding limits are 16 MiB of source bytes and 1,048,576 decoded scalars.
+Callers MUST provide per-operation limits and MAY lower either bound but cannot raise the profile
+maximum. A larger accepted representation requires a new language-profile decision rather than a
+platform-dependent allocation accident. These decoder limits do not replace the lexer, parser,
+alias-expansion, depth, individual-scalar, or total semantic-value limits required below.
+
+Diagnostic precedence for byte-decoding transformation version 1 is normative. The decoder first
+applies the effective source-byte cap, then rejects a forbidden leading BOM, then applies the
+decoded-scalar cap before attempting the next scalar. Within a scalar it classifies an intrinsically
+invalid leader first. For a potentially valid multi-byte leader, it examines each available
+continuation byte from left to right. An available non-continuation byte is reported at that byte.
+After a valid second byte is present, the `E0`, `ED`, `F0`, and `F4` second-byte restrictions are
+reported as overlong, surrogate, or out-of-range errors at the leader before inspecting any later
+byte. Only when every available byte required so far is valid and another required byte is absent is
+the sequence truncated.
+
+Offsets are also normative: source-limit errors identify the first byte excluded by the effective
+cap; scalar-limit errors identify the start of the next scalar; forbidden BOM, intrinsically
+overlong, surrogate, and out-of-range errors identify the leader; continuation errors identify the
+offending byte; and truncation identifies the end-of-input offset. The pure Verus transformation is
+total over bytes, limits, and BOM policy. Its result fixes both every successful decoded source and
+every error kind and offset, and executable correspondence is required for both result variants.
+
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
 without a language-profile change. Parse rejection is a typed configuration result, not a

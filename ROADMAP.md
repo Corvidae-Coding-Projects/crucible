@@ -21,6 +21,9 @@ Current work establishes and extends:
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - verified structurally valid append-only evidence/provenance transitions, atomic multi-input
   derivations, retry-safe borrowed publication, and versioned evidence envelopes;
+- project-owned Crucible YAML profile-1 byte decoding with exact source spans, typed UTF-8
+  diagnostics, explicit BOM behavior, line-ending normalization, resource caps, and Verus
+  total-result correspondence proofs;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
