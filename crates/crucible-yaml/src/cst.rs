@@ -7450,6 +7450,58 @@ fn specialize_parse_task(
     Ok(specialized)
 }
 
+pub open spec fn cst_task_push_sequence_entry_spec(
+    task: ParseTaskView,
+    entry: CstSequenceEntryView,
+) -> ParseTaskView {
+    ParseTaskView { pending_sequence: task.pending_sequence.push(entry), ..task }
+}
+
+fn task_push_sequence_entry(entry: CstSequenceEntry, task: &mut ParseTask)
+    ensures
+        final(task)@ == cst_task_push_sequence_entry_spec(old(task)@, entry@),
+{
+    let ghost old_entries = task.pending_sequence@;
+    task.pending_sequence.push(entry);
+    proof {
+        lemma_cst_sequence_entry_views_push(old_entries, entry);
+        reveal(cst_task_push_sequence_entry_spec);
+    }
+}
+
+pub open spec fn cst_task_push_mapping_entry_spec(
+    task: ParseTaskView,
+    entry: CstMappingEntryView,
+) -> ParseTaskView {
+    ParseTaskView { pending_mapping: task.pending_mapping.push(entry), ..task }
+}
+
+fn task_push_mapping_entry(entry: CstMappingEntry, task: &mut ParseTask)
+    ensures
+        final(task)@ == cst_task_push_mapping_entry_spec(old(task)@, entry@),
+{
+    let ghost old_entries = task.pending_mapping@;
+    task.pending_mapping.push(entry);
+    proof {
+        lemma_cst_mapping_entry_views_push(old_entries, entry);
+        reveal(cst_task_push_mapping_entry_spec);
+    }
+}
+
+pub open spec fn cst_task_push_flow_entry_spec(task: ParseTaskView, token: u64) -> ParseTaskView {
+    ParseTaskView { flow_entry_tokens: task.flow_entry_tokens.push(token), ..task }
+}
+
+fn task_push_flow_entry(task: &mut ParseTask, token: u64)
+    ensures
+        final(task)@ == cst_task_push_flow_entry_spec(old(task)@, token),
+{
+    task.flow_entry_tokens.push(token);
+    proof {
+        reveal(cst_task_push_flow_entry_spec);
+    }
+}
+
 pub open spec fn cst_push_sequence_entries_from_spec(
     builder: CstBuilderView,
     tokens: Seq<crate::token::CompletedTokenView>,
@@ -8793,13 +8845,14 @@ fn parse_node_iterative(
                             Ok(node) => node,
                             Err(error) => return Err(error),
                         };
-                        task.pending_sequence.push(
+                        task_push_sequence_entry(
                             CstSequenceEntry {
                                 node_index: pair,
                                 token_start: task.entry_token_start as u64,
                                 token_end: task.cursor as u64,
                                 indicator_token: None,
                             },
+                            &mut task,
                         );
                         task.state = 4;
                         tasks.push(task);
@@ -8842,13 +8895,14 @@ fn parse_node_iterative(
                     } else {
                         task.key_node_index
                     };
-                    task.pending_sequence.push(
+                    task_push_sequence_entry(
                         CstSequenceEntry {
                             node_index: entry_node,
                             token_start: task.entry_token_start as u64,
                             token_end: task.cursor as u64,
                             indicator_token: None,
                         },
+                        &mut task,
                     );
                     task.state = 4;
                     tasks.push(task);
@@ -8884,13 +8938,14 @@ fn parse_node_iterative(
                     Ok(node) => node,
                     Err(error) => return Err(error),
                 };
-                task.pending_sequence.push(
+                task_push_sequence_entry(
                     CstSequenceEntry {
                         node_index: pair,
                         token_start: task.entry_token_start as u64,
                         token_end: task.cursor as u64,
                         indicator_token: None,
                     },
+                    &mut task,
                 );
                 task.state = 4;
                 tasks.push(task);
@@ -8917,7 +8972,8 @@ fn parse_node_iterative(
                     CstError::at(CstErrorKind::MissingFlowEntry, tokens[task.cursor].byte_start()),
                 );
             }
-            task.flow_entry_tokens.push(task.cursor as u64);
+            let entry_token = task.cursor as u64;
+            task_push_flow_entry(&mut task, entry_token);
             task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
             if task.cursor < task.end && tokens[task.cursor].kind()
                 == CompletedTokenKind::FlowEntry {
@@ -9029,7 +9085,7 @@ fn parse_node_iterative(
                             Ok(node) => node,
                             Err(error) => return Err(error),
                         };
-                        task.pending_mapping.push(
+                        task_push_mapping_entry(
                             CstMappingEntry {
                                 key_node_index: task.key_node_index,
                                 value_node_index: value,
@@ -9042,6 +9098,7 @@ fn parse_node_iterative(
                                 },
                                 mapping_value_token: Some(task.colon_token as u64),
                             },
+                            &mut task,
                         );
                         task.state = 4;
                         tasks.push(task);
@@ -9064,7 +9121,7 @@ fn parse_node_iterative(
                         Ok(node) => node,
                         Err(error) => return Err(error),
                     };
-                    task.pending_mapping.push(
+                    task_push_mapping_entry(
                         CstMappingEntry {
                             key_node_index: task.key_node_index,
                             value_node_index: value,
@@ -9077,6 +9134,7 @@ fn parse_node_iterative(
                             },
                             mapping_value_token: None,
                         },
+                        &mut task,
                     );
                     task.state = 4;
                     tasks.push(task);
@@ -9092,7 +9150,7 @@ fn parse_node_iterative(
                     return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                 }
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
-                task.pending_mapping.push(
+                task_push_mapping_entry(
                     CstMappingEntry {
                         key_node_index: task.key_node_index,
                         value_node_index: child.node_index,
@@ -9105,6 +9163,7 @@ fn parse_node_iterative(
                         },
                         mapping_value_token: Some(task.colon_token as u64),
                     },
+                    &mut task,
                 );
                 task.state = 4;
                 tasks.push(task);
@@ -9131,7 +9190,8 @@ fn parse_node_iterative(
                     CstError::at(CstErrorKind::MissingFlowEntry, tokens[task.cursor].byte_start()),
                 );
             }
-            task.flow_entry_tokens.push(task.cursor as u64);
+            let entry_token = task.cursor as u64;
+            task_push_flow_entry(&mut task, entry_token);
             task.cursor = skip_trivia(tokens, task.cursor + 1, task.end);
             if task.cursor < task.end && tokens[task.cursor].kind()
                 == CompletedTokenKind::FlowEntry {
@@ -9184,7 +9244,7 @@ fn parse_node_iterative(
                         Ok(node) => node,
                         Err(error) => return Err(error),
                     };
-                    task.pending_sequence.push(
+                    task_push_sequence_entry(
                         CstSequenceEntry {
                             node_index: node,
                             token_start: dash as u64,
@@ -9195,6 +9255,7 @@ fn parse_node_iterative(
                             },
                             indicator_token: Some(dash as u64),
                         },
+                        &mut task,
                     );
                     task.state = 2;
                     tasks.push(task);
@@ -9237,13 +9298,14 @@ fn parse_node_iterative(
                 if task.entry_token_end > task.node_token_end {
                     task.node_token_end = task.entry_token_end;
                 }
-                task.pending_sequence.push(
+                task_push_sequence_entry(
                     CstSequenceEntry {
                         node_index: child.node_index,
                         token_start: task.entry_token_start as u64,
                         token_end: task.entry_token_end as u64,
                         indicator_token: Some(task.entry_token_start as u64),
                     },
+                    &mut task,
                 );
                 task.state = 2;
                 tasks.push(task);
@@ -9451,7 +9513,7 @@ fn parse_node_iterative(
                     } else {
                         task.colon_token + 1
                     };
-                    task.pending_mapping.push(
+                    task_push_mapping_entry(
                         CstMappingEntry {
                             key_node_index: task.key_node_index,
                             value_node_index: value,
@@ -9464,6 +9526,7 @@ fn parse_node_iterative(
                             },
                             mapping_value_token: Some(task.colon_token as u64),
                         },
+                        &mut task,
                     );
                     task.state = 6;
                     tasks.push(task);
@@ -9518,7 +9581,7 @@ fn parse_node_iterative(
                 } else {
                     task.colon_token + 1
                 };
-                task.pending_mapping.push(
+                task_push_mapping_entry(
                     CstMappingEntry {
                         key_node_index: task.key_node_index,
                         value_node_index: child.node_index,
@@ -9531,6 +9594,7 @@ fn parse_node_iterative(
                         },
                         mapping_value_token: Some(task.colon_token as u64),
                     },
+                    &mut task,
                 );
                 task.state = 6;
                 tasks.push(task);
@@ -9563,7 +9627,7 @@ fn parse_node_iterative(
                 } else {
                     task.entry_token_start + 1
                 };
-                task.pending_mapping.push(
+                task_push_mapping_entry(
                     CstMappingEntry {
                         key_node_index: task.key_node_index,
                         value_node_index: value,
@@ -9572,6 +9636,7 @@ fn parse_node_iterative(
                         explicit_key_token: Some(task.entry_token_start as u64),
                         mapping_value_token: None,
                     },
+                    &mut task,
                 );
                 task.state = 6;
                 tasks.push(task);

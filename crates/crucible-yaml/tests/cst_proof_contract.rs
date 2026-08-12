@@ -15,6 +15,44 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_parser_pending_table_appends_are_exact() {
+    proof {
+        let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
+        let sequence = CstSequenceEntryView {
+            node_index: 0,
+            token_start: 1,
+            token_end: 2,
+            indicator_token: Some(1),
+        };
+        let mapping = CstMappingEntryView {
+            key_node_index: 0,
+            value_node_index: 1,
+            token_start: 2,
+            token_end: 5,
+            explicit_key_token: Some(2),
+            mapping_value_token: Some(4),
+        };
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_task_push_sequence_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_push_mapping_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_push_flow_entry_spec);
+        let after_sequence = crucible_yaml::cst::cst_task_push_sequence_entry_spec(task, sequence);
+        assert(after_sequence.pending_sequence == Seq::empty().push(sequence));
+        assert(after_sequence.pending_mapping.len() == 0);
+        let after_mapping = crucible_yaml::cst::cst_task_push_mapping_entry_spec(
+            after_sequence,
+            mapping,
+        );
+        assert(after_mapping.pending_mapping == Seq::empty().push(mapping));
+        let after_flow = crucible_yaml::cst::cst_task_push_flow_entry_spec(after_mapping, 6);
+        assert(after_flow.flow_entry_tokens == Seq::empty().push(6));
+        assert(after_flow.token_start == task.token_start);
+        assert(after_flow.cursor == task.cursor && after_flow.end == task.end);
+        assert(after_flow.depth_left == task.depth_left);
+    }
+}
+
+#[test]
 fn pure_collection_frame_specialization_is_exact() {
     proof {
         let base = crucible_yaml::cst::cst_node_task_spec(2, 9, true, 4);
