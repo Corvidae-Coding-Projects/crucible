@@ -83,6 +83,10 @@ Current work establishes and extends:
   representation, including direct Unicode, quote doubling, multiline flow folding, exact atom and
   byte provenance, empty content, caller-lowered first-excluded output diagnostics, and total
   executable-to-pure correspondence;
+- verified semantic decoding of authenticated double-quoted content into the shared scalar-content
+  representation, including every YAML 1.2.2 simple and hexadecimal escape, ordinary flow folding,
+  escaped line breaks and following empty-line content, exact atom/byte provenance, empty content,
+  caller-lowered first-excluded output diagnostics, and total executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

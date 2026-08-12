@@ -1,9 +1,9 @@
 //! Verified style-specific scalar content decoding for Crucible YAML profile 1.
 //!
 //! Block scalars are already normalized by the authenticated block-scalar machine. Their decoder
-//! copies that content into the shared representation, while the single-quoted decoder implements
-//! quote doubling and flow-line folding directly. Both retain exact atom and byte provenance;
-//! double-quoted and plain styles extend the same model.
+//! copies that content into the shared representation, while the quoted decoders implement quote
+//! doubling, every YAML 1.2.2 double-quoted escape, and both ordinary and escaped flow-line
+//! folding. All retain exact atom and byte provenance; the plain style extends the same model.
 use crate::atom::{AtomizedSource, LexicalAtom};
 #[allow(unused_imports)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
@@ -732,6 +732,435 @@ pub open spec fn decode_profile1_single_quoted_scalar_content_spec(
         )
     } else {
         decode_single_quoted_content_spec(
+            atomized.atoms,
+            quoted.scalars[scalar_index as int],
+            limits,
+        )
+    }
+}
+
+pub open spec fn simple_double_escape_value_spec(code_point: u32) -> Option<u32> {
+    if code_point == 0x30 {
+        Some(0x00)
+    } else if code_point == 0x61 {
+        Some(0x07)
+    } else if code_point == 0x62 {
+        Some(0x08)
+    } else if code_point == 0x74 || code_point == 0x09 {
+        Some(0x09)
+    } else if code_point == 0x6e {
+        Some(0x0a)
+    } else if code_point == 0x76 {
+        Some(0x0b)
+    } else if code_point == 0x66 {
+        Some(0x0c)
+    } else if code_point == 0x72 {
+        Some(0x0d)
+    } else if code_point == 0x65 {
+        Some(0x1b)
+    } else if code_point == 0x20 {
+        Some(0x20)
+    } else if code_point == 0x22 {
+        Some(0x22)
+    } else if code_point == 0x2f {
+        Some(0x2f)
+    } else if code_point == 0x5c {
+        Some(0x5c)
+    } else if code_point == 0x4e {
+        Some(0x85)
+    } else if code_point == 0x5f {
+        Some(0xa0)
+    } else if code_point == 0x4c {
+        Some(0x2028)
+    } else if code_point == 0x50 {
+        Some(0x2029)
+    } else {
+        None
+    }
+}
+
+pub open spec fn scalar_hex_digit_value_spec(code_point: u32) -> Option<u32> {
+    if 0x30 <= code_point <= 0x39 {
+        Some((code_point - 0x30) as u32)
+    } else if 0x41 <= code_point <= 0x46 {
+        Some((code_point - 0x41 + 10) as u32)
+    } else if 0x61 <= code_point <= 0x66 {
+        Some((code_point - 0x61 + 10) as u32)
+    } else {
+        None
+    }
+}
+
+pub open spec fn double_hex_value_tail_spec(
+    atoms: Seq<LexicalAtomView>,
+    index: int,
+    end: int,
+    value: int,
+    fuel: nat,
+) -> Result<int, u64>
+    decreases fuel,
+{
+    if index >= end {
+        Ok(value)
+    } else if fuel == 0 || index < 0 || end > atoms.len() {
+        Err(
+            if 0 <= index < atoms.len() {
+                atoms[index].span.start.byte_offset
+            } else {
+                0
+            },
+        )
+    } else {
+        match scalar_hex_digit_value_spec(atoms[index].code_point) {
+            None => Err(atoms[index].span.start.byte_offset),
+            Some(digit) => double_hex_value_tail_spec(
+                atoms,
+                index + 1,
+                end,
+                value * 16 + digit as int,
+                (fuel - 1) as nat,
+            ),
+        }
+    }
+}
+
+pub open spec fn double_escape_content_spec(
+    atoms: Seq<LexicalAtomView>,
+    index: int,
+    atom_width: int,
+    code_point: u32,
+) -> DecodedContentScalarView {
+    DecodedContentScalarView {
+        code_point,
+        source_atom_start: index as u64,
+        source_atom_end: (index + atom_width) as u64,
+        byte_start: atoms[index].span.start.byte_offset,
+        byte_end: atoms[index + atom_width - 1].span.end.byte_offset,
+        origin: DecodedContentOrigin::DoubleQuotedEscape,
+    }
+}
+
+pub open spec fn escaped_break_content_spec(atoms: Seq<LexicalAtomView>, breaks: Seq<int>) -> Seq<
+    DecodedContentScalarView,
+> {
+    if breaks.len() <= 1 {
+        Seq::empty()
+    } else {
+        Seq::new(
+            (breaks.len() - 1) as nat,
+            |offset: int|
+                direct_atom_content_spec(
+                    atoms[breaks[offset + 1]],
+                    breaks[offset + 1],
+                    0x0a,
+                    DecodedContentOrigin::EscapedLineBreak,
+                ),
+        )
+    }
+}
+
+pub open spec fn double_escape_width_spec(code_point: u32) -> Option<int> {
+    if code_point == 0x78 {
+        Some(2)
+    } else if code_point == 0x75 {
+        Some(4)
+    } else if code_point == 0x55 {
+        Some(8)
+    } else {
+        None
+    }
+}
+
+pub open spec fn decoded_unicode_scalar_spec(code_point: int) -> bool {
+    0 <= code_point <= 0x10ffff && !(0xd800 <= code_point <= 0xdfff)
+}
+
+pub open spec fn double_quoted_step_spec(
+    atoms: Seq<LexicalAtomView>,
+    index: int,
+    end: int,
+    remaining: u64,
+) -> Result<(Seq<DecodedContentScalarView>, int), ScalarDecodeErrorView> {
+    let atom = atoms[index];
+    if scalar_atom_white_spec(atom) {
+        let after_white = skip_scalar_white_spec(atoms, index, end, (end - index) as nat);
+        if after_white < end && atoms[after_white].code_point == 0x0a {
+            Ok((Seq::empty(), after_white))
+        } else {
+            let item = direct_atom_content_spec(
+                atom,
+                index,
+                atom.code_point,
+                DecodedContentOrigin::Direct,
+            );
+            if remaining == 0 {
+                Err(
+                    ScalarDecodeErrorView {
+                        kind: ScalarDecodeErrorKind::ContentLimitExceeded,
+                        byte_offset: item.byte_start,
+                    },
+                )
+            } else {
+                Ok((Seq::empty().push(item), index + 1))
+            }
+        }
+    } else if atom.code_point == 0x0a {
+        let group = single_quoted_break_group_spec(atoms, index, end, (end - index) as nat);
+        let additions = folded_break_content_spec(atoms, group.0);
+        if additions.len() > remaining {
+            Err(
+                ScalarDecodeErrorView {
+                    kind: ScalarDecodeErrorKind::ContentLimitExceeded,
+                    byte_offset: additions[remaining as int].byte_start,
+                },
+            )
+        } else {
+            Ok((additions, group.1))
+        }
+    } else if atom.code_point == 0x5c {
+        if index + 1 >= end {
+            Err(
+                ScalarDecodeErrorView {
+                    kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                    byte_offset: atom.span.start.byte_offset,
+                },
+            )
+        } else {
+            let escaped = atoms[index + 1];
+            if escaped.code_point == 0x0a {
+                let group = single_quoted_break_group_spec(
+                    atoms,
+                    index + 1,
+                    end,
+                    (end - index - 1) as nat,
+                );
+                let additions = escaped_break_content_spec(atoms, group.0);
+                if additions.len() > remaining {
+                    Err(
+                        ScalarDecodeErrorView {
+                            kind: ScalarDecodeErrorKind::ContentLimitExceeded,
+                            byte_offset: additions[remaining as int].byte_start,
+                        },
+                    )
+                } else {
+                    Ok((additions, group.1))
+                }
+            } else {
+                match simple_double_escape_value_spec(escaped.code_point) {
+                    Some(code_point) => {
+                        let item = double_escape_content_spec(atoms, index, 2, code_point);
+                        if remaining == 0 {
+                            Err(
+                                ScalarDecodeErrorView {
+                                    kind: ScalarDecodeErrorKind::ContentLimitExceeded,
+                                    byte_offset: item.byte_start,
+                                },
+                            )
+                        } else {
+                            Ok((Seq::empty().push(item), index + 2))
+                        }
+                    },
+                    None => match double_escape_width_spec(escaped.code_point) {
+                        None => Err(
+                            ScalarDecodeErrorView {
+                                kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                                byte_offset: escaped.span.start.byte_offset,
+                            },
+                        ),
+                        Some(digit_count) => {
+                            let escape_end = index + 2 + digit_count;
+                            if escape_end > end {
+                                Err(
+                                    ScalarDecodeErrorView {
+                                        kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                                        byte_offset: atom.span.start.byte_offset,
+                                    },
+                                )
+                            } else {
+                                match double_hex_value_tail_spec(
+                                    atoms,
+                                    index + 2,
+                                    escape_end,
+                                    0,
+                                    digit_count as nat,
+                                ) {
+                                    Err(byte_offset) => Err(
+                                        ScalarDecodeErrorView {
+                                            kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                                            byte_offset,
+                                        },
+                                    ),
+                                    Ok(value) => {
+                                        if !decoded_unicode_scalar_spec(value) {
+                                            Err(
+                                                ScalarDecodeErrorView {
+                                                    kind:
+                                                        ScalarDecodeErrorKind::InputQuotedMismatch,
+                                                    byte_offset: atom.span.start.byte_offset,
+                                                },
+                                            )
+                                        } else {
+                                            let item = double_escape_content_spec(
+                                                atoms,
+                                                index,
+                                                digit_count + 2,
+                                                value as u32,
+                                            );
+                                            if remaining == 0 {
+                                                Err(
+                                                    ScalarDecodeErrorView {
+                                                        kind:
+                                                            ScalarDecodeErrorKind::ContentLimitExceeded,
+                                                        byte_offset: item.byte_start,
+                                                    },
+                                                )
+                                            } else {
+                                                Ok((Seq::empty().push(item), escape_end))
+                                            }
+                                        }
+                                    },
+                                }
+                            }
+                        },
+                    },
+                }
+            }
+        }
+    } else if atom.code_point == 0x22 {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                byte_offset: atom.span.start.byte_offset,
+            },
+        )
+    } else {
+        let item = direct_atom_content_spec(
+            atom,
+            index,
+            atom.code_point,
+            DecodedContentOrigin::Direct,
+        );
+        if remaining == 0 {
+            Err(
+                ScalarDecodeErrorView {
+                    kind: ScalarDecodeErrorKind::ContentLimitExceeded,
+                    byte_offset: item.byte_start,
+                },
+            )
+        } else {
+            Ok((Seq::empty().push(item), index + 1))
+        }
+    }
+}
+
+pub open spec fn decode_double_quoted_loop_spec(
+    atoms: Seq<LexicalAtomView>,
+    index: int,
+    end: int,
+    remaining: u64,
+    fuel: nat,
+) -> Result<Seq<DecodedContentScalarView>, ScalarDecodeErrorView>
+    decreases fuel,
+{
+    if index >= end {
+        Ok(Seq::empty())
+    } else if fuel == 0 {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                byte_offset: atoms[index].span.start.byte_offset,
+            },
+        )
+    } else {
+        match double_quoted_step_spec(atoms, index, end, remaining) {
+            Err(error) => Err(error),
+            Ok((prefix, next)) => prepend_decoded_content_result_spec(
+                prefix,
+                decode_double_quoted_loop_spec(
+                    atoms,
+                    next,
+                    end,
+                    (remaining - prefix.len()) as u64,
+                    (fuel - 1) as nat,
+                ),
+            ),
+        }
+    }
+}
+
+pub open spec fn double_quoted_scalar_range_matches_atoms_spec(
+    atoms: Seq<LexicalAtomView>,
+    quote: QuotedScalarView,
+) -> bool {
+    quote.start_atom_index + 2 <= quote.end_atom_index && quote.end_atom_index <= atoms.len()
+        && atoms[quote.start_atom_index as int].code_point == 0x22 && atoms[(quote.end_atom_index
+        - 1) as int].code_point == 0x22 && quote.byte_start
+        == atoms[quote.start_atom_index as int].span.start.byte_offset && quote.byte_end == atoms[(
+    quote.end_atom_index - 1) as int].span.end.byte_offset
+}
+
+pub open spec fn decode_double_quoted_content_spec(
+    atoms: Seq<LexicalAtomView>,
+    quote: QuotedScalarView,
+    limits: ScalarDecodeLimitsView,
+) -> Result<DecodedScalarContentView, ScalarDecodeErrorView> {
+    if quote.style != QuotedScalarStyle::Double {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::ScalarStyleMismatch,
+                byte_offset: quote.byte_start,
+            },
+        )
+    } else if !double_quoted_scalar_range_matches_atoms_spec(atoms, quote) {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                byte_offset: quote.byte_start,
+            },
+        )
+    } else {
+        let start = quote.start_atom_index + 1;
+        let end = quote.end_atom_index - 1;
+        match decode_double_quoted_loop_spec(
+            atoms,
+            start as int,
+            end as int,
+            effective_scalar_content_limit_spec(limits),
+            (end - start + 1) as nat,
+        ) {
+            Ok(content) => Ok(
+                DecodedScalarContentView { style: DecodedScalarStyle::DoubleQuoted, content },
+            ),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub open spec fn decode_profile1_double_quoted_scalar_content_spec(
+    atomized: AtomizedSourceView,
+    quoted: QuotedScalarSourceView,
+    scalar_index: u64,
+    limits: ScalarDecodeLimitsView,
+) -> Result<DecodedScalarContentView, ScalarDecodeErrorView> {
+    if quoted.profile_version != atomized.profile_version || quoted.input_transformation_version
+        != atomized.transformation_version || quoted.source_len_bytes != atomized.source_len_bytes
+        || quoted.bom_bytes != atomized.bom_bytes || quoted.input_atom_count
+        != atomized.atoms.len() {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::InputQuotedMismatch,
+                byte_offset: atomized.bom_bytes,
+            },
+        )
+    } else if scalar_index >= quoted.scalars.len() {
+        Err(
+            ScalarDecodeErrorView {
+                kind: ScalarDecodeErrorKind::ScalarIndexOutOfRange,
+                byte_offset: atomized.source_len_bytes,
+            },
+        )
+    } else {
+        decode_double_quoted_content_spec(
             atomized.atoms,
             quoted.scalars[scalar_index as int],
             limits,
@@ -1499,6 +1928,859 @@ proof fn lemma_decoded_content_views_push(
     reveal(decoded_content_scalar_views_spec);
     assert(decoded_content_scalar_views_spec(content.push(scalar))
         =~= decoded_content_scalar_views_spec(content).push(scalar@));
+}
+
+fn simple_double_escape_value(code_point: u32) -> (value: Option<u32>)
+    ensures
+        value == simple_double_escape_value_spec(code_point),
+{
+    if code_point == 0x30 {
+        Some(0x00)
+    } else if code_point == 0x61 {
+        Some(0x07)
+    } else if code_point == 0x62 {
+        Some(0x08)
+    } else if code_point == 0x74 || code_point == 0x09 {
+        Some(0x09)
+    } else if code_point == 0x6e {
+        Some(0x0a)
+    } else if code_point == 0x76 {
+        Some(0x0b)
+    } else if code_point == 0x66 {
+        Some(0x0c)
+    } else if code_point == 0x72 {
+        Some(0x0d)
+    } else if code_point == 0x65 {
+        Some(0x1b)
+    } else if code_point == 0x20 {
+        Some(0x20)
+    } else if code_point == 0x22 {
+        Some(0x22)
+    } else if code_point == 0x2f {
+        Some(0x2f)
+    } else if code_point == 0x5c {
+        Some(0x5c)
+    } else if code_point == 0x4e {
+        Some(0x85)
+    } else if code_point == 0x5f {
+        Some(0xa0)
+    } else if code_point == 0x4c {
+        Some(0x2028)
+    } else if code_point == 0x50 {
+        Some(0x2029)
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::manual_range_contains)]
+fn scalar_hex_digit_value(code_point: u32) -> (value: Option<u32>)
+    ensures
+        value == scalar_hex_digit_value_spec(code_point),
+{
+    if 0x30 <= code_point && code_point <= 0x39 {
+        Some(code_point - 0x30)
+    } else if 0x41 <= code_point && code_point <= 0x46 {
+        Some(code_point - 0x41 + 10)
+    } else if 0x61 <= code_point && code_point <= 0x66 {
+        Some(code_point - 0x61 + 10)
+    } else {
+        None
+    }
+}
+
+pub open spec fn hex_prefix_bound_spec(length: int) -> int {
+    if length <= 0 {
+        1
+    } else if length == 1 {
+        0x10
+    } else if length == 2 {
+        0x100
+    } else if length == 3 {
+        0x1000
+    } else if length == 4 {
+        0x10000
+    } else if length == 5 {
+        0x100000
+    } else if length == 6 {
+        0x1000000
+    } else if length == 7 {
+        0x10000000
+    } else {
+        0x100000000
+    }
+}
+
+fn decode_double_hex_value(atoms: &[LexicalAtom], start: usize, end: usize) -> (result: Result<
+    u64,
+    u64,
+>)
+    requires
+        start <= end <= atoms@.len(),
+        end - start <= 8,
+    ensures
+        double_hex_value_tail_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            start as int,
+            end as int,
+            0,
+            (end - start) as nat,
+        ) == match result {
+            Ok(value) => Ok(value as int),
+            Err(byte_offset) => Err(byte_offset),
+        },
+        match result {
+            Ok(value) => value <= u32::MAX,
+            Err(_) => true,
+        },
+{
+    let ghost views = crate::atom::lexical_atom_views_spec(atoms@);
+    let mut index = start;
+    let mut value = 0u64;
+    let mut _fuel = end - start;
+    while index < end
+        invariant
+            start <= index <= end <= atoms@.len(),
+            end - start <= 8,
+            views == crate::atom::lexical_atom_views_spec(atoms@),
+            _fuel == end - index,
+            value < hex_prefix_bound_spec((index - start) as int),
+            value <= u32::MAX,
+            double_hex_value_tail_spec(views, start as int, end as int, 0, (end - start) as nat)
+                == double_hex_value_tail_spec(
+                views,
+                index as int,
+                end as int,
+                value as int,
+                _fuel as nat,
+            ),
+        decreases _fuel,
+    {
+        assert(views[index as int] == atoms[index as int]@) by {
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
+        let digit = match scalar_hex_digit_value(atoms[index].code_point()) {
+            Some(digit) => digit,
+            None => {
+                let byte_offset = atoms[index].span().start().byte_offset();
+                proof {
+                    assert(scalar_hex_digit_value_spec(views[index as int].code_point) == None);
+                    reveal(double_hex_value_tail_spec);
+                    assert(double_hex_value_tail_spec(
+                        views,
+                        index as int,
+                        end as int,
+                        value as int,
+                        _fuel as nat,
+                    ) == Err(byte_offset));
+                    assert(double_hex_value_tail_spec(
+                        views,
+                        start as int,
+                        end as int,
+                        0,
+                        (end - start) as nat,
+                    ) == Err(byte_offset));
+                }
+                return Err(byte_offset);
+            },
+        };
+        proof {
+            reveal(double_hex_value_tail_spec);
+            reveal(hex_prefix_bound_spec);
+        }
+        value = value * 16 + digit as u64;
+        index += 1;
+        _fuel -= 1;
+    }
+    proof {
+        reveal(double_hex_value_tail_spec);
+    }
+    Ok(value)
+}
+
+fn double_escape_content(
+    atoms: &[LexicalAtom],
+    index: usize,
+    atom_width: usize,
+    code_point: u32,
+) -> (content: DecodedContentScalar)
+    requires
+        2 <= atom_width,
+        atom_width <= atoms@.len(),
+        index <= atoms@.len() - atom_width,
+        atom_width <= u64::MAX,
+        index <= u64::MAX - atom_width,
+    ensures
+        content@ == double_escape_content_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            index as int,
+            atom_width as int,
+            code_point,
+        ),
+{
+    assert(atoms@[index as int]@ == crate::atom::lexical_atom_views_spec(atoms@)[index as int]) by {
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    assert(atoms@[(index + atom_width - 1) as int]@ == crate::atom::lexical_atom_views_spec(
+        atoms@,
+    )[(index + atom_width - 1) as int]) by {
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    let content = DecodedContentScalar::new(
+        code_point,
+        index as u64,
+        index as u64 + atom_width as u64,
+        atoms[index].span().start().byte_offset(),
+        atoms[index + atom_width - 1].span().end().byte_offset(),
+        DecodedContentOrigin::DoubleQuotedEscape,
+    );
+    proof {
+        reveal(double_escape_content_spec);
+    }
+    content
+}
+
+fn decode_flow_break_content(atoms: &[LexicalAtom], breaks: &[usize], escaped: bool) -> (content:
+    Vec<DecodedContentScalar>)
+    requires
+        breaks@.len() > 0,
+        atoms@.len() <= u64::MAX,
+        forall|position: int|
+            0 <= position < breaks@.len() ==> #[trigger] breaks@[position] < atoms@.len(),
+    ensures
+        decoded_content_scalar_views_spec(content@) == if escaped {
+            escaped_break_content_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                usize_indices_as_int_spec(breaks@),
+            )
+        } else {
+            folded_break_content_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                usize_indices_as_int_spec(breaks@),
+            )
+        },
+{
+    let ghost views = crate::atom::lexical_atom_views_spec(atoms@);
+    let mut content = Vec::new();
+    if !escaped && breaks.len() == 1 {
+        let source_index = breaks[0];
+        assert(source_index < atoms@.len());
+        assert(views[source_index as int] == atoms[source_index as int]@) by {
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
+        let item = direct_atom_content(
+            &atoms[source_index],
+            source_index,
+            0x20,
+            DecodedContentOrigin::FoldedLineBreak,
+        );
+        proof {
+            lemma_decoded_content_views_push(content@, item);
+        }
+        content.push(item);
+    } else {
+        let mut break_index = 1usize;
+        while break_index < breaks.len()
+            invariant
+                1 <= break_index <= breaks@.len(),
+                views == crate::atom::lexical_atom_views_spec(atoms@),
+                forall|position: int|
+                    0 <= position < breaks@.len() ==> #[trigger] breaks@[position] < atoms@.len(),
+                decoded_content_scalar_views_spec(content@) == Seq::new(
+                    (break_index - 1) as nat,
+                    |offset: int|
+                        direct_atom_content_spec(
+                            views[breaks@[offset + 1] as int],
+                            breaks@[offset + 1] as int,
+                            0x0a,
+                            if escaped {
+                                DecodedContentOrigin::EscapedLineBreak
+                            } else {
+                                DecodedContentOrigin::FoldedLineBreak
+                            },
+                        ),
+                ),
+            decreases breaks.len() - break_index,
+        {
+            let source_index = breaks[break_index];
+            assert(source_index < atoms@.len());
+            assert(views[source_index as int] == atoms[source_index as int]@) by {
+                reveal(crate::atom::lexical_atom_views_spec);
+            }
+            let origin = if escaped {
+                DecodedContentOrigin::EscapedLineBreak
+            } else {
+                DecodedContentOrigin::FoldedLineBreak
+            };
+            let item = direct_atom_content(&atoms[source_index], source_index, 0x0a, origin);
+            proof {
+                lemma_decoded_content_views_push(content@, item);
+            }
+            content.push(item);
+            break_index += 1;
+        }
+    }
+    proof {
+        reveal(escaped_break_content_spec);
+        reveal(folded_break_content_spec);
+        reveal(usize_indices_as_int_spec);
+        reveal(decoded_content_scalar_views_spec);
+    }
+    content
+}
+
+#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+fn decoded_double_quoted_step(
+    atoms: &[LexicalAtom],
+    index: usize,
+    end: usize,
+    remaining: u64,
+) -> (result: Result<(Vec<DecodedContentScalar>, usize), ScalarDecodeError>)
+    requires
+        index < end <= atoms@.len(),
+        end <= u64::MAX,
+    ensures
+        double_quoted_step_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            index as int,
+            end as int,
+            remaining,
+        ) == match result {
+            Ok((content, next)) => Ok((decoded_content_scalar_views_spec(content@), next as int)),
+            Err(error) => Err(error@),
+        },
+        match result {
+            Ok((content, next)) => index < next <= end && content@.len() <= remaining,
+            Err(_) => true,
+        },
+{
+    let ghost views = crate::atom::lexical_atom_views_spec(atoms@);
+    let atom = &atoms[index];
+    assert(views[index as int] == atom@) by {
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    if scalar_atom_white(atom) {
+        let after_white = skip_scalar_white(atoms, index, end);
+        assert(after_white > index) by {
+            lemma_skip_scalar_white_progress(views, index as int, end as int, (end - index) as nat);
+        }
+        if after_white < end {
+            assert(views[after_white as int] == atoms[after_white as int]@) by {
+                reveal(crate::atom::lexical_atom_views_spec);
+            }
+        }
+        if after_white < end && atoms[after_white].code_point() == 0x0a {
+            let content = Vec::new();
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(scalar_atom_white_spec);
+                reveal(decoded_content_scalar_views_spec);
+                assert(decoded_content_scalar_views_spec(content@) == Seq::empty());
+                assert(double_quoted_step_spec(views, index as int, end as int, remaining) == Ok(
+                    (Seq::empty(), after_white as int),
+                ));
+            }
+            return Ok((content, after_white));
+        }
+        let item = direct_atom_content(
+            atom,
+            index,
+            atom.code_point(),
+            DecodedContentOrigin::Direct,
+        );
+        if remaining == 0 {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::ContentLimitExceeded,
+                item.byte_start(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(scalar_atom_white_spec);
+                reveal(direct_atom_content_spec);
+            }
+            return Err(error);
+        }
+        let mut content = Vec::new();
+        proof {
+            lemma_decoded_content_views_push(content@, item);
+        }
+        content.push(item);
+        proof {
+            reveal(double_quoted_step_spec);
+            reveal(scalar_atom_white_spec);
+            reveal(direct_atom_content_spec);
+            assert(item@ == direct_atom_content_spec(
+                atom@,
+                index as int,
+                atom@.code_point,
+                DecodedContentOrigin::Direct,
+            ));
+            assert(decoded_content_scalar_views_spec(content@) == Seq::empty().push(item@));
+        }
+        return Ok((content, index + 1));
+    }
+    if atom.code_point() == 0x0a {
+        let (breaks, next) = single_quoted_break_group(atoms, index, end);
+        let addition_count = if breaks.len() == 1 {
+            1
+        } else {
+            breaks.len() - 1
+        };
+        if addition_count as u64 > remaining {
+            let excluded_break = if breaks.len() == 1 {
+                breaks[0]
+            } else {
+                breaks[remaining as usize + 1]
+            };
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::ContentLimitExceeded,
+                atoms[excluded_break].span().start().byte_offset(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(folded_break_content_spec);
+                reveal(direct_atom_content_spec);
+                reveal(usize_indices_as_int_spec);
+            }
+            return Err(error);
+        }
+        let content = decode_flow_break_content(atoms, breaks.as_slice(), false);
+        proof {
+            reveal(double_quoted_step_spec);
+        }
+        return Ok((content, next));
+    }
+    if atom.code_point() == 0x5c {
+        if index + 1 >= end {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::InputQuotedMismatch,
+                atom.span().start().byte_offset(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+            }
+            return Err(error);
+        }
+        let escaped = &atoms[index + 1];
+        assert(views[(index + 1) as int] == escaped@) by {
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
+        if escaped.code_point() == 0x0a {
+            let (breaks, next) = single_quoted_break_group(atoms, index + 1, end);
+            let addition_count = breaks.len() - 1;
+            if addition_count as u64 > remaining {
+                let excluded_break = breaks[remaining as usize + 1];
+                let error = ScalarDecodeError::at(
+                    ScalarDecodeErrorKind::ContentLimitExceeded,
+                    atoms[excluded_break].span().start().byte_offset(),
+                );
+                proof {
+                    reveal(double_quoted_step_spec);
+                    reveal(escaped_break_content_spec);
+                    reveal(direct_atom_content_spec);
+                    reveal(usize_indices_as_int_spec);
+                }
+                return Err(error);
+            }
+            let content = decode_flow_break_content(atoms, breaks.as_slice(), true);
+            proof {
+                reveal(double_quoted_step_spec);
+            }
+            return Ok((content, next));
+        }
+        if let Some(code_point) = simple_double_escape_value(escaped.code_point()) {
+            let item = double_escape_content(atoms, index, 2, code_point);
+            if remaining == 0 {
+                let error = ScalarDecodeError::at(
+                    ScalarDecodeErrorKind::ContentLimitExceeded,
+                    item.byte_start(),
+                );
+                proof {
+                    reveal(double_quoted_step_spec);
+                    reveal(double_escape_content_spec);
+                }
+                return Err(error);
+            }
+            let mut content = Vec::new();
+            proof {
+                lemma_decoded_content_views_push(content@, item);
+            }
+            content.push(item);
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(double_escape_content_spec);
+                assert(simple_double_escape_value_spec(escaped@.code_point) == Some(code_point));
+                assert(item@ == double_escape_content_spec(views, index as int, 2, code_point));
+                assert(decoded_content_scalar_views_spec(content@) == Seq::empty().push(item@));
+            }
+            return Ok((content, index + 2));
+        }
+        let digit_count = if escaped.code_point() == 0x78 {
+            2usize
+        } else if escaped.code_point() == 0x75 {
+            4usize
+        } else if escaped.code_point() == 0x55 {
+            8usize
+        } else {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::InputQuotedMismatch,
+                escaped.span().start().byte_offset(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(double_escape_width_spec);
+            }
+            return Err(error);
+        };
+        assert(index + 2 <= end);
+        if digit_count > end - index - 2 {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::InputQuotedMismatch,
+                atom.span().start().byte_offset(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(double_escape_width_spec);
+            }
+            return Err(error);
+        }
+        let escape_end = index + 2 + digit_count;
+        let value = match decode_double_hex_value(atoms, index + 2, escape_end) {
+            Ok(value) => value,
+            Err(byte_offset) => {
+                let error = ScalarDecodeError::at(
+                    ScalarDecodeErrorKind::InputQuotedMismatch,
+                    byte_offset,
+                );
+                proof {
+                    reveal(double_quoted_step_spec);
+                    reveal(double_escape_width_spec);
+                }
+                return Err(error);
+            },
+        };
+        if value > 0x10ffff || (0xd800 <= value && value <= 0xdfff) {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::InputQuotedMismatch,
+                atom.span().start().byte_offset(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(double_escape_width_spec);
+                reveal(decoded_unicode_scalar_spec);
+            }
+            return Err(error);
+        }
+        let item = double_escape_content(atoms, index, digit_count + 2, value as u32);
+        if remaining == 0 {
+            let error = ScalarDecodeError::at(
+                ScalarDecodeErrorKind::ContentLimitExceeded,
+                item.byte_start(),
+            );
+            proof {
+                reveal(double_quoted_step_spec);
+                reveal(double_escape_width_spec);
+                reveal(decoded_unicode_scalar_spec);
+                reveal(double_escape_content_spec);
+            }
+            return Err(error);
+        }
+        let mut content = Vec::new();
+        proof {
+            lemma_decoded_content_views_push(content@, item);
+        }
+        content.push(item);
+        proof {
+            assert(double_escape_width_spec(escaped@.code_point) == Some(digit_count as int)) by {
+                reveal(double_escape_width_spec);
+            }
+            assert(double_hex_value_tail_spec(
+                views,
+                index as int + 2,
+                escape_end as int,
+                0,
+                digit_count as nat,
+            ) == Ok(value as int));
+            assert(item@ == double_escape_content_spec(
+                views,
+                index as int,
+                digit_count as int + 2,
+                value as u32,
+            ));
+            assert(decoded_content_scalar_views_spec(content@) == Seq::empty().push(item@));
+            reveal(double_quoted_step_spec);
+            reveal(double_escape_width_spec);
+            reveal(decoded_unicode_scalar_spec);
+            reveal(double_escape_content_spec);
+        }
+        return Ok((content, escape_end));
+    }
+    if atom.code_point() == 0x22 {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::InputQuotedMismatch,
+            atom.span().start().byte_offset(),
+        );
+        proof {
+            reveal(double_quoted_step_spec);
+        }
+        return Err(error);
+    }
+    let item = direct_atom_content(atom, index, atom.code_point(), DecodedContentOrigin::Direct);
+    if remaining == 0 {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::ContentLimitExceeded,
+            item.byte_start(),
+        );
+        proof {
+            reveal(double_quoted_step_spec);
+        }
+        return Err(error);
+    }
+    let mut content = Vec::new();
+    proof {
+        lemma_decoded_content_views_push(content@, item);
+    }
+    content.push(item);
+    proof {
+        reveal(double_quoted_step_spec);
+        reveal(scalar_atom_white_spec);
+        reveal(direct_atom_content_spec);
+        assert(!scalar_atom_white_spec(atom@));
+        assert(atom@.code_point != 0x0a);
+        assert(atom@.code_point != 0x5c);
+        assert(atom@.code_point != 0x22);
+        assert(decoded_content_scalar_views_spec(content@) == Seq::empty().push(item@));
+    }
+    Ok((content, index + 1))
+}
+
+fn decode_double_quoted_content(
+    atoms: &[LexicalAtom],
+    quote: &QuotedScalar,
+    limits: ScalarDecodeLimits,
+) -> (result: Result<DecodedScalarContent, ScalarDecodeError>)
+    ensures
+        decode_double_quoted_content_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            quote@,
+            limits@,
+        ) == match result {
+            Ok(content) => Ok(content@),
+            Err(error) => Err(error@),
+        },
+{
+    if quote.style() != QuotedScalarStyle::Double {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::ScalarStyleMismatch,
+            quote.byte_start(),
+        );
+        proof {
+            reveal(decode_double_quoted_content_spec);
+        }
+        return Err(error);
+    }
+    let start_atom = quote.start_atom_index();
+    let end_atom = quote.end_atom_index();
+    let range_matches = start_atom <= end_atom && end_atom <= atoms.len() as u64 && end_atom
+        - start_atom >= 2 && atoms[start_atom as usize].code_point() == 0x22 && atoms[(end_atom
+        - 1) as usize].code_point() == 0x22 && quote.byte_start()
+        == atoms[start_atom as usize].span().start().byte_offset() && quote.byte_end() == atoms[(
+    end_atom - 1) as usize].span().end().byte_offset();
+    if !range_matches {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::InputQuotedMismatch,
+            quote.byte_start(),
+        );
+        proof {
+            reveal(decode_double_quoted_content_spec);
+            reveal(double_quoted_scalar_range_matches_atoms_spec);
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
+        return Err(error);
+    }
+    proof {
+        reveal(double_quoted_scalar_range_matches_atoms_spec);
+        reveal(crate::atom::lexical_atom_views_spec);
+        assert(double_quoted_scalar_range_matches_atoms_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            quote@,
+        ));
+    }
+    let start = start_atom as usize + 1;
+    let end = end_atom as usize - 1;
+    assert(start <= end <= atoms.len());
+    assert(end <= u64::MAX);
+    let limit = if limits.max_content_code_points
+        < MAX_PROFILE1_DECODED_SCALAR_CONTENT_CODE_POINTS {
+        limits.max_content_code_points
+    } else {
+        MAX_PROFILE1_DECODED_SCALAR_CONTENT_CODE_POINTS
+    };
+    assert(limit == effective_scalar_content_limit_spec(limits@)) by {
+        reveal(effective_scalar_content_limit_spec);
+    }
+    let ghost views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost expected = decode_double_quoted_loop_spec(
+        views,
+        start as int,
+        end as int,
+        limit,
+        (end - start + 1) as nat,
+    );
+    proof {
+        assert(start as int == quote@.start_atom_index as int + 1);
+        assert(end as int == quote@.end_atom_index as int - 1);
+        reveal(decode_double_quoted_content_spec);
+        assert(decode_double_quoted_content_spec(views, quote@, limits@) == match expected {
+            Ok(content) => Ok(
+                DecodedScalarContentView { style: DecodedScalarStyle::DoubleQuoted, content },
+            ),
+            Err(error) => Err(error),
+        });
+    }
+    let mut output = Vec::new();
+    let mut index = start;
+    let mut remaining = limit;
+    let mut _fuel = end - start + 1;
+    while index < end
+        invariant
+            start <= index <= end <= atoms@.len(),
+            end <= u64::MAX,
+            views == crate::atom::lexical_atom_views_spec(atoms@),
+            _fuel >= end - index,
+            remaining + output@.len() == limit,
+            decoded_content_scalar_views_spec(output@).len() == output@.len(),
+            expected == prepend_decoded_content_result_spec(
+                decoded_content_scalar_views_spec(output@),
+                decode_double_quoted_loop_spec(
+                    views,
+                    index as int,
+                    end as int,
+                    remaining,
+                    _fuel as nat,
+                ),
+            ),
+            decode_double_quoted_content_spec(views, quote@, limits@) == match expected {
+                Ok(content) => Ok(
+                    DecodedScalarContentView { style: DecodedScalarStyle::DoubleQuoted, content },
+                ),
+                Err(error) => Err(error),
+            },
+        decreases end - index,
+    {
+        let step = decoded_double_quoted_step(atoms, index, end, remaining);
+        match step {
+            Err(error) => {
+                proof {
+                    reveal(decode_double_quoted_loop_spec);
+                    reveal(prepend_decoded_content_result_spec);
+                    assert(expected == Err(error@));
+                    assert(decode_double_quoted_content_spec(views, quote@, limits@) == Err(
+                        error@,
+                    ));
+                }
+                return Err(error);
+            },
+            Ok((additions, next)) => {
+                let addition_count = additions.len();
+                let ghost prior_output = output@;
+                let ghost addition_views = decoded_content_scalar_views_spec(additions@);
+                let ghost tail_result = decode_double_quoted_loop_spec(
+                    views,
+                    next as int,
+                    end as int,
+                    (remaining - addition_views.len()) as u64,
+                    (_fuel - 1) as nat,
+                );
+                assert(addition_count <= remaining);
+                assert(addition_views.len() == addition_count) by {
+                    reveal(decoded_content_scalar_views_spec);
+                }
+                assert(index < next <= end);
+                proof {
+                    reveal(decode_double_quoted_loop_spec);
+                    reveal(prepend_decoded_content_result_spec);
+                    lemma_prepend_decoded_content_associative(
+                        decoded_content_scalar_views_spec(prior_output),
+                        addition_views,
+                        tail_result,
+                    );
+                }
+                append_decoded_content(&mut output, additions.as_slice());
+                remaining -= addition_count as u64;
+                index = next;
+                _fuel -= 1;
+                proof {
+                    assert(decoded_content_scalar_views_spec(output@)
+                        == decoded_content_scalar_views_spec(prior_output) + addition_views);
+                }
+            },
+        }
+    }
+    proof {
+        reveal(decode_double_quoted_loop_spec);
+        reveal(prepend_decoded_content_result_spec);
+    }
+    let decoded = DecodedScalarContent::new(DecodedScalarStyle::DoubleQuoted, output);
+    proof {
+        reveal(decode_double_quoted_content_spec);
+        reveal(effective_scalar_content_limit_spec);
+        reveal(double_quoted_scalar_range_matches_atoms_spec);
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    Ok(decoded)
+}
+
+/// Decode one authenticated double-quoted scalar with exact source provenance.
+pub fn decode_profile1_double_quoted_scalar_content(
+    atomized: &AtomizedSource,
+    quoted: &QuotedScalarSource,
+    scalar_index: u64,
+    limits: ScalarDecodeLimits,
+) -> (result: Result<DecodedScalarContent, ScalarDecodeError>)
+    ensures
+        decode_profile1_double_quoted_scalar_content_spec(atomized@, quoted@, scalar_index, limits@)
+            == match result {
+            Ok(content) => Ok(content@),
+            Err(error) => Err(error@),
+        },
+{
+    let metadata_matches = quoted.profile_version() == atomized.profile_version()
+        && quoted.input_transformation_version() == atomized.transformation_version()
+        && quoted.source_len_bytes() == atomized.source_len_bytes() && quoted.bom_bytes()
+        == atomized.bom_bytes() && quoted.input_atom_count() == atomized.atoms().len() as u64;
+    if !metadata_matches {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::InputQuotedMismatch,
+            atomized.bom_bytes(),
+        );
+        proof {
+            reveal(decode_profile1_double_quoted_scalar_content_spec);
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
+        return Err(error);
+    }
+    let scalars = quoted.scalars();
+    if scalar_index >= scalars.len() as u64 {
+        let error = ScalarDecodeError::at(
+            ScalarDecodeErrorKind::ScalarIndexOutOfRange,
+            atomized.source_len_bytes(),
+        );
+        proof {
+            reveal(decode_profile1_double_quoted_scalar_content_spec);
+            reveal(crate::quoted::quoted_scalar_views_spec);
+        }
+        return Err(error);
+    }
+    let index = scalar_index as usize;
+    assert(quoted@.scalars[index as int] == scalars[index as int]@) by {
+        reveal(crate::quoted::quoted_scalar_views_spec);
+    }
+    let result = decode_double_quoted_content(atomized.atoms(), &scalars[index], limits);
+    proof {
+        reveal(decode_profile1_double_quoted_scalar_content_spec);
+    }
+    result
 }
 
 fn copy_block_content(source: &[BlockScalarContentScalar]) -> (decoded: Vec<DecodedContentScalar>)
