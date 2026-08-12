@@ -10860,6 +10860,144 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
     }
 }
 
+pub open spec fn cst_dispatch_parse_task_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    match cst_validate_dispatched_task_spec(task, tokens.len() as u64) {
+        Err(error) => Err(error),
+        Ok(()) => {
+            if !cst_parse_task_state_is_valid_spec(task.kind, task.state) {
+                Err(cst_step_node_internal_error_spec())
+            } else {
+                match task.kind {
+                    ParseTaskKind::Node => cst_step_node_task_spec(
+                        atoms,
+                        tokens,
+                        task,
+                        machine,
+                        builder,
+                        depth_limit,
+                    ),
+                    ParseTaskKind::FlowSequence => {
+                        if task.state == 0 {
+                            cst_step_flow_sequence_state_zero_spec(
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 1 {
+                            cst_step_flow_sequence_state_one_spec(tokens, task, machine, builder)
+                        } else if task.state == 2 {
+                            cst_step_flow_sequence_state_two_spec(
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 3 {
+                            cst_step_flow_sequence_state_three_spec(tokens, task, machine, builder)
+                        } else {
+                            cst_step_flow_sequence_state_four_spec(tokens, task, machine, builder)
+                        }
+                    },
+                    ParseTaskKind::FlowMapping => {
+                        if task.state == 0 {
+                            cst_step_flow_mapping_state_zero_spec(
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 1 {
+                            cst_step_flow_mapping_state_one_spec(tokens, task, machine, builder)
+                        } else if task.state == 2 {
+                            cst_step_flow_mapping_state_two_spec(
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 3 {
+                            cst_step_flow_mapping_state_three_spec(tokens, task, machine, builder)
+                        } else {
+                            cst_step_flow_mapping_state_four_spec(tokens, task, machine, builder)
+                        }
+                    },
+                    ParseTaskKind::BlockSequence => {
+                        if task.state == 0 {
+                            cst_step_block_sequence_state_zero_spec(
+                                atoms,
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 1 {
+                            cst_step_block_sequence_state_one_spec(tokens, task, machine, builder)
+                        } else {
+                            cst_step_block_sequence_state_two_spec(
+                                atoms,
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                            )
+                        }
+                    },
+                    ParseTaskKind::BlockMapping => {
+                        if task.state == 0 {
+                            cst_step_block_mapping_state_zero_spec(
+                                atoms,
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 1 {
+                            cst_step_block_mapping_state_one_spec(tokens, task, machine, builder)
+                        } else if task.state == 2 {
+                            cst_step_block_mapping_state_two_spec(
+                                atoms,
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                                depth_limit,
+                            )
+                        } else if task.state == 3 {
+                            cst_step_block_mapping_state_three_spec(tokens, task, machine, builder)
+                        } else if task.state == 4 {
+                            cst_step_block_mapping_state_four_spec(tokens, task, machine, builder)
+                        } else if task.state == 5 {
+                            cst_step_block_mapping_state_five_spec(tokens, task, machine, builder)
+                        } else {
+                            cst_step_block_mapping_state_six_spec(
+                                atoms,
+                                tokens,
+                                task,
+                                machine,
+                                builder,
+                            )
+                        }
+                    },
+                }
+            }
+        },
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -14599,6 +14737,342 @@ fn step_block_mapping_state_two(
     }
 }
 
+#[verifier::rlimit(800)]
+fn dispatch_parse_task(
+    atoms: &[LexicalAtom],
+    tokens: &[CompletedToken],
+    task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+    depth_limit: u64,
+) -> (result: Result<(), CstError>)
+    requires
+        cst_parse_task_is_valid_spec(task@),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+        machine.tasks.len() <= depth_limit + 1,
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+    ensures
+        cst_dispatch_parse_task_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+            depth_limit,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_dispatch_parse_task_spec(
+        atom_views,
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+        depth_limit,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_dispatch_parse_task_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
+    }
+    if let Err(error) = validate_dispatched_task(&task, tokens.len()) {
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    proof {
+        assert(cst_validate_dispatched_task_spec(task_view, token_views.len() as u64) == Ok(()));
+        assert(cst_parse_task_state_is_valid_spec(task_view.kind, task_view.state));
+    }
+    if task.kind == ParseTaskKind::Node {
+        let result = step_node_task(atoms, tokens, task, machine, builder, depth_limit);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.kind == ParseTaskKind::FlowSequence {
+        if task.state == 0 {
+            let result = step_flow_sequence_state_zero(
+                tokens,
+                task,
+                machine,
+                builder,
+                depth_limit,
+            );
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 1 {
+            let result = step_flow_sequence_state_one(tokens, task, machine, builder);
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 2 {
+            let result = step_flow_sequence_state_two(
+                tokens,
+                task,
+                machine,
+                builder,
+                depth_limit,
+            );
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 3 {
+            let result = step_flow_sequence_state_three(tokens, task, machine, builder);
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        proof {
+            reveal(cst_parse_task_state_is_valid_spec);
+            assert(task.state == 4);
+        }
+        let result = step_flow_sequence_state_four(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.kind == ParseTaskKind::FlowMapping {
+        if task.state == 0 {
+            let result = step_flow_mapping_state_zero(
+                tokens,
+                task,
+                machine,
+                builder,
+                depth_limit,
+            );
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 1 {
+            let result = step_flow_mapping_state_one(tokens, task, machine, builder);
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 2 {
+            let result = step_flow_mapping_state_two(
+                tokens,
+                task,
+                machine,
+                builder,
+                depth_limit,
+            );
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 3 {
+            let result = step_flow_mapping_state_three(tokens, task, machine, builder);
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        proof {
+            reveal(cst_parse_task_state_is_valid_spec);
+            assert(task.state == 4);
+        }
+        let result = step_flow_mapping_state_four(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.kind == ParseTaskKind::BlockSequence {
+        if task.state == 0 {
+            let result = step_block_sequence_state_zero(
+                atoms,
+                tokens,
+                task,
+                machine,
+                builder,
+                depth_limit,
+            );
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        if task.state == 1 {
+            let result = step_block_sequence_state_one(tokens, task, machine, builder);
+            proof {
+                assert(expected == match result {
+                    Ok(()) => Ok((machine@, builder@)),
+                    Err(error) => Err(error@),
+                });
+            }
+            return result;
+        }
+        proof {
+            reveal(cst_parse_task_state_is_valid_spec);
+            assert(task.state == 2);
+        }
+        let result = step_block_sequence_state_two(atoms, tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    proof {
+        assert(task.kind == ParseTaskKind::BlockMapping);
+    }
+    if task.state == 0 {
+        let result = step_block_mapping_state_zero(
+            atoms,
+            tokens,
+            task,
+            machine,
+            builder,
+            depth_limit,
+        );
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.state == 1 {
+        let result = step_block_mapping_state_one(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.state == 2 {
+        let result = step_block_mapping_state_two(
+            atoms,
+            tokens,
+            task,
+            machine,
+            builder,
+            depth_limit,
+        );
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.state == 3 {
+        let result = step_block_mapping_state_three(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.state == 4 {
+        let result = step_block_mapping_state_four(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    if task.state == 5 {
+        let result = step_block_mapping_state_five(tokens, task, machine, builder);
+        proof {
+            assert(expected == match result {
+                Ok(()) => Ok((machine@, builder@)),
+                Err(error) => Err(error@),
+            });
+        }
+        return result;
+    }
+    proof {
+        reveal(cst_parse_task_state_is_valid_spec);
+        assert(task.state == 6);
+    }
+    let result = step_block_mapping_state_six(atoms, tokens, task, machine, builder);
+    proof {
+        assert(expected == match result {
+            Ok(()) => Ok((machine@, builder@)),
+            Err(error) => Err(error@),
+        });
+    }
+    result
+}
+
 #[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
@@ -14635,193 +15109,17 @@ fn parse_node_iterative(
             Ok(value) => value,
             Err(error) => return Err(error),
         };
-        if let Err(error) = validate_dispatched_task(&task, tokens.len()) {
-            return Err(error);
+        match dispatch_parse_task(
+            atoms,
+            tokens,
+            task,
+            &mut machine,
+            builder,
+            depth_limit,
+        ) {
+            Ok(()) => continue,
+            Err(error) => return Err(error),
         }
-        if task.kind == ParseTaskKind::Node {
-            match step_node_task(atoms, tokens, task, &mut machine, builder, depth_limit) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        if task.kind == ParseTaskKind::FlowSequence {
-            if task.state == 0 {
-                match step_flow_sequence_state_zero(
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 1 {
-                match step_flow_sequence_state_one(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 2 {
-                match step_flow_sequence_state_two(
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 3 {
-                match step_flow_sequence_state_three(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            proof {
-                assert(task.state == 4);
-            }
-            match step_flow_sequence_state_four(tokens, task, &mut machine, builder) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        if task.kind == ParseTaskKind::FlowMapping {
-            if task.state == 0 {
-                match step_flow_mapping_state_zero(
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 1 {
-                match step_flow_mapping_state_one(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 2 {
-                match step_flow_mapping_state_two(
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 3 {
-                match step_flow_mapping_state_three(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            proof {
-                assert(task.state == 4);
-            }
-            match step_flow_mapping_state_four(tokens, task, &mut machine, builder) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        if task.kind == ParseTaskKind::BlockSequence {
-            if task.state == 0 {
-                match step_block_sequence_state_zero(
-                    atoms,
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 1 {
-                match step_block_sequence_state_one(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            proof {
-                assert(task.state == 2);
-            }
-            match step_block_sequence_state_two(atoms, tokens, task, &mut machine, builder) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        if task.kind == ParseTaskKind::BlockMapping {
-            if task.state == 0 {
-                match step_block_mapping_state_zero(
-                    atoms,
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 1 {
-                match step_block_mapping_state_one(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 2 {
-                match step_block_mapping_state_two(
-                    atoms,
-                    tokens,
-                    task,
-                    &mut machine,
-                    builder,
-                    depth_limit,
-                ) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 3 {
-                match step_block_mapping_state_three(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 4 {
-                match step_block_mapping_state_four(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            if task.state == 5 {
-                match step_block_mapping_state_five(tokens, task, &mut machine, builder) {
-                    Ok(()) => continue,
-                    Err(error) => return Err(error),
-                }
-            }
-            proof {
-                assert(task.state == 6);
-            }
-            match step_block_mapping_state_six(atoms, tokens, task, &mut machine, builder) {
-                Ok(()) => continue,
-                Err(error) => return Err(error),
-            }
-        }
-        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
     }
 }
 
