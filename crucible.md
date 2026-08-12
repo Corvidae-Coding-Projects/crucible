@@ -1793,9 +1793,8 @@ retains the source sign so negative zero remains distinct. Equivalent spellings 
 caller-lowered coefficient- or exponent-digit limit reports the exact first source digit requiring
 the excluded canonical digit; when normalization creates the excluded exponent digit, the error
 uses the exact coefficient, fraction, or exponent source anchor responsible for that scale.
-Positive
-and negative infinity are distinct values, every accepted NaN spelling has one canonical semantic
-value, and negative zero remains distinguishable until schema lowering explicitly chooses
+Positive and negative infinity are distinct values, every accepted NaN spelling has one canonical
+semantic value, and negative zero remains distinguishable until schema lowering explicitly chooses
 otherwise. Later lowering performs checked conversion to any required fixed-width integer or
 floating format and reports range or precision policy errors instead of inheriting host casts.
 

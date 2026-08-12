@@ -73,6 +73,9 @@ Current work establishes and extends:
   and signed-exponent digits, with equivalent-spelling normalization, distinct negative zero,
   linear-time arbitrary-width handling, caller-lowered coefficient/exponent limits at exact source
   anchors, no IEEE-754 intermediate, and exact executable-to-pure correspondence;
+- verified canonical Core infinity and NaN conversion, with all YAML 1.2.2 case variants, distinct
+  positive and negative infinity, one NaN value, exact caller-lowered input diagnostics, and exact
+  executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

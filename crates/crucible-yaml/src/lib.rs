@@ -10,6 +10,7 @@ pub mod quoted;
 pub mod resolve;
 pub mod resolve_float;
 pub mod resolve_integer;
+pub mod resolve_special_float;
 pub mod structural;
 pub mod token;
 pub mod utf8;
@@ -67,6 +68,11 @@ pub use resolve_float::{
     convert_core_finite_float, CoreFiniteFloat, CoreFiniteFloatError, CoreFiniteFloatErrorKind,
     CoreFiniteFloatLimits, CORE_FINITE_FLOAT_CONVERSION_VERSION,
     MAX_PROFILE1_CORE_FLOAT_COEFFICIENT_DIGITS, MAX_PROFILE1_CORE_FLOAT_EXPONENT_DIGITS,
+};
+
+pub use resolve_special_float::{
+    convert_core_special_float, CoreSpecialFloat, CoreSpecialFloatError, CoreSpecialFloatErrorKind,
+    CoreSpecialFloatLimits, CORE_SPECIAL_FLOAT_CONVERSION_VERSION,
 };
 
 pub use plain::{
