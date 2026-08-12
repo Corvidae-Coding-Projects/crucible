@@ -11,6 +11,7 @@ pub mod resolve;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_special_float;
+pub mod scalar_decode;
 pub mod structural;
 pub mod token;
 pub mod utf8;
@@ -73,6 +74,13 @@ pub use resolve_float::{
 pub use resolve_special_float::{
     convert_core_special_float, CoreSpecialFloat, CoreSpecialFloatError, CoreSpecialFloatErrorKind,
     CoreSpecialFloatLimits, CORE_SPECIAL_FLOAT_CONVERSION_VERSION,
+};
+
+pub use scalar_decode::{
+    decode_profile1_block_scalar_content, DecodedContentOrigin, DecodedContentScalar,
+    DecodedScalarContent, DecodedScalarStyle, ScalarDecodeError, ScalarDecodeErrorKind,
+    ScalarDecodeLimits, MAX_PROFILE1_DECODED_SCALAR_CONTENT_CODE_POINTS,
+    SCALAR_DECODE_TRANSFORMATION_VERSION,
 };
 
 pub use plain::{

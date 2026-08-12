@@ -76,6 +76,9 @@ Current work establishes and extends:
 - verified canonical Core infinity and NaN conversion, with all YAML 1.2.2 case variants, distinct
   positive and negative infinity, one NaN value, exact caller-lowered input diagnostics, and exact
   executable-to-pure correspondence;
+- verified semantic decoding of authenticated literal and folded block content into the shared
+  scalar-content representation, retaining exact direct/folded atom and byte provenance, empty
+  content, caller-lowered first-excluded output diagnostics, and executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

@@ -1803,8 +1803,12 @@ style-specific machines. Single-quote doubling, every accepted double-quote esca
 breaks, and YAML flow-line folding produce exact Unicode scalar content with per-output provenance.
 Plain-scalar line folding uses the authenticated presentation range and indentation context rather
 than trimming arbitrary host strings. Block scalars reuse the already authenticated normalized
-content and provenance. Scalar decoding does not apply Unicode normalization; code-point identity
-is preserved unless an explicit future language-profile version says otherwise.
+content and provenance. Every shared decoded-content record retains its Unicode code point, exact
+half-open source-atom range, original byte range, and whether it was direct, folded, quote-doubled,
+escape-produced, or derived from an escaped line break. A caller-lowered output cap reports the
+exact first excluded provenance record before copying it. Scalar decoding does not apply Unicode
+normalization; code-point identity is preserved unless an explicit future language-profile version
+says otherwise.
 
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
