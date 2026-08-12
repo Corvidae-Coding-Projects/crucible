@@ -242,6 +242,39 @@ fn pure_parser_machine_initialization_is_exact() {
 }
 
 #[test]
+fn pure_parser_machine_channels_and_fuel_are_exact() {
+    proof {
+        let initial = crucible_yaml::cst::cst_initial_parse_machine_spec(1, 8, true, 4);
+        let child = crucible_yaml::cst::ParsedNodeView { node_index: 3, next_token: 6 };
+        reveal(crucible_yaml::cst::cst_machine_store_completed_spec);
+        reveal(crucible_yaml::cst::cst_machine_take_completed_spec);
+        reveal(crucible_yaml::cst::cst_machine_resume_task_spec);
+        reveal(crucible_yaml::cst::cst_machine_pop_task_spec);
+        reveal(crucible_yaml::cst::cst_machine_consume_fuel_spec);
+        let stored = crucible_yaml::cst::cst_machine_store_completed_spec(initial, child);
+        assert(stored.completed == Some(child));
+        assert(stored.tasks == initial.tasks && stored.fuel == initial.fuel);
+        let taken = crucible_yaml::cst::cst_machine_take_completed_spec(stored).unwrap();
+        assert(taken.0.completed.is_none() && taken.1 == child);
+        assert(taken.0.tasks == initial.tasks && taken.0.fuel == initial.fuel);
+        let task = crucible_yaml::cst::cst_node_task_spec(2, 7, false, 3);
+        let resumed = crucible_yaml::cst::cst_machine_resume_task_spec(taken.0, task);
+        assert(resumed.tasks == taken.0.tasks.push(task));
+        assert(resumed.completed == taken.0.completed && resumed.fuel == taken.0.fuel);
+        let popped = crucible_yaml::cst::cst_machine_pop_task_spec(resumed).unwrap();
+        assert(popped.0.tasks == taken.0.tasks && popped.1 == task);
+        assert(popped.0.completed == resumed.completed && popped.0.fuel == resumed.fuel);
+        let two = crucible_yaml::cst::ParseMachineView { fuel: 2, ..popped.0 };
+        match crucible_yaml::cst::cst_machine_consume_fuel_spec(two) {
+            Ok(one) => {
+                assert(one.fuel == 1 && one.tasks == two.tasks && one.completed == two.completed);
+            },
+            Err(_) => assert(false),
+        }
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
