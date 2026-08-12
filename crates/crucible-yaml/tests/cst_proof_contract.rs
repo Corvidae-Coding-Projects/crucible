@@ -549,6 +549,115 @@ fn pure_parser_flow_sequence_completed_key_transition_is_exact_and_total() {
 }
 
 #[test]
+fn pure_parser_flow_sequence_key_decision_transition_is_exact_and_total() {
+    proof {
+        let key = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: Some(0),
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 2,
+            max_sequence_entries: 2,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 4,
+        };
+        let empty = crucible_yaml::cst::cst_empty_builder_spec(1, limits, 1);
+        let key_node = CstNodeView {
+            kind: CstNodeKind::Scalar,
+            style: CstNodeStyle::Plain,
+            token_start: 0,
+            token_end: 1,
+            byte_start: 0,
+            byte_end: 1,
+            anchor_property_token: None,
+            tag_property_token: None,
+            scalar_or_alias_token: Some(0),
+            collection_start_token: None,
+            collection_end_token: None,
+            entry_start: 0,
+            entry_end: 0,
+            empty_anchor_token: None,
+            empty_anchor_byte: None,
+        };
+        let builder = crucible_yaml::cst::CstBuilderView {
+            nodes: seq![key_node],
+            syntax_owner_slots: seq![Some(CstSyntaxOwnerView {
+                token_index: 0,
+                kind: CstSyntaxOwnerKind::NodeContent,
+                record_index: 0,
+            })],
+            ..empty
+        };
+        let base = crucible_yaml::cst::cst_node_task_spec(0, 1, false, 4);
+        let task = crucible_yaml::cst::ParseTaskView {
+            kind: crucible_yaml::cst::ParseTaskKind::FlowSequence,
+            state: 2,
+            cursor: 1,
+            key_node_index: 0,
+            entry_token_start: 0,
+            ..base
+        };
+        let machine = crucible_yaml::cst::ParseMachineView {
+            tasks: Seq::empty(),
+            completed: None,
+            fuel: 1,
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_step_flow_sequence_state_two_spec);
+        reveal(crucible_yaml::cst::cst_step_node_internal_error_spec);
+        reveal(crucible_yaml::cst::cst_step_flow_sequence_finish_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_push_sequence_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_set_state_spec);
+        reveal(crucible_yaml::cst::cst_machine_resume_task_spec);
+        let result = crucible_yaml::cst::cst_step_flow_sequence_state_two_spec(
+            seq![key],
+            task,
+            machine,
+            builder,
+            4,
+        );
+        assert(result.is_ok());
+        let (next_machine, next_builder) = match result {
+            Ok(value) => value,
+            Err(_) => (machine, builder),
+        };
+        assert(next_builder == builder);
+        assert(next_machine.tasks.len() == 1);
+        assert(next_machine.tasks[0].state == 4);
+        assert(next_machine.tasks[0].pending_sequence.len() == 1);
+        assert(next_machine.tasks[0].pending_sequence[0].node_index == 0);
+        assert(next_machine.tasks[0].pending_sequence[0].token_start == 0);
+        assert(next_machine.tasks[0].pending_sequence[0].token_end == 1);
+        let invalid = crucible_yaml::cst::ParseTaskView { state: 1, ..task };
+        assert(crucible_yaml::cst::cst_step_flow_sequence_state_two_spec(
+            seq![key],
+            invalid,
+            machine,
+            builder,
+            4,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_parser_flow_sequence_completed_value_transition_is_exact_and_total() {
     proof {
         let key = CompletedTokenView {
