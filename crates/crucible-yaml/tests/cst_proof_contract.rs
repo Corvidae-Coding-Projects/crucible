@@ -745,11 +745,15 @@ fn pure_parser_flow_mapping_key_decision_transition_is_exact_and_total() {
         };
         let builder = crucible_yaml::cst::CstBuilderView {
             nodes: seq![key_node],
-            syntax_owner_slots: seq![Some(CstSyntaxOwnerView {
-                token_index: 0,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 0,
-            })],
+            syntax_owner_slots: seq![
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 0,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 0,
+                    },
+                ),
+            ],
             ..empty
         };
         let base = crucible_yaml::cst::cst_node_task_spec(0, 1, false, 4);
@@ -973,11 +977,15 @@ fn pure_parser_flow_sequence_key_decision_transition_is_exact_and_total() {
         };
         let builder = crucible_yaml::cst::CstBuilderView {
             nodes: seq![key_node],
-            syntax_owner_slots: seq![Some(CstSyntaxOwnerView {
-                token_index: 0,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 0,
-            })],
+            syntax_owner_slots: seq![
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 0,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 0,
+                    },
+                ),
+            ],
             ..empty
         };
         let base = crucible_yaml::cst::cst_node_task_spec(0, 1, false, 4);
@@ -1109,17 +1117,21 @@ fn pure_parser_flow_sequence_completed_value_transition_is_exact_and_total() {
         let builder = crucible_yaml::cst::CstBuilderView {
             nodes: seq![key_node, value_node],
             syntax_owner_slots: seq![
-                Some(CstSyntaxOwnerView {
-                    token_index: 0,
-                    kind: CstSyntaxOwnerKind::NodeContent,
-                    record_index: 0,
-                }),
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 0,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 0,
+                    },
+                ),
                 None,
-                Some(CstSyntaxOwnerView {
-                    token_index: 2,
-                    kind: CstSyntaxOwnerKind::NodeContent,
-                    record_index: 1,
-                }),
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 2,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 1,
+                    },
+                ),
             ],
             ..empty
         };
@@ -1869,11 +1881,15 @@ fn pure_parser_block_mapping_unpaired_explicit_key_entry_is_exact_and_total() {
         };
         let builder = crucible_yaml::cst::CstBuilderView {
             nodes: seq![key_node],
-            syntax_owner_slots: seq![Some(CstSyntaxOwnerView {
-                token_index: 0,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 0,
-            })],
+            syntax_owner_slots: seq![
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 0,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 0,
+                    },
+                ),
+            ],
             ..empty
         };
         let base = crucible_yaml::cst::cst_node_task_spec(0, 1, false, 4);
@@ -2188,11 +2204,16 @@ fn pure_parser_block_mapping_value_decision_transition_is_exact_and_total() {
         };
         let builder = crucible_yaml::cst::CstBuilderView {
             nodes: seq![key_node],
-            syntax_owner_slots: seq![Some(CstSyntaxOwnerView {
-                token_index: 0,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 0,
-            }), None],
+            syntax_owner_slots: seq![
+                Some(
+                    CstSyntaxOwnerView {
+                        token_index: 0,
+                        kind: CstSyntaxOwnerKind::NodeContent,
+                        record_index: 0,
+                    },
+                ),
+                None,
+            ],
             ..empty
         };
         let base = crucible_yaml::cst::cst_node_task_spec(0, 2, false, 4);
@@ -2479,9 +2500,7 @@ fn pure_total_parser_fixes_the_complete_empty_node_result_and_fuel_error() {
         let initial = crucible_yaml::cst::cst_initial_parse_machine_spec(0, 0, false, 4);
         let task = crucible_yaml::cst::cst_node_task_spec(0, 0, false, 4);
         let stepped = crucible_yaml::cst::cst_initial_parse_machine_after_begin_spec();
-        crucible_yaml::cst::lemma_cst_initial_parse_machine_begins_with_node_task(
-            0, 0, false, 4,
-        );
+        crucible_yaml::cst::lemma_cst_initial_parse_machine_begins_with_node_task(0, 0, false, 4);
         assert(crucible_yaml::cst::cst_machine_begin_step_spec(initial) == Ok((stepped, task)));
         let dispatched = crucible_yaml::cst::cst_dispatch_parse_task_spec(
             Seq::empty(),

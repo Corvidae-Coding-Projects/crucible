@@ -7493,10 +7493,7 @@ fn task_begin_sequence_entry(entry_token_start: usize, task: &mut ParseTask)
     requires
         entry_token_start < usize::MAX,
     ensures
-        final(task)@ == cst_task_begin_sequence_entry_spec(
-            old(task)@,
-            entry_token_start as u64,
-        ),
+        final(task)@ == cst_task_begin_sequence_entry_spec(old(task)@, entry_token_start as u64),
         cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.entry_token_start = entry_token_start;
@@ -8798,12 +8795,9 @@ pub proof fn lemma_cst_initial_parse_tasks_are_valid(
     requires
         start <= end,
     ensures
-        cst_parse_task_stack_is_valid_spec(cst_initial_parse_tasks_spec(
-            start,
-            end,
-            allow_block_mapping,
-            depth_left,
-        )),
+        cst_parse_task_stack_is_valid_spec(
+            cst_initial_parse_tasks_spec(start, end, allow_block_mapping, depth_left),
+        ),
 {
     reveal(cst_initial_parse_tasks_spec);
     reveal(cst_node_task_spec);
@@ -8934,10 +8928,7 @@ pub open spec fn cst_resume_parse_task_spec(tasks: Seq<ParseTaskView>, task: Par
     tasks.push(task)
 }
 
-pub proof fn lemma_cst_resume_preserves_valid_stack(
-    tasks: Seq<ParseTaskView>,
-    task: ParseTaskView,
-)
+pub proof fn lemma_cst_resume_preserves_valid_stack(tasks: Seq<ParseTaskView>, task: ParseTaskView)
     requires
         cst_parse_task_stack_is_valid_spec(tasks),
         cst_parse_task_is_valid_spec(task),
@@ -8967,8 +8958,9 @@ fn resume_parse_task(tasks: &mut Vec<ParseTask>, task: ParseTask)
             task@,
         ),
         cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old(tasks)@))
-            && cst_parse_task_is_valid_spec(task@)
-            ==> cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(final(tasks)@)),
+            && cst_parse_task_is_valid_spec(task@) ==> cst_parse_task_stack_is_valid_spec(
+            cst_parse_task_views_spec(final(tasks)@),
+        ),
 {
     let ghost old_tasks = tasks@;
     tasks.push(task);
@@ -9076,10 +9068,8 @@ pub proof fn lemma_cst_initial_parse_fuel_is_positive()
 {
     assert(MAX_PROFILE1_COMPLETED_TOKENS == 1_048_576);
     assert(MAX_PROFILE1_CST_DEPTH == 4_096);
-    assert(
-        (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32
-            == 137_472_639_008
-    );
+    assert((MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32
+        == 137_472_639_008);
     reveal(cst_initial_parse_fuel_spec);
 }
 
@@ -9121,29 +9111,20 @@ pub proof fn lemma_cst_initial_parse_machine_begins_with_node_task(
     depth_left: u64,
 )
     ensures
-        cst_machine_begin_step_spec(cst_initial_parse_machine_spec(
-            start,
-            end,
-            allow_block_mapping,
-            depth_left,
-        )) == Ok((
-            cst_initial_parse_machine_after_begin_spec(),
-            cst_node_task_spec(start, end, allow_block_mapping, depth_left),
-        )),
+        cst_machine_begin_step_spec(
+            cst_initial_parse_machine_spec(start, end, allow_block_mapping, depth_left),
+        ) == Ok(
+            (
+                cst_initial_parse_machine_after_begin_spec(),
+                cst_node_task_spec(start, end, allow_block_mapping, depth_left),
+            ),
+        ),
 {
     lemma_cst_initial_parse_fuel_is_positive();
-    let initial = cst_initial_parse_machine_spec(
-        start,
-        end,
-        allow_block_mapping,
-        depth_left,
-    );
+    let initial = cst_initial_parse_machine_spec(start, end, allow_block_mapping, depth_left);
     let task = cst_node_task_spec(start, end, allow_block_mapping, depth_left);
     let after = cst_initial_parse_machine_after_begin_spec();
-    let consumed = ParseMachineView {
-        fuel: (cst_initial_parse_fuel_spec() - 1) as u64,
-        ..initial
-    };
+    let consumed = ParseMachineView { fuel: (cst_initial_parse_fuel_spec() - 1) as u64, ..initial };
     reveal(cst_initial_parse_machine_spec);
     reveal(cst_initial_parse_machine_after_begin_spec);
     reveal(cst_initial_parse_tasks_spec);
@@ -9218,9 +9199,10 @@ pub open spec fn cst_machine_pop_task_spec(machine: ParseMachineView) -> Option<
     }
 }
 
-pub open spec fn cst_machine_consume_fuel_spec(
-    machine: ParseMachineView,
-) -> Result<ParseMachineView, CstErrorView> {
+pub open spec fn cst_machine_consume_fuel_spec(machine: ParseMachineView) -> Result<
+    ParseMachineView,
+    CstErrorView,
+> {
     match cst_consume_parse_fuel_spec(machine.fuel) {
         Ok(fuel) => Ok(ParseMachineView { fuel, ..machine }),
         Err(error) => Err(error),
@@ -9248,10 +9230,7 @@ pub open spec fn cst_machine_begin_step_spec(machine: ParseMachineView) -> Resul
             match cst_machine_pop_task_spec(consumed) {
                 Some((next, task)) => Ok((next, task)),
                 None => Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ),
             }
         },
@@ -9287,17 +9266,12 @@ pub open spec fn cst_machine_finish_spec(
     cst_finish_parse_node_spec(machine.tasks, machine.completed, start, end, node_count)
 }
 
-pub open spec fn cst_validate_dispatched_task_spec(
-    task: ParseTaskView,
-    token_count: u64,
-) -> Result<(), CstErrorView> {
+pub open spec fn cst_validate_dispatched_task_spec(task: ParseTaskView, token_count: u64) -> Result<
+    (),
+    CstErrorView,
+> {
     if task.end > token_count || task.cursor > task.end || task.token_start > task.end {
-        Err(
-            CstErrorView {
-                kind: CstErrorKind::InternalInvariantViolation,
-                byte_offset: 0,
-            },
-        )
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
     } else {
         Ok(())
     }
@@ -9591,11 +9565,7 @@ pub open spec fn cst_step_flow_sequence_state_zero_spec(
                 )
             } else {
                 let explicit = kind == CompletedTokenKind::ExplicitMappingKey;
-                let started = cst_task_begin_keyed_entry_spec(
-                    positioned,
-                    cursor as u64,
-                    explicit,
-                );
+                let started = cst_task_begin_keyed_entry_spec(positioned, cursor as u64, explicit);
                 let keyed = if explicit {
                     let next = cst_skip_trivia_spec(
                         tokens,
@@ -9620,12 +9590,7 @@ pub open spec fn cst_step_flow_sequence_state_zero_spec(
                         Err(error) => Err(error),
                     }
                 } else {
-                    let child = cst_node_task_spec(
-                        keyed.cursor,
-                        task.end,
-                        false,
-                        task.depth_left,
-                    );
+                    let child = cst_node_task_spec(keyed.cursor, task.end, false, task.depth_left);
                     let waiting = cst_task_set_state_spec(keyed, 1);
                     let resumed = cst_machine_resume_task_spec(machine, waiting);
                     match cst_machine_push_task_spec(
@@ -9773,12 +9738,7 @@ pub open spec fn cst_step_flow_sequence_state_two_spec(
                     },
                 }
             } else {
-                let child = cst_node_task_spec(
-                    cursor as u64,
-                    task.end,
-                    false,
-                    task.depth_left,
-                );
+                let child = cst_node_task_spec(cursor as u64, task.end, false, task.depth_left);
                 let waiting = cst_task_set_state_spec(positioned, 3);
                 let resumed = cst_machine_resume_task_spec(machine, waiting);
                 match cst_machine_push_task_spec(
@@ -9869,10 +9829,7 @@ pub open spec fn cst_step_flow_sequence_state_three_spec(
                                     token_end: cursor as u64,
                                     indicator_token: None,
                                 };
-                                let appended = cst_task_push_sequence_entry_spec(
-                                    positioned,
-                                    entry,
-                                );
+                                let appended = cst_task_push_sequence_entry_spec(positioned, entry);
                                 let waiting = cst_task_set_state_spec(appended, 4);
                                 Ok((cst_machine_resume_task_spec(taken, waiting), next_builder))
                             },
@@ -9905,12 +9862,7 @@ pub open spec fn cst_step_flow_sequence_state_four_spec(
         if token.kind == CompletedTokenKind::FlowSequenceEnd {
             cst_step_node_store_parsed_spec(
                 machine,
-                cst_finish_iterative_sequence_spec(
-                    tokens,
-                    task,
-                    Some(task.cursor),
-                    builder,
-                ),
+                cst_finish_iterative_sequence_spec(tokens, task, Some(task.cursor), builder),
             )
         } else if token.kind != CompletedTokenKind::FlowEntry {
             Err(
@@ -9989,11 +9941,7 @@ pub open spec fn cst_step_flow_mapping_state_zero_spec(
                 )
             } else {
                 let explicit = kind == CompletedTokenKind::ExplicitMappingKey;
-                let started = cst_task_begin_keyed_entry_spec(
-                    positioned,
-                    cursor as u64,
-                    explicit,
-                );
+                let started = cst_task_begin_keyed_entry_spec(positioned, cursor as u64, explicit);
                 let keyed = if explicit {
                     let next = cst_skip_trivia_spec(
                         tokens,
@@ -10018,12 +9966,7 @@ pub open spec fn cst_step_flow_mapping_state_zero_spec(
                         Err(error) => Err(error),
                     }
                 } else {
-                    let child = cst_node_task_spec(
-                        keyed.cursor,
-                        task.end,
-                        false,
-                        task.depth_left,
-                    );
+                    let child = cst_node_task_spec(keyed.cursor, task.end, false, task.depth_left);
                     let waiting = cst_task_set_state_spec(keyed, 1);
                     let resumed = cst_machine_resume_task_spec(machine, waiting);
                     match cst_machine_push_task_spec(
@@ -10143,12 +10086,7 @@ pub open spec fn cst_step_flow_mapping_state_two_spec(
                     Err(error) => Err(error),
                 }
             } else {
-                let child = cst_node_task_spec(
-                    cursor as u64,
-                    task.end,
-                    false,
-                    task.depth_left,
-                );
+                let child = cst_node_task_spec(cursor as u64, task.end, false, task.depth_left);
                 let waiting = cst_task_set_state_spec(positioned, 3);
                 let resumed = cst_machine_resume_task_spec(machine, waiting);
                 match cst_machine_push_task_spec(
@@ -10165,13 +10103,7 @@ pub open spec fn cst_step_flow_mapping_state_two_spec(
     } else {
         match cst_empty_node_spec(builder, tokens, task.cursor) {
             Ok((next_builder, value)) => {
-                cst_step_flow_mapping_finish_entry_spec(
-                    machine,
-                    next_builder,
-                    task,
-                    value,
-                    None,
-                )
+                cst_step_flow_mapping_finish_entry_spec(machine, next_builder, task, value, None)
             },
             Err(error) => Err(error),
         }
@@ -10235,12 +10167,7 @@ pub open spec fn cst_step_flow_mapping_state_four_spec(
         if token.kind == CompletedTokenKind::FlowMappingEnd {
             cst_step_node_store_parsed_spec(
                 machine,
-                cst_finish_iterative_mapping_spec(
-                    tokens,
-                    task,
-                    Some(task.cursor),
-                    builder,
-                ),
+                cst_finish_iterative_mapping_spec(tokens, task, Some(task.cursor), builder),
             )
         } else if token.kind != CompletedTokenKind::FlowEntry {
             Err(
@@ -10298,7 +10225,11 @@ pub open spec fn cst_step_block_sequence_state_zero_spec(
                 Err(
                     CstErrorView {
                         kind: CstErrorKind::UnexpectedToken,
-                        byte_offset: cst_byte_at_spec(tokens, task.opener, builder.source_len_bytes),
+                        byte_offset: cst_byte_at_spec(
+                            tokens,
+                            task.opener,
+                            builder.source_len_bytes,
+                        ),
                     },
                 )
             } else {
@@ -10353,12 +10284,7 @@ pub open spec fn cst_step_block_sequence_state_zero_spec(
                     Some(index) => index as u64,
                     None => task.end,
                 };
-                let child = cst_node_task_spec(
-                    next as u64,
-                    child_end,
-                    true,
-                    task.depth_left,
-                );
+                let child = cst_node_task_spec(next as u64, child_end, true, task.depth_left);
                 let waiting = cst_task_set_state_spec(started, 1);
                 let resumed = cst_machine_resume_task_spec(machine, waiting);
                 match cst_machine_push_task_spec(
@@ -10587,11 +10513,11 @@ pub open spec fn cst_step_block_mapping_state_six_spec(
             let begins_entry = if column == task.indentation {
                 tokens[next].kind == CompletedTokenKind::ExplicitMappingKey
                     || cst_find_mapping_value_on_line_spec(
-                        tokens,
-                        next,
-                        task.end as int,
-                        (task.end as int - next) as nat + 1,
-                    ).is_some()
+                    tokens,
+                    next,
+                    task.end as int,
+                    (task.end as int - next) as nat + 1,
+                ).is_some()
             } else {
                 false
             };
@@ -10678,10 +10604,12 @@ pub open spec fn cst_step_block_mapping_state_two_spec(
             (task.end as int - task.colon_token as int) as nat,
         );
         let positioned = cst_task_set_cursor_spec(task, cursor as u64);
-        let indentationless_sequence = cursor < task.end
-            && tokens[cursor].start_line_number > tokens[task.colon_token as int].start_line_number
-            && tokens[cursor].kind == CompletedTokenKind::BlockSequenceEntry
-            && cst_token_column_spec(atoms, tokens[cursor]) == task.indentation;
+        let indentationless_sequence = cursor < task.end && tokens[cursor].start_line_number
+            > tokens[task.colon_token as int].start_line_number && tokens[cursor].kind
+            == CompletedTokenKind::BlockSequenceEntry && cst_token_column_spec(
+            atoms,
+            tokens[cursor],
+        ) == task.indentation;
         let empty_value = cursor >= task.end || !indentationless_sequence
             && tokens[cursor].start_line_number > tokens[task.colon_token as int].start_line_number
             && cst_token_column_spec(atoms, tokens[cursor]) <= task.indentation;
@@ -10772,8 +10700,7 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
             (task.end - task.cursor) as nat + 1,
         );
         let positioned = cst_task_set_cursor_spec(task, cursor as u64);
-        if cursor >= task.end || cst_token_column_spec(atoms, tokens[cursor])
-            != task.indentation {
+        if cursor >= task.end || cst_token_column_spec(atoms, tokens[cursor]) != task.indentation {
             if task.pending_mapping.len() == 0 {
                 Err(
                     CstErrorView {
@@ -10793,11 +10720,7 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
             }
         } else {
             let explicit = tokens[cursor].kind == CompletedTokenKind::ExplicitMappingKey;
-            let started = cst_task_begin_keyed_entry_spec(
-                positioned,
-                cursor as u64,
-                explicit,
-            );
+            let started = cst_task_begin_keyed_entry_spec(positioned, cursor as u64, explicit);
             let keyed = if explicit {
                 let next = cst_skip_trivia_spec(
                     tokens,
@@ -10849,9 +10772,9 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
                     } else {
                         let empty_key = keyed.cursor >= task.end
                             || tokens[keyed.cursor as int].start_line_number
-                                > tokens[keyed.entry_token_start as int].start_line_number
-                                && cst_token_column_spec(atoms, tokens[keyed.cursor as int])
-                                    <= task.indentation;
+                            > tokens[keyed.entry_token_start as int].start_line_number
+                            && cst_token_column_spec(atoms, tokens[keyed.cursor as int])
+                            <= task.indentation;
                         if empty_key {
                             match cst_empty_node_spec(builder, tokens, keyed.cursor) {
                                 Err(error) => Err(error),
@@ -10861,10 +10784,12 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
                                         key_node_index,
                                     );
                                     let waiting = cst_task_set_state_spec(with_key, 5);
-                                    Ok((
-                                        cst_machine_resume_task_spec(machine, waiting),
-                                        next_builder,
-                                    ))
+                                    Ok(
+                                        (
+                                            cst_machine_resume_task_spec(machine, waiting),
+                                            next_builder,
+                                        ),
+                                    )
                                 },
                             }
                         } else {
@@ -10906,21 +10831,18 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
                                     key_node_index,
                                 );
                                 let waiting = cst_task_set_state_spec(with_key, 2);
-                                Ok((
-                                    cst_machine_resume_task_spec(machine, waiting),
-                                    next_builder,
-                                ))
+                                Ok((cst_machine_resume_task_spec(machine, waiting), next_builder))
                             },
                         }
                     } else {
                         let allow_block_collection = explicit
                             && cst_block_value_allows_collection_spec(
-                                tokens,
-                                keyed.cursor as int,
-                                colon_index,
-                                keyed.entry_token_start as int,
-                                (colon_index - keyed.cursor as int) as nat + 1,
-                            );
+                            tokens,
+                            keyed.cursor as int,
+                            colon_index,
+                            keyed.entry_token_start as int,
+                            (colon_index - keyed.cursor as int) as nat + 1,
+                        );
                         let child = cst_node_task_spec(
                             keyed.cursor,
                             colon_index as u64,
@@ -11106,13 +11028,7 @@ pub closed spec fn cst_parse_node_iterative_from_spec(
     } else if fuel == 0 {
         Err(cst_step_node_internal_error_spec())
     } else {
-        match cst_parse_node_iteration_spec(
-            atoms,
-            tokens,
-            machine,
-            builder,
-            depth_limit,
-        ) {
+        match cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) {
             Err(error) => Err(error),
             Ok((next_machine, next_builder)) => cst_parse_node_iterative_from_spec(
                 atoms,
@@ -11193,12 +11109,7 @@ pub proof fn lemma_cst_parse_node_iterative_unfold_terminal(
             machine,
             builder,
             fuel,
-        ) == match cst_machine_finish_spec(
-            machine,
-            start,
-            end,
-            builder.nodes.len() as u64,
-        ) {
+        ) == match cst_machine_finish_spec(machine, start, end, builder.nodes.len() as u64) {
             Ok(parsed) => Ok((builder, parsed)),
             Err(error) => Err(error),
         },
@@ -11223,10 +11134,9 @@ pub proof fn lemma_cst_parse_node_iterative_unfold_success(
         depth_limit <= MAX_PROFILE1_CST_DEPTH,
         machine.tasks.len() > 0,
         fuel > 0,
-        cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok((
-            next_machine,
-            next_builder,
-        )),
+        cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok(
+            (next_machine, next_builder),
+        ),
     ensures
         cst_parse_node_iterative_from_spec(
             atoms,
@@ -11394,12 +11304,7 @@ proof fn lemma_cst_parse_node_remaining_initial(
             start,
             end,
             depth_limit,
-            cst_initial_parse_machine_spec(
-                start,
-                end,
-                allow_block_mapping,
-                depth_limit,
-            ),
+            cst_initial_parse_machine_spec(start, end, allow_block_mapping, depth_limit),
             builder,
             cst_initial_parse_fuel_spec() as nat + 1,
         ),
@@ -11435,12 +11340,7 @@ proof fn lemma_cst_parse_node_remaining_terminal(
             fuel,
         ),
     ensures
-        expected == match cst_machine_finish_spec(
-            machine,
-            start,
-            end,
-            builder.nodes.len() as u64,
-        ) {
+        expected == match cst_machine_finish_spec(machine, start, end, builder.nodes.len() as u64) {
             Ok(parsed) => Ok((builder, parsed)),
             Err(error) => Err(error),
         },
@@ -11503,10 +11403,9 @@ proof fn lemma_cst_parse_node_remaining_success(
             (fuel - 1) as nat,
         ),
 {
-    assert(cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok((
-        next_machine,
-        next_builder,
-    )));
+    assert(cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok(
+        (next_machine, next_builder),
+    ));
     reveal(cst_parse_node_remaining_matches_spec);
     lemma_cst_parse_node_iterative_unfold_success(
         atoms,
@@ -11697,9 +11596,9 @@ fn machine_resume_task(task: ParseTask, machine: &mut ParseMachine)
     ensures
         final(machine)@ == cst_machine_resume_task_spec(old(machine)@, task@),
         final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@)
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     resume_parse_task(&mut machine.tasks, task);
     proof {
@@ -11761,9 +11660,9 @@ fn machine_push_task(
             Ok(()) => Ok(final(machine)@),
             Err(error) => Err(error@),
         },
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let result = push_iterative_task(&mut machine.tasks, task, depth_limit, offset);
     proof {
@@ -11808,12 +11707,8 @@ fn machine_begin_step(machine: &mut ParseMachine) -> (result: Result<ParseTask, 
     }
 }
 
-fn machine_finish(
-    machine: &ParseMachine,
-    start: usize,
-    end: usize,
-    node_count: u64,
-) -> (result: Result<ParsedNode, CstError>)
+fn machine_finish(machine: &ParseMachine, start: usize, end: usize, node_count: u64) -> (result:
+    Result<ParsedNode, CstError>)
     ensures
         result.is_ok() ==> result.unwrap().node_index < node_count,
         result.is_ok() ==> start <= result.unwrap().next_token <= end,
@@ -11882,9 +11777,9 @@ fn step_node_task(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -12074,7 +11969,8 @@ fn step_node_task(
             }
             let prior_depth_left = task.depth_left;
             let indentation = token_column(atoms, &tokens[index]);
-            task = match specialize_parse_task(
+            task =
+            match specialize_parse_task(
                 task,
                 ParseTaskKind::BlockMapping,
                 token_start,
@@ -12108,10 +12004,7 @@ fn step_node_task(
             if task_view.allow_block_mapping && after < task_view.end
                 && token_views[after as int].kind == CompletedTokenKind::MappingValue {
                 crate::token::lemma_completed_token_view_at(tokens@, after as int);
-                assert(!cst_same_line_spec(
-                    token_views[index as int],
-                    token_views[after as int],
-                ));
+                assert(!cst_same_line_spec(token_views[index as int], token_views[after as int]));
             }
             assert(!(task_view.allow_block_mapping && after < task_view.end
                 && token_views[after as int].kind == CompletedTokenKind::MappingValue
@@ -12191,7 +12084,8 @@ fn step_node_task(
         index
     };
     let indentation = token_column(atoms, &tokens[index]);
-    task = match specialize_parse_task(
+    task =
+    match specialize_parse_task(
         task,
         specialized,
         token_start,
@@ -12252,9 +12146,9 @@ fn step_flow_sequence_state_zero(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -12379,20 +12273,17 @@ fn step_flow_sequence_state_zero(
             assert(tokens@[keyed.cursor as int]@ == token_views[keyed.cursor as int]);
         }
     }
-    if task.cursor >= task.end || tokens[task.cursor].kind()
-        == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
-        == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
+    if task.cursor >= task.end || tokens[task.cursor].kind() == CompletedTokenKind::MappingValue
+        || tokens[task.cursor].kind() == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
         == CompletedTokenKind::FlowSequenceEnd {
         let ghost prior_builder = builder@;
         let node = match empty_node(builder, tokens, task.cursor) {
             Ok(node) => node,
             Err(error) => {
                 proof {
-                    assert(cst_empty_node_spec(
-                        prior_builder,
-                        token_views,
-                        keyed.cursor,
-                    ) == Err(error@));
+                    assert(cst_empty_node_spec(prior_builder, token_views, keyed.cursor) == Err(
+                        error@,
+                    ));
                     assert(keyed.cursor >= task_view.end || token_views[keyed.cursor as int].kind
                         == CompletedTokenKind::MappingValue || token_views[keyed.cursor as int].kind
                         == CompletedTokenKind::FlowEntry || token_views[keyed.cursor as int].kind
@@ -12438,12 +12329,8 @@ fn step_flow_sequence_state_zero(
         },
         Err(error) => {
             proof {
-                assert(cst_machine_push_task_spec(
-                    resumed,
-                    child@,
-                    depth_limit,
-                    child_offset,
-                ) == Err(error@));
+                assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                    == Err(error@));
                 reveal(cst_machine_push_task_spec);
                 reveal(cst_push_parse_task_spec);
                 assert(machine@.fuel == initial_machine.fuel);
@@ -12481,9 +12368,9 @@ fn step_flow_sequence_state_one(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -12505,10 +12392,7 @@ fn step_flow_sequence_state_one(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12519,10 +12403,7 @@ fn step_flow_sequence_state_one(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12563,9 +12444,9 @@ fn machine_finish_flow_sequence_entry(
         ),
         final(machine)@.fuel == old(machine)@.fuel,
         final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@)
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let entry = CstSequenceEntry {
         node_index,
@@ -12608,9 +12489,9 @@ fn step_flow_sequence_state_two(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -12637,10 +12518,7 @@ fn step_flow_sequence_state_two(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12676,11 +12554,8 @@ fn step_flow_sequence_state_two(
                 Ok(node) => node,
                 Err(error) => {
                     proof {
-                        assert(cst_empty_node_spec(
-                            before_empty,
-                            token_views,
-                            positioned.cursor,
-                        ) == Err(error@));
+                        assert(cst_empty_node_spec(before_empty, token_views, positioned.cursor)
+                            == Err(error@));
                         assert(expected == Err(error@));
                     }
                     return Err(error);
@@ -12795,12 +12670,8 @@ fn step_flow_sequence_state_two(
             },
             Err(error) => {
                 proof {
-                    assert(cst_machine_push_task_spec(
-                        resumed,
-                        child@,
-                        depth_limit,
-                        child_offset,
-                    ) == Err(error@));
+                    assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                        == Err(error@));
                     assert(expected == Err(error@));
                 }
                 return Err(error);
@@ -12812,10 +12683,7 @@ fn step_flow_sequence_state_two(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12919,9 +12787,9 @@ fn step_flow_sequence_state_three(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -12943,10 +12811,7 @@ fn step_flow_sequence_state_three(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12957,10 +12822,7 @@ fn step_flow_sequence_state_three(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -12972,10 +12834,7 @@ fn step_flow_sequence_state_three(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13072,9 +12931,9 @@ fn step_flow_sequence_state_four(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13217,9 +13076,9 @@ fn step_flow_mapping_state_zero(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13344,20 +13203,17 @@ fn step_flow_mapping_state_zero(
             assert(tokens@[keyed.cursor as int]@ == token_views[keyed.cursor as int]);
         }
     }
-    if task.cursor >= task.end || tokens[task.cursor].kind()
-        == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
-        == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
+    if task.cursor >= task.end || tokens[task.cursor].kind() == CompletedTokenKind::MappingValue
+        || tokens[task.cursor].kind() == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
         == CompletedTokenKind::FlowMappingEnd {
         let ghost prior_builder = builder@;
         let node = match empty_node(builder, tokens, task.cursor) {
             Ok(node) => node,
             Err(error) => {
                 proof {
-                    assert(cst_empty_node_spec(
-                        prior_builder,
-                        token_views,
-                        keyed.cursor,
-                    ) == Err(error@));
+                    assert(cst_empty_node_spec(prior_builder, token_views, keyed.cursor) == Err(
+                        error@,
+                    ));
                     assert(keyed.cursor >= task_view.end || token_views[keyed.cursor as int].kind
                         == CompletedTokenKind::MappingValue || token_views[keyed.cursor as int].kind
                         == CompletedTokenKind::FlowEntry || token_views[keyed.cursor as int].kind
@@ -13403,12 +13259,8 @@ fn step_flow_mapping_state_zero(
         },
         Err(error) => {
             proof {
-                assert(cst_machine_push_task_spec(
-                    resumed,
-                    child@,
-                    depth_limit,
-                    child_offset,
-                ) == Err(error@));
+                assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                    == Err(error@));
                 reveal(cst_machine_push_task_spec);
                 reveal(cst_push_parse_task_spec);
                 assert(machine@.fuel == initial_machine.fuel);
@@ -13446,9 +13298,9 @@ fn step_flow_mapping_state_one(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13470,10 +13322,7 @@ fn step_flow_mapping_state_one(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13483,10 +13332,7 @@ fn step_flow_mapping_state_one(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13534,9 +13380,9 @@ fn machine_finish_flow_mapping_entry(
         ),
         final(machine)@.fuel == old(machine)@.fuel,
         final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@)
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let entry = CstMappingEntry {
         key_node_index: task.key_node_index,
@@ -13585,9 +13431,9 @@ fn step_flow_mapping_state_two(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13614,10 +13460,7 @@ fn step_flow_mapping_state_two(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13653,11 +13496,8 @@ fn step_flow_mapping_state_two(
                 Ok(node) => node,
                 Err(error) => {
                     proof {
-                        assert(cst_empty_node_spec(
-                            before_empty,
-                            token_views,
-                            positioned.cursor,
-                        ) == Err(error@));
+                        assert(cst_empty_node_spec(before_empty, token_views, positioned.cursor)
+                            == Err(error@));
                         assert(expected == Err(error@));
                     }
                     return Err(error);
@@ -13690,12 +13530,8 @@ fn step_flow_mapping_state_two(
             },
             Err(error) => {
                 proof {
-                    assert(cst_machine_push_task_spec(
-                        resumed,
-                        child@,
-                        depth_limit,
-                        child_offset,
-                    ) == Err(error@));
+                    assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                        == Err(error@));
                     assert(expected == Err(error@));
                 }
                 return Err(error);
@@ -13753,9 +13589,9 @@ fn step_flow_mapping_state_three(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13777,10 +13613,7 @@ fn step_flow_mapping_state_three(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13790,10 +13623,7 @@ fn step_flow_mapping_state_three(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -13837,9 +13667,9 @@ fn step_flow_mapping_state_four(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -13984,9 +13814,9 @@ fn step_block_sequence_state_zero(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -14048,12 +13878,8 @@ fn step_block_sequence_state_zero(
         };
         machine_store_completed(parsed, machine);
         proof {
-            assert(cst_finish_iterative_sequence_spec(
-                token_views,
-                positioned,
-                None,
-                prior_builder,
-            ) == Ok((builder@, parsed@)));
+            assert(cst_finish_iterative_sequence_spec(token_views, positioned, None, prior_builder)
+                == Ok((builder@, parsed@)));
             reveal(cst_step_node_store_parsed_spec);
             assert(expected == Ok((machine@, builder@)));
         }
@@ -14076,8 +13902,8 @@ fn step_block_sequence_state_zero(
     } else {
         let column = token_column(atoms, &tokens[task.cursor]);
         tokens[task.cursor].start_line_number() > dash_line && column <= task.indentation
-            || tokens[task.cursor].kind() == CompletedTokenKind::BlockSequenceEntry
-                && column == task.indentation
+            || tokens[task.cursor].kind() == CompletedTokenKind::BlockSequenceEntry && column
+            == task.indentation
     };
     if empty_entry {
         let ghost prior_builder = builder@;
@@ -14116,13 +13942,7 @@ fn step_block_sequence_state_zero(
         return Ok(());
     }
     let child_offset = tokens[task.cursor].byte_start();
-    let boundary = block_property_only_end(
-        atoms,
-        tokens,
-        task.cursor,
-        task.end,
-        task.indentation,
-    );
+    let boundary = block_property_only_end(atoms, tokens, task.cursor, task.end, task.indentation);
     let child_end = match boundary {
         Some(end) => end,
         None => task.end,
@@ -14140,12 +13960,8 @@ fn step_block_sequence_state_zero(
         },
         Err(error) => {
             proof {
-                assert(cst_machine_push_task_spec(
-                    resumed,
-                    child@,
-                    depth_limit,
-                    child_offset,
-                ) == Err(error@));
+                assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                    == Err(error@));
                 assert(expected == Err(error@));
             }
             Err(error)
@@ -14180,9 +13996,9 @@ fn step_block_sequence_state_one(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(_tokens@);
     let ghost task_view = task@;
@@ -14204,10 +14020,7 @@ fn step_block_sequence_state_one(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14217,10 +14030,7 @@ fn step_block_sequence_state_one(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14272,9 +14082,9 @@ fn step_block_sequence_state_two(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -14365,9 +14175,9 @@ fn step_block_mapping_state_zero(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -14395,8 +14205,8 @@ fn step_block_mapping_state_zero(
             assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
         }
     }
-    let at_indentation = task.cursor < task.end
-        && token_column(atoms, &tokens[task.cursor]) == task.indentation;
+    let at_indentation = task.cursor < task.end && token_column(atoms, &tokens[task.cursor])
+        == task.indentation;
     if !at_indentation {
         if task.pending_mapping.len() == 0 {
             let offset = byte_at(tokens, task.opener, builder.source_len_bytes);
@@ -14425,12 +14235,8 @@ fn step_block_mapping_state_zero(
         };
         machine_store_completed(parsed, machine);
         proof {
-            assert(cst_finish_iterative_mapping_spec(
-                token_views,
-                positioned,
-                None,
-                prior_builder,
-            ) == Ok((builder@, parsed@)));
+            assert(cst_finish_iterative_mapping_spec(token_views, positioned, None, prior_builder)
+                == Ok((builder@, parsed@)));
             reveal(cst_step_node_store_parsed_spec);
             assert(expected == Ok((machine@, builder@)));
         }
@@ -14456,13 +14262,7 @@ fn step_block_mapping_state_zero(
         }
     }
     let colon = if task.explicit_key {
-        find_explicit_mapping_value(
-            atoms,
-            tokens,
-            task.cursor,
-            task.end,
-            task.indentation,
-        )
+        find_explicit_mapping_value(atoms, tokens, task.cursor, task.end, task.indentation)
     } else {
         find_mapping_value_on_line(tokens, task.cursor, task.end)
     };
@@ -14495,12 +14295,8 @@ fn step_block_mapping_state_zero(
             };
             machine_store_completed(parsed, machine);
             proof {
-                assert(cst_finish_iterative_mapping_spec(
-                    token_views,
-                    keyed,
-                    None,
-                    prior_builder,
-                ) == Ok((builder@, parsed@)));
+                assert(cst_finish_iterative_mapping_spec(token_views, keyed, None, prior_builder)
+                    == Ok((builder@, parsed@)));
                 reveal(cst_step_node_store_parsed_spec);
                 assert(expected == Ok((machine@, builder@)));
             }
@@ -14513,8 +14309,10 @@ fn step_block_mapping_state_zero(
                 == token_views[task.entry_token_start as int]);
         }
         let empty_key = task.cursor >= task.end || tokens[task.cursor].start_line_number()
-            > tokens[task.entry_token_start].start_line_number()
-            && token_column(atoms, &tokens[task.cursor]) <= task.indentation;
+            > tokens[task.entry_token_start].start_line_number() && token_column(
+            atoms,
+            &tokens[task.cursor],
+        ) <= task.indentation;
         if empty_key {
             let ghost prior_builder = builder@;
             let key_node_index = match empty_node(builder, tokens, task.cursor) {
@@ -14552,12 +14350,7 @@ fn step_block_mapping_state_zero(
             task.end,
             task.entry_token_start,
         );
-        let child = node_task(
-            task.cursor,
-            task.end,
-            allow_block_collection,
-            task.depth_left,
-        );
+        let child = node_task(task.cursor, task.end, allow_block_collection, task.depth_left);
         task_set_state(&mut task, 4);
         machine_resume_task(task, machine);
         let ghost resumed = machine@;
@@ -14570,12 +14363,8 @@ fn step_block_mapping_state_zero(
             },
             Err(error) => {
                 proof {
-                    assert(cst_machine_push_task_spec(
-                        resumed,
-                        child@,
-                        depth_limit,
-                        child_offset,
-                    ) == Err(error@));
+                    assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                        == Err(error@));
                     assert(expected == Err(error@));
                 }
                 return Err(error);
@@ -14596,11 +14385,8 @@ fn step_block_mapping_state_zero(
             Ok(node) => node,
             Err(error) => {
                 proof {
-                    assert(cst_empty_node_spec(
-                        prior_builder,
-                        token_views,
-                        with_colon.colon_token,
-                    ) == Err(error@));
+                    assert(cst_empty_node_spec(prior_builder, token_views, with_colon.colon_token)
+                        == Err(error@));
                     assert(expected == Err(error@));
                 }
                 return Err(error);
@@ -14610,11 +14396,9 @@ fn step_block_mapping_state_zero(
         task_set_state(&mut task, 2);
         machine_resume_task(task, machine);
         proof {
-            assert(cst_empty_node_spec(
-                prior_builder,
-                token_views,
-                with_colon.colon_token,
-            ) == Ok((builder@, key_node_index)));
+            assert(cst_empty_node_spec(prior_builder, token_views, with_colon.colon_token) == Ok(
+                (builder@, key_node_index),
+            ));
             assert(expected == Ok((machine@, builder@)));
         }
         return Ok(());
@@ -14631,12 +14415,7 @@ fn step_block_mapping_state_zero(
         task.colon_token,
         task.entry_token_start,
     );
-    let child = node_task(
-        task.cursor,
-        task.colon_token,
-        allow_block_collection,
-        task.depth_left,
-    );
+    let child = node_task(task.cursor, task.colon_token, allow_block_collection, task.depth_left);
     task_set_state(&mut task, 1);
     machine_resume_task(task, machine);
     let ghost resumed = machine@;
@@ -14649,12 +14428,8 @@ fn step_block_mapping_state_zero(
         },
         Err(error) => {
             proof {
-                assert(cst_machine_push_task_spec(
-                    resumed,
-                    child@,
-                    depth_limit,
-                    child_offset,
-                ) == Err(error@));
+                assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                    == Err(error@));
                 assert(expected == Err(error@));
             }
             Err(error)
@@ -14689,9 +14464,9 @@ fn step_block_mapping_state_one(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -14713,10 +14488,7 @@ fn step_block_mapping_state_one(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14726,10 +14498,7 @@ fn step_block_mapping_state_one(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14782,9 +14551,9 @@ fn step_block_mapping_state_four(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -14806,10 +14575,7 @@ fn step_block_mapping_state_four(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14819,10 +14585,7 @@ fn step_block_mapping_state_four(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14864,9 +14627,9 @@ fn step_block_mapping_state_five(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
     let ghost task_view = task@;
@@ -14886,10 +14649,7 @@ fn step_block_mapping_state_five(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -14962,9 +14722,9 @@ fn step_block_mapping_state_six(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -15061,9 +14821,9 @@ fn step_block_mapping_state_three(
         final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost token_views = crate::token::completed_token_views_spec(_tokens@);
     let ghost task_view = task@;
@@ -15085,10 +14845,7 @@ fn step_block_mapping_state_three(
             proof {
                 reveal(cst_step_node_internal_error_spec);
                 assert(expected == Err(
-                    CstErrorView {
-                        kind: CstErrorKind::InternalInvariantViolation,
-                        byte_offset: 0,
-                    },
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
                 ));
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -15098,10 +14855,7 @@ fn step_block_mapping_state_three(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -15166,9 +14920,9 @@ fn step_block_mapping_state_two(
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
         final(machine)@.fuel == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
-        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
-            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
-            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && cst_parse_task_is_valid_spec(
+            task@,
+        ) && result.is_ok() ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
 {
     let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
     let ghost token_views = crate::token::completed_token_views_spec(tokens@);
@@ -15191,10 +14945,7 @@ fn step_block_mapping_state_two(
         proof {
             reveal(cst_step_node_internal_error_spec);
             assert(expected == Err(
-                CstErrorView {
-                    kind: CstErrorKind::InternalInvariantViolation,
-                    byte_offset: 0,
-                },
+                CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
             ));
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
@@ -15217,14 +14968,11 @@ fn step_block_mapping_state_two(
     } else {
         0
     };
-    let indentationless_sequence = task.cursor < task.end
-        && tokens[task.cursor].start_line_number()
-            > tokens[task.colon_token].start_line_number()
-        && tokens[task.cursor].kind() == CompletedTokenKind::BlockSequenceEntry
-        && cursor_column == task.indentation;
+    let indentationless_sequence = task.cursor < task.end && tokens[task.cursor].start_line_number()
+        > tokens[task.colon_token].start_line_number() && tokens[task.cursor].kind()
+        == CompletedTokenKind::BlockSequenceEntry && cursor_column == task.indentation;
     let empty_value = task.cursor >= task.end || !indentationless_sequence
-        && tokens[task.cursor].start_line_number()
-            > tokens[task.colon_token].start_line_number()
+        && tokens[task.cursor].start_line_number() > tokens[task.colon_token].start_line_number()
         && cursor_column <= task.indentation;
     if empty_value {
         let ghost prior_builder = builder@;
@@ -15232,9 +14980,8 @@ fn step_block_mapping_state_two(
             Ok(node) => node,
             Err(error) => {
                 proof {
-                    assert(cst_empty_node_spec(prior_builder, token_views, positioned.cursor) == Err(
-                        error@,
-                    ));
+                    assert(cst_empty_node_spec(prior_builder, token_views, positioned.cursor)
+                        == Err(error@));
                     assert(expected == Err(error@));
                 }
                 return Err(error);
@@ -15270,13 +15017,7 @@ fn step_block_mapping_state_two(
         return Ok(());
     }
     let child_offset = tokens[task.cursor].byte_start();
-    let boundary = block_property_only_end(
-        atoms,
-        tokens,
-        task.cursor,
-        task.end,
-        task.indentation,
-    );
+    let boundary = block_property_only_end(atoms, tokens, task.cursor, task.end, task.indentation);
     let child_end = match boundary {
         Some(end) => end,
         None => task.end,
@@ -15300,12 +15041,8 @@ fn step_block_mapping_state_two(
         },
         Err(error) => {
             proof {
-                assert(cst_machine_push_task_spec(
-                    resumed,
-                    child@,
-                    depth_limit,
-                    child_offset,
-                ) == Err(error@));
+                assert(cst_machine_push_task_spec(resumed, child@, depth_limit, child_offset)
+                    == Err(error@));
                 assert(expected == Err(error@));
             }
             Err(error)
@@ -15391,13 +15128,7 @@ fn dispatch_parse_task(
     }
     if task.kind == ParseTaskKind::FlowSequence {
         if task.state == 0 {
-            let result = step_flow_sequence_state_zero(
-                tokens,
-                task,
-                machine,
-                builder,
-                depth_limit,
-            );
+            let result = step_flow_sequence_state_zero(tokens, task, machine, builder, depth_limit);
             proof {
                 assert(expected == match result {
                     Ok(()) => Ok((machine@, builder@)),
@@ -15417,13 +15148,7 @@ fn dispatch_parse_task(
             return result;
         }
         if task.state == 2 {
-            let result = step_flow_sequence_state_two(
-                tokens,
-                task,
-                machine,
-                builder,
-                depth_limit,
-            );
+            let result = step_flow_sequence_state_two(tokens, task, machine, builder, depth_limit);
             proof {
                 assert(expected == match result {
                     Ok(()) => Ok((machine@, builder@)),
@@ -15457,13 +15182,7 @@ fn dispatch_parse_task(
     }
     if task.kind == ParseTaskKind::FlowMapping {
         if task.state == 0 {
-            let result = step_flow_mapping_state_zero(
-                tokens,
-                task,
-                machine,
-                builder,
-                depth_limit,
-            );
+            let result = step_flow_mapping_state_zero(tokens, task, machine, builder, depth_limit);
             proof {
                 assert(expected == match result {
                     Ok(()) => Ok((machine@, builder@)),
@@ -15483,13 +15202,7 @@ fn dispatch_parse_task(
             return result;
         }
         if task.state == 2 {
-            let result = step_flow_mapping_state_two(
-                tokens,
-                task,
-                machine,
-                builder,
-                depth_limit,
-            );
+            let result = step_flow_mapping_state_two(tokens, task, machine, builder, depth_limit);
             proof {
                 assert(expected == match result {
                     Ok(()) => Ok((machine@, builder@)),
@@ -15732,8 +15445,7 @@ fn parse_node_iterative(
             ),
             machine.tasks.len() <= depth_limit + 2,
             cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(machine.tasks@)),
-            working_builder.syntax_owner_slots.len()
-                == initial_builder.syntax_owner_slots.len(),
+            working_builder.syntax_owner_slots.len() == initial_builder.syntax_owner_slots.len(),
             machine.fuel <= (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32,
             cst_parse_node_remaining_matches_spec(
                 expected,
@@ -15749,12 +15461,7 @@ fn parse_node_iterative(
         decreases machine.fuel,
     {
         if machine.tasks.len() == 0 {
-            let result = machine_finish(
-                &machine,
-                start,
-                end,
-                working_builder.nodes.len() as u64,
-            );
+            let result = machine_finish(&machine, start, end, working_builder.nodes.len() as u64);
             match result {
                 Ok(parsed) => {
                     proof {
