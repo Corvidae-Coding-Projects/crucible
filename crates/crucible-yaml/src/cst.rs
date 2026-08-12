@@ -4884,6 +4884,98 @@ fn find_explicit_mapping_value(
     None
 }
 
+pub open spec fn cst_token_is_property_spec(kind: CompletedTokenKind) -> bool {
+    kind == CompletedTokenKind::AnchorProperty || kind == CompletedTokenKind::TagProperty || kind
+        == CompletedTokenKind::VerbatimTagProperty
+}
+
+fn token_is_property(kind: CompletedTokenKind) -> (result: bool)
+    ensures
+        result == cst_token_is_property_spec(kind),
+{
+    kind == CompletedTokenKind::AnchorProperty || kind == CompletedTokenKind::TagProperty || kind
+        == CompletedTokenKind::VerbatimTagProperty
+}
+
+pub open spec fn cst_block_property_only_end_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: int,
+    end: int,
+    parent_indentation: u64,
+    property_line: u64,
+    syntax: int,
+    property_end: int,
+    fuel: nat,
+) -> Option<int>
+    decreases fuel,
+{
+    if start < 0 || property_end < start || syntax < property_end || end < syntax || end
+        > tokens.len() || fuel == 0 {
+        None
+    } else if syntax < end && cst_token_is_property_spec(tokens[syntax].kind) {
+        let next_property_end = syntax + 1;
+        let next_syntax = cst_skip_trivia_spec(
+            tokens,
+            next_property_end,
+            end,
+            (end - next_property_end) as nat + 1,
+        );
+        cst_block_property_only_end_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            parent_indentation,
+            property_line,
+            next_syntax,
+            next_property_end,
+            (fuel - 1) as nat,
+        )
+    } else if property_end <= start {
+        None
+    } else if syntax >= end {
+        Some(property_end)
+    } else {
+        let indentationless_sequence = tokens[syntax].kind == CompletedTokenKind::BlockSequenceEntry
+            && cst_token_column_spec(atoms, tokens[syntax]) == parent_indentation;
+        if tokens[syntax].start_line_number > property_line && cst_token_column_spec(
+            atoms,
+            tokens[syntax],
+        ) <= parent_indentation && !indentationless_sequence {
+            Some(property_end)
+        } else {
+            None
+        }
+    }
+}
+
+pub open spec fn cst_block_property_only_end_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: int,
+    end: int,
+    parent_indentation: u64,
+    fuel: nat,
+) -> Option<int> {
+    if start < 0 || end < start || end > tokens.len() || start >= end
+        || !cst_token_is_property_spec(tokens[start].kind) {
+        None
+    } else {
+        cst_block_property_only_end_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            parent_indentation,
+            tokens[start].start_line_number,
+            start,
+            start,
+            fuel,
+        )
+    }
+}
+
 fn block_property_only_end(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -4895,39 +4987,227 @@ fn block_property_only_end(
         start <= end <= tokens.len(),
     ensures
         result.is_some() ==> start < result.unwrap() <= end,
+        match result {
+            Some(index) => cst_block_property_only_end_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                crate::token::completed_token_views_spec(tokens@),
+                start as int,
+                end as int,
+                parent_indentation,
+                (end - start) as nat + 1,
+            ) == Some(index as int),
+            None => cst_block_property_only_end_spec(
+                crate::atom::lexical_atom_views_spec(atoms@),
+                crate::token::completed_token_views_spec(tokens@),
+                start as int,
+                end as int,
+                parent_indentation,
+                (end - start) as nat + 1,
+            ).is_none(),
+        },
 {
-    if start >= end || !(tokens[start].kind() == CompletedTokenKind::AnchorProperty
-        || tokens[start].kind() == CompletedTokenKind::TagProperty || tokens[start].kind()
-        == CompletedTokenKind::VerbatimTagProperty) {
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    if start >= end || !token_is_property(tokens[start].kind()) {
+        proof {
+            if start < end {
+                crate::token::lemma_completed_token_view_at(tokens@, start as int);
+            }
+            reveal(cst_block_property_only_end_spec);
+        }
         return None;
     }
     let property_line = tokens[start].start_line_number();
+    let ghost expected = cst_block_property_only_end_spec(
+        atom_views,
+        token_views,
+        start as int,
+        end as int,
+        parent_indentation,
+        (end - start) as nat + 1,
+    );
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, start as int);
+        reveal(cst_block_property_only_end_spec);
+        assert(expected == cst_block_property_only_end_from_spec(
+            atom_views,
+            token_views,
+            start as int,
+            end as int,
+            parent_indentation,
+            property_line,
+            start as int,
+            start as int,
+            (end - start) as nat + 1,
+        ));
+    }
     let mut syntax = start;
     let mut property_end = start;
-    while syntax < end && (tokens[syntax].kind() == CompletedTokenKind::AnchorProperty
-        || tokens[syntax].kind() == CompletedTokenKind::TagProperty || tokens[syntax].kind()
-        == CompletedTokenKind::VerbatimTagProperty)
+    let ghost mut fuel: nat = (end - start) as nat + 1;
+    while syntax < end && token_is_property(tokens[syntax].kind())
         invariant
             start <= property_end <= syntax <= end,
             end <= tokens.len(),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            atom_views.len() == atoms.len(),
+            fuel >= end - syntax + 1,
+            expected == cst_block_property_only_end_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                parent_indentation,
+                (end - start) as nat + 1,
+            ),
+            expected == cst_block_property_only_end_from_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                parent_indentation,
+                property_line,
+                syntax as int,
+                property_end as int,
+                fuel,
+            ),
         decreases end - syntax,
     {
-        property_end = syntax + 1;
-        syntax = skip_trivia(tokens, property_end, end);
+        let next_property_end = syntax + 1;
+        let next_syntax = skip_trivia(tokens, next_property_end, end);
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, syntax as int);
+            assert(token_views[syntax as int] == tokens@[syntax as int]@);
+            assert(cst_token_is_property_spec(token_views[syntax as int].kind));
+            assert(fuel > 0);
+            reveal(cst_block_property_only_end_from_spec);
+            assert(expected == cst_block_property_only_end_from_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                parent_indentation,
+                property_line,
+                next_syntax as int,
+                next_property_end as int,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
+        }
+        property_end = next_property_end;
+        syntax = next_syntax;
+        proof {
+            assert(expected == cst_block_property_only_end_from_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                parent_indentation,
+                property_line,
+                syntax as int,
+                property_end as int,
+                fuel,
+            ));
+        }
+    }
+    proof {
+        if syntax < end {
+            crate::token::lemma_completed_token_view_at(tokens@, syntax as int);
+            assert(token_views[syntax as int] == tokens@[syntax as int]@);
+            assert(!cst_token_is_property_spec(token_views[syntax as int].kind));
+        }
+        assert(fuel > 0);
     }
     if property_end <= start {
+        proof {
+            reveal(cst_block_property_only_end_from_spec);
+            assert(expected.is_none());
+        }
         return None;
     }
     if syntax >= end {
+        proof {
+            reveal(cst_block_property_only_end_from_spec);
+            assert(expected == Some(property_end as int));
+        }
         return Some(property_end);
     }
-    let indentationless_sequence = tokens[syntax].kind() == CompletedTokenKind::BlockSequenceEntry
-        && token_column(atoms, &tokens[syntax]) == parent_indentation;
-    if tokens[syntax].start_line_number() > property_line && token_column(atoms, &tokens[syntax])
-        <= parent_indentation && !indentationless_sequence {
+    let kind = tokens[syntax].kind();
+    let syntax_line = tokens[syntax].start_line_number();
+    let column = token_column(atoms, &tokens[syntax]);
+    let indentationless_sequence = kind == CompletedTokenKind::BlockSequenceEntry && column
+        == parent_indentation;
+    let result = if syntax_line > property_line && column <= parent_indentation
+        && !indentationless_sequence {
         Some(property_end)
     } else {
         None
+    };
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, syntax as int);
+        assert(token_views[syntax as int] == tokens@[syntax as int]@);
+        assert(token_views[syntax as int].kind == kind);
+        assert(token_views[syntax as int].start_line_number == syntax_line);
+        assert(cst_token_column_spec(atom_views, token_views[syntax as int]) == column);
+        assert(fuel > 0);
+        assert(!cst_token_is_property_spec(token_views[syntax as int].kind));
+        reveal(cst_block_property_only_end_from_spec);
+    }
+    result
+}
+
+pub open spec fn cst_block_value_allows_collection_from_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    syntax: int,
+    end: int,
+    colon_line: u64,
+    fuel: nat,
+) -> bool
+    decreases fuel,
+{
+    if syntax < 0 || end < syntax || end > tokens.len() || fuel == 0 {
+        false
+    } else if syntax < end && cst_token_is_property_spec(tokens[syntax].kind) {
+        let next_syntax = cst_skip_trivia_spec(
+            tokens,
+            syntax + 1,
+            end,
+            (end - (syntax + 1)) as nat + 1,
+        );
+        cst_block_value_allows_collection_from_spec(
+            tokens,
+            next_syntax,
+            end,
+            colon_line,
+            (fuel - 1) as nat,
+        )
+    } else {
+        syntax < end && tokens[syntax].start_line_number > colon_line
+    }
+}
+
+pub open spec fn cst_block_value_allows_collection_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: int,
+    end: int,
+    colon: int,
+    fuel: nat,
+) -> bool {
+    if start < 0 || end < start || end > tokens.len() || colon < 0 || colon >= tokens.len() {
+        false
+    } else {
+        cst_block_value_allows_collection_from_spec(
+            tokens,
+            start,
+            end,
+            tokens[colon].start_line_number,
+            fuel,
+        )
     }
 }
 
@@ -4940,19 +5220,100 @@ fn block_value_allows_collection(
     requires
         start <= end <= tokens.len(),
         colon < tokens.len(),
+    ensures
+        allowed == cst_block_value_allows_collection_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            start as int,
+            end as int,
+            colon as int,
+            (end - start) as nat + 1,
+        ),
 {
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        crate::token::lemma_completed_token_view_at(tokens@, colon as int);
+    }
+    let colon_line = tokens[colon].start_line_number();
+    let ghost expected = cst_block_value_allows_collection_spec(
+        token_views,
+        start as int,
+        end as int,
+        colon as int,
+        (end - start) as nat + 1,
+    );
+    proof {
+        reveal(cst_block_value_allows_collection_spec);
+        assert(expected == cst_block_value_allows_collection_from_spec(
+            token_views,
+            start as int,
+            end as int,
+            colon_line,
+            (end - start) as nat + 1,
+        ));
+    }
     let mut syntax = start;
-    while syntax < end && (tokens[syntax].kind() == CompletedTokenKind::AnchorProperty
-        || tokens[syntax].kind() == CompletedTokenKind::TagProperty || tokens[syntax].kind()
-        == CompletedTokenKind::VerbatimTagProperty)
+    let ghost mut fuel: nat = (end - start) as nat + 1;
+    while syntax < end && token_is_property(tokens[syntax].kind())
         invariant
             start <= syntax <= end,
             end <= tokens.len(),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            fuel >= end - syntax + 1,
+            expected == cst_block_value_allows_collection_spec(
+                token_views,
+                start as int,
+                end as int,
+                colon as int,
+                (end - start) as nat + 1,
+            ),
+            expected == cst_block_value_allows_collection_from_spec(
+                token_views,
+                syntax as int,
+                end as int,
+                colon_line,
+                fuel,
+            ),
         decreases end - syntax,
     {
-        syntax = skip_trivia(tokens, syntax + 1, end);
+        let next_syntax = skip_trivia(tokens, syntax + 1, end);
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, syntax as int);
+            assert(token_views[syntax as int] == tokens@[syntax as int]@);
+            assert(cst_token_is_property_spec(token_views[syntax as int].kind));
+            assert(fuel > 0);
+            reveal(cst_block_value_allows_collection_from_spec);
+            assert(expected == cst_block_value_allows_collection_from_spec(
+                token_views,
+                next_syntax as int,
+                end as int,
+                colon_line,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
+        }
+        syntax = next_syntax;
+        proof {
+            assert(expected == cst_block_value_allows_collection_from_spec(
+                token_views,
+                syntax as int,
+                end as int,
+                colon_line,
+                fuel,
+            ));
+        }
     }
-    syntax < end && tokens[syntax].start_line_number() > tokens[colon].start_line_number()
+    proof {
+        if syntax < end {
+            crate::token::lemma_completed_token_view_at(tokens@, syntax as int);
+            assert(token_views[syntax as int] == tokens@[syntax as int]@);
+            assert(!cst_token_is_property_spec(token_views[syntax as int].kind));
+        }
+        assert(fuel > 0);
+        reveal(cst_block_value_allows_collection_from_spec);
+    }
+    syntax < end && tokens[syntax].start_line_number() > colon_line
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -13,6 +13,76 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_block_property_boundary_and_collection_permission_are_exact() {
+    proof {
+        let line_zero = SourcePositionView { byte_offset: 0, line: 0, column: 2 };
+        let line_one = SourcePositionView { byte_offset: 4, line: 1, column: 2 };
+        let ordinary_atom = LexicalAtomView {
+            kind: crucible_yaml::LexicalAtomKind::Content,
+            code_point: 0x61,
+            span: SourceSpanView { start: line_zero, end: line_zero },
+        };
+        let next_line_atom = LexicalAtomView {
+            span: SourceSpanView { start: line_one, end: line_one },
+            ..ordinary_atom
+        };
+        let colon = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let property = CompletedTokenView {
+            kind: CompletedTokenKind::AnchorProperty,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            ..colon
+        };
+        let line_feed = CompletedTokenView {
+            kind: CompletedTokenKind::LineFeed,
+            start_atom_index: 2,
+            end_atom_index: 3,
+            byte_start: 2,
+            byte_end: 3,
+            ..colon
+        };
+        let next_node = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_line_number: 1,
+            end_line_number: 1,
+            start_atom_index: 3,
+            end_atom_index: 4,
+            byte_start: 4,
+            byte_end: 5,
+            scalar_index: Some(0),
+            ..colon
+        };
+        let atoms = Seq::empty().push(ordinary_atom).push(ordinary_atom).push(ordinary_atom).push(
+            next_line_atom,
+        );
+        let tokens = Seq::empty().push(colon).push(property).push(line_feed).push(next_node);
+        reveal(crucible_yaml::cst::cst_block_property_only_end_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_block_property_only_end_from_spec, 5);
+        reveal(crucible_yaml::cst::cst_block_value_allows_collection_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_block_value_allows_collection_from_spec, 5);
+        reveal_with_fuel(crucible_yaml::cst::cst_skip_trivia_spec, 5);
+        reveal(crucible_yaml::cst::cst_token_column_spec);
+        assert(crucible_yaml::cst::cst_block_property_only_end_spec(atoms, tokens, 1, 4, 2, 4)
+            == Some(2));
+        assert(crucible_yaml::cst::cst_block_value_allows_collection_spec(tokens, 1, 4, 0, 4));
+    }
+}
+
+#[test]
 fn pure_explicit_mapping_lookahead_uses_exact_cross_line_indentation() {
     proof {
         let first_position = SourcePositionView { byte_offset: 0, line: 0, column: 2 };
