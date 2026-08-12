@@ -201,6 +201,16 @@ impl DeepView for QuotedScalar {
 }
 
 impl QuotedScalar {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.style == other.style && self.start_line_number == other.start_line_number
+            && self.end_line_number == other.end_line_number && self.start_atom_index
+            == other.start_atom_index && self.end_atom_index == other.end_atom_index
+            && self.byte_start == other.byte_start && self.byte_end == other.byte_end
+    }
+
     pub fn style(&self) -> (style: QuotedScalarStyle)
         ensures
             style == self@.style,
@@ -432,6 +442,57 @@ impl View for QuotedScalarSource {
 }
 
 impl QuotedScalarSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.layout_transformation_version
+            != other.layout_transformation_version || self.structural_transformation_version
+            != other.structural_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes || self.input_atom_count != other.input_atom_count
+            || self.input_line_count != other.input_line_count || self.input_structural_lexeme_count
+            != other.input_structural_lexeme_count {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.scalars.len() != other.scalars.len() {
+            proof {
+                reveal(quoted_scalar_views_spec);
+                assert(self@.scalars.len() != other@.scalars.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index: usize = 0;
+        while index < self.scalars.len()
+            invariant
+                self.scalars.len() == other.scalars.len(),
+                index <= self.scalars.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.scalars[prior]@ == other.scalars[prior]@,
+            decreases self.scalars.len() - index,
+        {
+            if !self.scalars[index].same_as(&other.scalars[index]) {
+                proof {
+                    reveal(quoted_scalar_views_spec);
+                    assert(self.scalars[index as int]@ != other.scalars[index as int]@);
+                    assert(self@.scalars[index as int] != other@.scalars[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(quoted_scalar_views_spec);
+            assert(self@.scalars =~= other@.scalars);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,
@@ -2048,6 +2109,21 @@ pub open spec fn canonical_quote_structural_limits_spec() -> crate::structural::
     crate::structural::canonical_structural_scan_limits_spec()
 }
 
+pub open spec fn canonical_quoted_scalar_limits_spec() -> QuotedScalarScanLimitsView {
+    QuotedScalarScanLimitsView {
+        max_scalars: MAX_PROFILE1_QUOTED_SCALARS,
+        max_scalar_atoms: MAX_PROFILE1_QUOTED_SCALAR_ATOMS,
+    }
+}
+
+/// Returns the absolute quoted-scalar limits used to authenticate downstream input.
+pub fn canonical_quoted_scalar_limits() -> (limits: QuotedScalarScanLimits)
+    ensures
+        limits@ == canonical_quoted_scalar_limits_spec(),
+{
+    QuotedScalarScanLimits::new(MAX_PROFILE1_QUOTED_SCALARS, MAX_PROFILE1_QUOTED_SCALAR_ATOMS)
+}
+
 pub closed spec fn scan_profile1_quoted_scalars_spec(
     atomized: AtomizedSourceView,
     layout: LayoutSourceView,
@@ -2212,6 +2288,31 @@ pub proof fn lemma_empty_input_fits_quoted_scalar_scan_limits(
     reveal(scan_profile1_quoted_scalars_spec);
     reveal(quoted_scalar_scan_tail_spec);
     assert(scan_profile1_quoted_scalars_spec(atomized, layout, structural, limits) == Ok(source));
+}
+
+/// Canonical success on an empty structural stream contains no quoted scalar ranges.
+pub proof fn lemma_empty_quoted_scan_has_no_scalars(
+    atomized: AtomizedSourceView,
+    layout: LayoutSourceView,
+    structural: StructuralLexemeSourceView,
+    limits: QuotedScalarScanLimitsView,
+    quoted: QuotedScalarSourceView,
+)
+    requires
+        crate::layout::analyze_profile1_layout_spec(atomized, canonical_quote_layout_limits_spec())
+            == Ok(layout),
+        crate::structural::scan_profile1_structural_lexemes_spec(
+            atomized,
+            layout,
+            canonical_quote_structural_limits_spec(),
+        ) == Ok(structural),
+        structural.lexemes.len() == 0,
+        scan_profile1_quoted_scalars_spec(atomized, layout, structural, limits) == Ok(quoted),
+    ensures
+        quoted.scalars.len() == 0,
+{
+    reveal(scan_profile1_quoted_scalars_spec);
+    reveal(quoted_scalar_scan_tail_spec);
 }
 
 fn quote_style_for_candidate(candidate: &StructuralLexeme) -> (style: Option<QuotedScalarStyle>)

@@ -38,5 +38,15 @@ begin.
   lossless atom/byte coverage, directives and document markers, separation/comment/flow candidates,
   caller-lowered all-or-error bounds, typed mismatch and first-excluded diagnostics, iterative
   progress, a total pure model, and exact executable correspondence for success and failure.
+- Verified profile-1 context-sensitive single- and double-quoted scalar boundaries with canonical
+  upstream authentication, provisional plain/block-region tracking, complete YAML 1.2 escape
+  validation, exact source ranges, caller-lowered all-or-error caps, public semantic/range proofs,
+  and total executable correspondence for success and every typed failure.
+- Verified profile-1 context-sensitive plain-scalar boundaries with retained multiline presentation,
+  flow-sensitive indicator and mapping-colon handling, node-property and block-region exclusion,
+  contextual leading-tab diagnostics, exact source ranges, caller-lowered all-or-error caps, public
+  semantic/range proofs, and total executable correspondence. Adversarial fixtures cover verbatim
+  tag punctuation, coalesced flow colons, tab-only prefixes, block-header comments, and malformed
+  `?`, `:`, and `-` scalar starts.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

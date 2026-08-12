@@ -1438,9 +1438,62 @@ semantic validity predicate retains the authenticated atom, layout, and structur
 forged upstream ghost views cannot be laundered. Its public range predicate and theorem expose, for
 every semantically valid result, nonempty bounded atom ranges, exact source byte and line endpoints,
 opening and closing delimiters matching the recorded style, and ordered pairwise atom/byte
-non-overlap. This completed slice does not replace or defer the committed completed plain-scalar,
+non-overlap. This completed slice does not replace or defer the committed plain-scalar,
 block-scalar, comment, directive, flow-balance, contextual-tab, final token, parser, resolution,
 lowering, validation, canonical-serialization, or self-fuzzing work.
+
+Profile 1's plain-scalar boundary transformation is version 1 and is the second completed slice of
+the same verified context-sensitive scanner. It authenticates the canonical atom, layout,
+structural-candidate, and quoted-scalar results before classifying any unquoted content. Its
+accepted first and continuation characters implement YAML 1.2.2 productions 126 through 135: a
+plain scalar is nonempty, has no leading or trailing white space, admits `?`, `:` or `-` initially
+only when followed by a context-safe nonspace character, never contains a colon-space or space-hash
+delimiter, and treats `[`, `]`, `{`, `}`, and `,` as terminating syntax only inside flow
+collections. A `:` followed by a context-safe character and a `#` immediately preceded by nonspace
+content remain scalar content, including URL and `foo#bar` spellings. Quotes and otherwise
+structural-looking indicators encountered after a plain scalar begins remain plain content when
+the YAML productions admit them.
+
+Plain scalar ranges retain every internal presentation atom used for line folding, including line
+feeds, required indentation spaces, and safe tabs, but exclude leading separation and trailing
+white space. Block-context continuation requires indentation beyond the parent indentation; flow
+context continuation remains governed by flow-line-prefix rules. Empty folded lines may be crossed
+only when a later nonempty continuation remains in the same scalar. The range's ending line and
+byte offset therefore belong to its final nonspace content atom, not to discarded presentation
+white space.
+
+Node-property exclusion retains distinct anchor, alias, shorthand-tag, and verbatim-tag substates.
+In particular, the comma and square brackets admitted by `ns-uri-char` inside a `!<...>` verbatim
+tag remain property spelling until the closing `>` and are never exposed as plain-scalar content.
+Flow-adjacent mapping colons are excluded even when the structural-candidate stage has coalesced a
+colon and neighboring content into one provisional range.
+
+Tab legality is decided from this scanner context rather than from a global character ban. A tab
+before required structural indentation is a typed indentation error. A tab after the required
+space indentation in plain, quoted, or block-scalar presentation is separation or scalar content
+as required by the applicable YAML production. Literal and folded block scalar header/body regions
+are tracked while finding plain boundaries so their punctuation, quotes, comments, and tabs cannot
+be relabeled as plain scalars; completed block-scalar token formation and chomping/folding remain a
+separate mandatory output of the same lexer.
+
+The absolute plain-scalar count and per-scalar presentation-atom caps are each 1,048,576. Callers
+MAY lower either cap but cannot raise it. Scalar-count exhaustion identifies the first content atom
+of the first excluded scalar. Atom exhaustion identifies the first atom excluded from the final
+accepted half-open range and is checked only when later nonspace content makes intervening
+presentation white space part of that range. Raw characters outside YAML's printable set are
+rejected at their original byte offset. A reserved `@` or grave-accent indicator in node-start
+position is rejected with its own typed diagnostic. A `?`, `:`, or `-` without the context-safe
+lookahead required by production 126 reports `InvalidPlainStart` at that indicator. For a given
+candidate, syntax and character validity are checked before caller scalar-count and per-scalar atom
+caps, so that malformed start cannot be hidden by a zero cap. Earlier stream failures retain their
+normal source-order precedence. Every failure exposes no partial public result.
+
+The executable outer and scalar-body scans are iterative; their pure Verus models are total under
+explicit candidate fuel, prove strict progress, and fix the complete success or error result. The
+public semantic and range contracts bind every scalar to exact opening/final-content atom, byte,
+and line endpoints and prove ordered pairwise atom/byte non-overlap. This slice does not relax the
+remaining block-scalar, completed-token, parser, resolution, lowering, schema, canonicalization, or
+self-fuzzing requirements.
 
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions

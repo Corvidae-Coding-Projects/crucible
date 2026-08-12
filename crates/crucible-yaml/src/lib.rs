@@ -3,6 +3,7 @@
 
 pub mod atom;
 pub mod layout;
+pub mod plain;
 pub mod quoted;
 pub mod structural;
 pub mod utf8;
@@ -20,9 +21,16 @@ pub use layout::{
 };
 
 pub use quoted::{
-    scan_profile1_quoted_scalars, QuotedScalar, QuotedScalarError, QuotedScalarErrorKind,
-    QuotedScalarScanLimits, QuotedScalarSource, QuotedScalarStyle, MAX_PROFILE1_QUOTED_SCALARS,
-    MAX_PROFILE1_QUOTED_SCALAR_ATOMS, QUOTED_SCALAR_TRANSFORMATION_VERSION,
+    canonical_quoted_scalar_limits, scan_profile1_quoted_scalars, QuotedScalar, QuotedScalarError,
+    QuotedScalarErrorKind, QuotedScalarScanLimits, QuotedScalarSource, QuotedScalarStyle,
+    MAX_PROFILE1_QUOTED_SCALARS, MAX_PROFILE1_QUOTED_SCALAR_ATOMS,
+    QUOTED_SCALAR_TRANSFORMATION_VERSION,
+};
+
+pub use plain::{
+    scan_profile1_plain_scalars, PlainScalar, PlainScalarError, PlainScalarErrorKind,
+    PlainScalarScanLimits, PlainScalarSource, PlainScalarSourceView, MAX_PROFILE1_PLAIN_SCALARS,
+    MAX_PROFILE1_PLAIN_SCALAR_ATOMS, PLAIN_SCALAR_TRANSFORMATION_VERSION,
 };
 
 pub use structural::{

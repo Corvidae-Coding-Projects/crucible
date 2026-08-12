@@ -35,8 +35,12 @@ Current work establishes and extends:
 - verified context-sensitive single- and double-quoted scalar boundaries with canonical upstream
   authentication, provisional plain/block-region tracking, YAML-printable-character admission,
   complete YAML 1.2 escape-spelling validation, publicly proved exact and non-overlapping raw
-  ranges, bounded all-or-error output, and total executable-to-pure correspondence; completed
-  plain/block scalar and final token interpretation continue in the same mandatory lexer work;
+  ranges, bounded all-or-error output, and total executable-to-pure correspondence;
+- verified context-sensitive plain-scalar boundaries with authenticated quoted-scalar exclusion,
+  exact retained presentation ranges, node-property and block-region exclusion, flow-sensitive
+  indicators and mapping colons, contextual leading-tab diagnostics, caller-lowered absolute caps,
+  public semantic/range proofs, and total executable-to-pure correspondence; completed block-scalar
+  and final-token interpretation continue in the same mandatory lexer work;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
