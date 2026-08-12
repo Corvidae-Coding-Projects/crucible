@@ -4020,6 +4020,42 @@ pub open spec fn cst_token_is_trivia_spec(kind: CompletedTokenKind) -> bool {
         == CompletedTokenKind::DocumentByteOrderMark
 }
 
+pub open spec fn cst_skip_trivia_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    index: int,
+    end: int,
+    fuel: nat,
+) -> int
+    decreases fuel,
+{
+    if index < 0 || end < index || end > tokens.len() || fuel == 0 || index >= end
+        || !cst_token_is_trivia_spec(tokens[index].kind) {
+        index
+    } else {
+        cst_skip_trivia_spec(tokens, index + 1, end, (fuel - 1) as nat)
+    }
+}
+
+pub open spec fn cst_token_is_scalar_spec(kind: CompletedTokenKind) -> bool {
+    kind == CompletedTokenKind::PlainScalar || kind == CompletedTokenKind::SingleQuotedScalar
+        || kind == CompletedTokenKind::DoubleQuotedScalar || kind
+        == CompletedTokenKind::LiteralBlockScalar || kind == CompletedTokenKind::FoldedBlockScalar
+}
+
+pub open spec fn cst_scalar_style_spec(kind: CompletedTokenKind) -> CstNodeStyle {
+    if kind == CompletedTokenKind::PlainScalar {
+        CstNodeStyle::Plain
+    } else if kind == CompletedTokenKind::SingleQuotedScalar {
+        CstNodeStyle::SingleQuoted
+    } else if kind == CompletedTokenKind::DoubleQuotedScalar {
+        CstNodeStyle::DoubleQuoted
+    } else if kind == CompletedTokenKind::LiteralBlockScalar {
+        CstNodeStyle::Literal
+    } else {
+        CstNodeStyle::Folded
+    }
+}
+
 fn is_trivia(kind: CompletedTokenKind) -> (result: bool)
     ensures
         result == cst_token_is_trivia_spec(kind),
@@ -4034,16 +4070,61 @@ fn skip_trivia(tokens: &[CompletedToken], index: usize, end: usize) -> (result: 
         index <= end <= tokens.len(),
     ensures
         index <= result <= end,
+        result as int == cst_skip_trivia_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            index as int,
+            end as int,
+            (end - index) as nat + 1,
+        ),
 {
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+    }
+    let ghost expected = cst_skip_trivia_spec(
+        token_views,
+        index as int,
+        end as int,
+        (end - index) as nat + 1,
+    );
     let mut cursor = index;
+    let ghost mut fuel: nat = (end - index) as nat + 1;
     while cursor < end && is_trivia(tokens[cursor].kind())
         invariant
             index <= cursor,
             cursor <= end,
             end <= tokens.len(),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            fuel >= end - cursor + 1,
+            expected == cst_skip_trivia_spec(token_views, cursor as int, end as int, fuel),
         decreases end - cursor,
     {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, cursor as int);
+            assert(token_views[cursor as int] == tokens@[cursor as int]@);
+            assert(cst_token_is_trivia_spec(tokens@[cursor as int]@.kind));
+            assert(cst_token_is_trivia_spec(token_views[cursor as int].kind));
+            assert(fuel > 0);
+            reveal(cst_skip_trivia_spec);
+            assert(expected == cst_skip_trivia_spec(
+                token_views,
+                cursor as int + 1,
+                end as int,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
+        }
         cursor += 1;
+        proof {
+            assert(expected == cst_skip_trivia_spec(token_views, cursor as int, end as int, fuel));
+        }
+    }
+    proof {
+        if cursor < end {
+            crate::token::lemma_completed_token_view_at(tokens@, cursor as int);
+        }
+        reveal(cst_skip_trivia_spec);
     }
     cursor
 }
@@ -4069,13 +4150,19 @@ fn same_line(left: &CompletedToken, right: &CompletedToken) -> bool {
     left.start_line_number() == right.start_line_number()
 }
 
-fn token_is_scalar(kind: CompletedTokenKind) -> bool {
+fn token_is_scalar(kind: CompletedTokenKind) -> (result: bool)
+    ensures
+        result == cst_token_is_scalar_spec(kind),
+{
     kind == CompletedTokenKind::PlainScalar || kind == CompletedTokenKind::SingleQuotedScalar
         || kind == CompletedTokenKind::DoubleQuotedScalar || kind
         == CompletedTokenKind::LiteralBlockScalar || kind == CompletedTokenKind::FoldedBlockScalar
 }
 
-fn scalar_style(kind: CompletedTokenKind) -> CstNodeStyle {
+fn scalar_style(kind: CompletedTokenKind) -> (result: CstNodeStyle)
+    ensures
+        result == cst_scalar_style_spec(kind),
+{
     if kind == CompletedTokenKind::PlainScalar {
         CstNodeStyle::Plain
     } else if kind == CompletedTokenKind::SingleQuotedScalar {

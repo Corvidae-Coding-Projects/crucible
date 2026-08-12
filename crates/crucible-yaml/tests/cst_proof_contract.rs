@@ -11,6 +11,42 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_parser_helpers_fix_scalar_classification_and_trivia_progress() {
+    proof {
+        let trivia = CompletedTokenView {
+            kind: CompletedTokenKind::Separation,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let scalar = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            scalar_index: Some(0),
+            ..trivia
+        };
+        let tokens = Seq::empty().push(trivia).push(scalar);
+        reveal_with_fuel(crucible_yaml::cst::cst_skip_trivia_spec, 4);
+        assert(crucible_yaml::cst::cst_skip_trivia_spec(tokens, 0, 2, 3) == 1);
+        reveal(crucible_yaml::cst::cst_token_is_scalar_spec);
+        reveal(crucible_yaml::cst::cst_scalar_style_spec);
+        assert(crucible_yaml::cst::cst_token_is_scalar_spec(CompletedTokenKind::PlainScalar));
+        assert(crucible_yaml::cst::cst_scalar_style_spec(CompletedTokenKind::PlainScalar)
+            == CstNodeStyle::Plain);
+    }
+}
+
+#[test]
 fn a_collection_cannot_launder_a_self_or_forward_child_reference() {
     proof {
         let collection = CstNodeView {
