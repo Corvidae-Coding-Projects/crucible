@@ -13,6 +13,55 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_mapping_value_lookahead_skips_nested_flow_indicators() {
+    proof {
+        let base = CompletedTokenView {
+            kind: CompletedTokenKind::FlowMappingStart,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let nested_colon = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            ..base
+        };
+        let flow_end = CompletedTokenView {
+            kind: CompletedTokenKind::FlowMappingEnd,
+            start_atom_index: 2,
+            end_atom_index: 3,
+            byte_start: 2,
+            byte_end: 3,
+            ..base
+        };
+        let top_level_colon = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_atom_index: 3,
+            end_atom_index: 4,
+            byte_start: 3,
+            byte_end: 4,
+            ..base
+        };
+        let tokens = Seq::empty().push(base).push(nested_colon).push(flow_end).push(
+            top_level_colon,
+        );
+        reveal(crucible_yaml::cst::cst_find_mapping_value_on_line_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_find_mapping_value_on_line_from_spec, 6);
+        assert(crucible_yaml::cst::cst_find_mapping_value_on_line_spec(tokens, 0, 4, 5) == Some(3));
+    }
+}
+
+#[test]
 fn pure_position_helpers_fix_exact_byte_line_and_column_results() {
     proof {
         let position = SourcePositionView { byte_offset: 4, line: 2, column: 3 };
