@@ -52,8 +52,15 @@ Current work establishes and extends:
   directive/property/alias payload ranges; scalar shielding; context-sensitive document and
   collection indicators; bounded typed flow-stack validation; a complete lossless atom/byte
   partition; distinct exact-offset diagnostics; and total executable-to-pure result correspondence
-  with public semantic, partition, and flow-balance proofs; parser/CST formation is the next YAML
-  slice;
+  with public semantic, partition, and flow-balance proofs;
+- verified nonrecursive YAML concrete-syntax-tree formation over the authenticated completed-token
+  stream, covering multidocument bare/explicit/directive forms, block and flow collections,
+  compact mappings, arbitrary and empty keys/values, aliases, both property orders, and every
+  scalar style; exact prefix/directive/start/root/end/suffix document regions; lossless trivia;
+  child-before-parent table ordering; exact syntax-token ownership; caller-lowered document, node,
+  entry, directive, warning, and depth caps; typed first-impossible diagnostics; a total fueled pure
+  parser; strict machine progress; deterministic results; and exact executable-to-pure
+  correspondence with adversarial forgery proof fixtures;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
