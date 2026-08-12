@@ -290,6 +290,25 @@ fn candidate_roles_retain_every_quoted_and_block_scalar_byte_for_contextual_scan
 }
 
 #[test]
+fn every_quote_remains_an_explicit_candidate_even_without_separation() {
+    let bytes = br#"{"a":"b"}"#;
+    let (_, _, scanned) = scan(bytes);
+    let quote_candidates = scanned
+        .lexemes()
+        .iter()
+        .filter(|lexeme| {
+            matches!(
+                lexeme.candidate_role(),
+                StructuralLexemeKind::Indicator(YamlIndicator::SingleQuotedScalar)
+                    | StructuralLexemeKind::Indicator(YamlIndicator::DoubleQuotedScalar)
+            )
+        })
+        .map(|lexeme| lexeme.byte_start())
+        .collect::<Vec<_>>();
+    assert_eq!(quote_candidates, vec![1, 3, 5, 7]);
+}
+
+#[test]
 fn a_layout_from_a_different_atom_stream_is_rejected_before_scanning() {
     let atoms = atomize(b"x\n");
     let other_atoms = atomize(b" y\n");

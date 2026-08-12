@@ -1399,6 +1399,49 @@ input atom count, and exact correspondence covers success, layout mismatch, and 
 semantic validity predicate retains both intrinsic atom validity and the authenticated layout
 witness, so forged ghost views cannot be laundered into a valid structural source.
 
+Profile 1's quoted-scalar boundary transformation is version 1 and is the first completed slice of
+the verified context-sensitive token scanner. It authenticates both the canonical line layout and
+canonical structural-candidate partition before interpreting any candidate. The structural stage
+therefore retains every single- and double-quote atom as an explicit provisional candidate,
+including quotes adjacent to JSON-style flow punctuation; this stage alone decides whether a quote
+can begin a scalar. Its verified state tracks provisional plain-scalar continuation and block-scalar
+header/body regions before updating flow depth, so quotes and provisional punctuation inside those
+regions remain raw content. Quotes may begin at the stream or after separation, a line break, a flow
+collection opener, a flow entry, or a mapping-value indicator inside a flow collection. This start
+decision is provisional token context, not a waiver of the parser's separation and
+collection-grammar obligations.
+
+Each accepted quoted scalar includes both delimiters and records its style, starting and ending
+line, half-open atom range, and exact half-open original-byte range. Single-quoted content escapes a
+single quote only by doubling it. Double-quoted content recognizes YAML 1.2's complete simple escape
+set, an escaped line break, and `x`, `u`, and `U` escapes with exactly two, four, and eight hexadecimal
+digits respectively. Escaped values above `U+10FFFF` and surrogate code points are rejected rather
+than converted. Unescaped content admits exactly YAML's printable character set: tab, line feed,
+ASCII `0x20` through `0x7E`, `U+0085`, `U+00A0` through `U+D7FF`, `U+E000` through `U+FFFD`, and
+`U+10000` through `U+10FFFF`. This transformation validates boundaries and escape spelling without
+prematurely discarding raw presentation bytes; semantic decoding and flow-line folding remain
+mandatory parts of scalar resolution.
+
+The absolute quoted-scalar count and per-scalar atom caps are each 1,048,576. Callers MAY lower
+either cap but cannot raise it. Scalar-count exhaustion reports the opening quote of the first
+excluded scalar. Per-scalar exhaustion reports the first atom excluded from that scalar, counting
+both delimiters. Invalid escape characters and hexadecimal digits report the offending atom;
+invalid escaped code points report the initiating backslash; an unfinished escape or hexadecimal
+sequence reports end of input; an unescaped forbidden character reports that character's original
+byte offset; and an otherwise unterminated quote also reports end of input. All failures expose no
+partial public result.
+
+The executable quote scan and scalar-body machines are iterative. Their pure Verus models are total
+under explicit structural-candidate and atom fuel, and exact correspondence covers success, input
+authentication failure, both resource caps, all escape failures, and unterminated scalars. The
+semantic validity predicate retains the authenticated atom, layout, and structural witnesses so
+forged upstream ghost views cannot be laundered. Its public range predicate and theorem expose, for
+every semantically valid result, nonempty bounded atom ranges, exact source byte and line endpoints,
+opening and closing delimiters matching the recorded style, and ordered pairwise atom/byte
+non-overlap. This completed slice does not replace or defer the committed completed plain-scalar,
+block-scalar, comment, directive, flow-balance, contextual-tab, final token, parser, resolution,
+lowering, validation, canonical-serialization, or self-fuzzing work.
+
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
 without a language-profile change. Parse rejection is a typed configuration result, not a

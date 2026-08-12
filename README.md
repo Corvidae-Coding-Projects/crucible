@@ -67,7 +67,7 @@ explicit Verus verification targets rather than delegated to an external YAML pa
 | Content-addressed artifact identity | Verified SHA-256, complete canonical codec, typed algorithm dispatch, checksum-pinned NIST vectors, and integrity checks; object store pending |
 | Evidence and provenance graph | Verified structural admission, append-only/idempotent transitions, borrowed retries, normative edge direction, and atomic multi-input derivations; persistence pending |
 | Trusted-boundary enforcement | Verified scanner/reconciliation, approved baseline, and CI known-defect fixture |
-| Crucible YAML implementation | Verified profile-1 UTF-8/BOM decoder, bounded lexical atoms, exact line/indentation layout, and a lossless structural-candidate partition with canonical-layout authentication and exact spans; context-sensitive scalar tokenization remains pending, followed by parser, resolution, lowering, schema validation, canonical serialization, and self-fuzzing |
+| Crucible YAML implementation | Verified profile-1 UTF-8/BOM decoder, bounded lexical atoms, exact line/indentation layout, lossless structural candidates, and the first context-sensitive scanner slice: authenticated single/double-quoted boundaries, provisional plain/block-region tracking, YAML-printable content and complete escape validation, proved exact/non-overlapping ranges, caps, and total error correspondence. Completed plain/block tokens, contextual tabs, parser, resolution, lowering, schema validation, canonical serialization, and self-fuzzing remain committed work |
 | Execution and evidence core | Not yet implemented |
 | Bug-finding engines and target adapters | Planned in staged phases |
 

@@ -191,6 +191,15 @@ impl DeepView for StructuralLexeme {
 }
 
 impl StructuralLexeme {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.kind == other.kind && self.line_number == other.line_number && self.start_atom_index
+            == other.start_atom_index && self.end_atom_index == other.end_atom_index
+            && self.byte_start == other.byte_start && self.byte_end == other.byte_end
+    }
+
     pub fn candidate_role(&self) -> (role: StructuralCandidateRole)
         ensures
             role == self@.kind,
@@ -285,6 +294,55 @@ impl View for StructuralLexemeSource {
 }
 
 impl StructuralLexemeSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.layout_transformation_version
+            != other.layout_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes || self.input_atom_count != other.input_atom_count
+            || self.input_line_count != other.input_line_count {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.lexemes.len() != other.lexemes.len() {
+            proof {
+                reveal(structural_lexeme_views_spec);
+                assert(self@.lexemes.len() != other@.lexemes.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index: usize = 0;
+        while index < self.lexemes.len()
+            invariant
+                self.lexemes.len() == other.lexemes.len(),
+                index <= self.lexemes.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.lexemes[prior]@ == other.lexemes[prior]@,
+            decreases self.lexemes.len() - index,
+        {
+            if !self.lexemes[index].same_as(&other.lexemes[index]) {
+                proof {
+                    reveal(structural_lexeme_views_spec);
+                    assert(self.lexemes[index as int]@ != other.lexemes[index as int]@);
+                    assert(self@.lexemes[index as int] != other@.lexemes[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(structural_lexeme_views_spec);
+            assert(self@.lexemes =~= other@.lexemes);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,
@@ -444,6 +502,18 @@ pub fn canonical_structural_layout_limits() -> (limits: LayoutLimits)
     limits
 }
 
+pub open spec fn canonical_structural_scan_limits_spec() -> StructuralScanLimitsView {
+    StructuralScanLimitsView { max_lexemes: MAX_PROFILE1_STRUCTURAL_LEXEMES }
+}
+
+/// Returns the absolute structural-candidate limits used to authenticate downstream input.
+pub fn canonical_structural_scan_limits() -> (limits: StructuralScanLimits)
+    ensures
+        limits@ == canonical_structural_scan_limits_spec(),
+{
+    StructuralScanLimits::new(MAX_PROFILE1_STRUCTURAL_LEXEMES)
+}
+
 pub open spec fn atom_is_indicator_spec(atom: LexicalAtomView, indicator: YamlIndicator) -> bool {
     atom.kind == LexicalAtomKind::Indicator(indicator)
 }
@@ -516,18 +586,20 @@ pub open spec fn single_structural_kind_spec(
                 Some(StructuralLexemeKind::FlowEntry)
             },
             LexicalAtomKind::Indicator(indicator) => {
-                let rejected_by_context = indicator == YamlIndicator::Comment || ((indicator
-                    == YamlIndicator::BlockSequenceEntry || indicator
+                let quote_candidate = indicator == YamlIndicator::SingleQuotedScalar || indicator
+                    == YamlIndicator::DoubleQuotedScalar;
+                let rejected_by_context = !quote_candidate && (indicator == YamlIndicator::Comment
+                    || ((indicator == YamlIndicator::BlockSequenceEntry || indicator
                     == YamlIndicator::ExplicitMappingKey) && (!(cursor.at_content_start
                     || cursor.previous_separation) || !followed_by_white_break_or_end_spec(
                     atoms,
                     cursor.atom_index,
                 ))) || (indicator == YamlIndicator::MappingValue
-                    && !followed_by_white_break_or_end_spec(atoms, cursor.atom_index));
+                    && !followed_by_white_break_or_end_spec(atoms, cursor.atom_index)));
                 if rejected_by_context {
                     None
-                } else if indicator == YamlIndicator::MappingValue || cursor.at_content_start
-                    || cursor.previous_separation {
+                } else if quote_candidate || indicator == YamlIndicator::MappingValue
+                    || cursor.at_content_start || cursor.previous_separation {
                     Some(StructuralLexemeKind::Indicator(indicator))
                 } else {
                     None
@@ -1200,8 +1272,10 @@ fn single_structural_kind(atoms: &[LexicalAtom], cursor: StructuralCursor) -> (k
                 Some(StructuralLexemeKind::FlowEntry)
             },
             LexicalAtomKind::Indicator(indicator) => {
-                let rejected_by_context = indicator == YamlIndicator::Comment || ((indicator
-                    == YamlIndicator::BlockSequenceEntry || indicator
+                let quote_candidate = indicator == YamlIndicator::SingleQuotedScalar || indicator
+                    == YamlIndicator::DoubleQuotedScalar;
+                let rejected_by_context = !quote_candidate && (indicator == YamlIndicator::Comment
+                    || ((indicator == YamlIndicator::BlockSequenceEntry || indicator
                     == YamlIndicator::ExplicitMappingKey) && (!(cursor.at_content_start
                     || cursor.previous_separation) || !followed_by_white_break_or_end(
                     atoms,
@@ -1209,11 +1283,11 @@ fn single_structural_kind(atoms: &[LexicalAtom], cursor: StructuralCursor) -> (k
                 ))) || (indicator == YamlIndicator::MappingValue && !followed_by_white_break_or_end(
                     atoms,
                     index,
-                ));
+                )));
                 if rejected_by_context {
                     None
-                } else if indicator == YamlIndicator::MappingValue || cursor.at_content_start
-                    || cursor.previous_separation {
+                } else if quote_candidate || indicator == YamlIndicator::MappingValue
+                    || cursor.at_content_start || cursor.previous_separation {
                     Some(StructuralLexemeKind::Indicator(indicator))
                 } else {
                     None

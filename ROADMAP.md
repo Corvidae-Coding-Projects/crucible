@@ -32,6 +32,11 @@ Current work establishes and extends:
 - verified lossless structural-candidate partitioning with canonical-layout authentication, exact
   atom/byte spans, bounded all-or-error output, and candidate roles retained for final
   context-sensitive scalar and flow interpretation;
+- verified context-sensitive single- and double-quoted scalar boundaries with canonical upstream
+  authentication, provisional plain/block-region tracking, YAML-printable-character admission,
+  complete YAML 1.2 escape-spelling validation, publicly proved exact and non-overlapping raw
+  ranges, bounded all-or-error output, and total executable-to-pure correspondence; completed
+  plain/block scalar and final token interpretation continue in the same mandatory lexer work;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
