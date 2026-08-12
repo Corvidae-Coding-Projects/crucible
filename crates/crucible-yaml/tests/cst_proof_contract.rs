@@ -1,7 +1,9 @@
 #![allow(unused_imports)]
 
-use crucible_yaml::atom::LexicalAtomView;
-use crucible_yaml::token::{CompletedTokenSourceView, CompletedTokenView};
+use crucible_yaml::atom::{LexicalAtomKind, LexicalAtomView};
+use crucible_yaml::token::{
+    CompletedTokenPartKind, CompletedTokenPartView, CompletedTokenSourceView, CompletedTokenView,
+};
 use crucible_yaml::utf8::{SourcePositionView, SourceSpanView};
 use crucible_yaml::{
     CompletedTokenKind, CstDocumentView, CstMappingEntryView, CstNodeKind, CstNodeStyle,
@@ -11,6 +13,86 @@ use crucible_yaml::{
 use vstd::prelude::*;
 
 verus! {
+
+#[test]
+fn pure_directive_and_tag_handle_helpers_are_exact() {
+    proof {
+        let position = SourcePositionView { byte_offset: 0, line: 0, column: 0 };
+        let span = SourceSpanView { start: position, end: position };
+        let bang = LexicalAtomView {
+            kind: LexicalAtomKind::Indicator(crucible_yaml::atom::YamlIndicator::Tag),
+            code_point: 0x21,
+            span,
+        };
+        let letter = LexicalAtomView { kind: LexicalAtomKind::Content, code_point: 0x65, span };
+        let atoms = Seq::empty().push(bang).push(bang).push(bang).push(letter).push(bang);
+        let parameter = CompletedTokenPartView {
+            kind: CompletedTokenPartKind::DirectiveParameter,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+        };
+        let named = CompletedTokenPartView {
+            kind: CompletedTokenPartKind::TagHandle,
+            start_atom_index: 2,
+            end_atom_index: 5,
+            byte_start: 2,
+            byte_end: 5,
+        };
+        let token = CompletedTokenView {
+            kind: CompletedTokenKind::TagProperty,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 2,
+            end_atom_index: 5,
+            byte_start: 2,
+            byte_end: 5,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty().push(parameter).push(named),
+        };
+        reveal(crucible_yaml::cst::cst_part_of_kind_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_part_of_kind_from_spec, 4);
+        reveal(crucible_yaml::cst::cst_atom_ranges_equal_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_atom_ranges_equal_from_spec, 8);
+        reveal(crucible_yaml::cst::cst_tag_handle_is_default_spec);
+        reveal(crucible_yaml::cst::cst_first_undeclared_tag_handle_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_first_undeclared_tag_handle_from_spec, 3);
+        reveal(crucible_yaml::cst::cst_tag_property_handle_is_undeclared_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_tag_handle_declared_from_spec, 8);
+        assert(crucible_yaml::cst::cst_part_of_kind_spec(token, CompletedTokenPartKind::TagHandle)
+            == Some(named));
+        assert(crucible_yaml::cst::cst_atom_ranges_equal_spec(atoms, 0, 1, 1, 2));
+        let primary = CompletedTokenPartView { start_atom_index: 0, end_atom_index: 1, ..named };
+        let secondary = CompletedTokenPartView { start_atom_index: 0, end_atom_index: 2, ..named };
+        let forged_suffix = CompletedTokenPartView {
+            start_atom_index: 3,
+            end_atom_index: 5,
+            ..named
+        };
+        assert(crucible_yaml::cst::cst_tag_handle_is_default_spec(atoms, primary));
+        assert(crucible_yaml::cst::cst_tag_handle_is_default_spec(atoms, secondary));
+        assert(!crucible_yaml::cst::cst_tag_handle_is_default_spec(atoms, named));
+        assert(!crucible_yaml::cst::cst_tag_handle_is_default_spec(atoms, forged_suffix));
+        let tokens = Seq::empty().push(token);
+        assert(crucible_yaml::cst::cst_first_undeclared_tag_handle_spec(
+            atoms,
+            tokens,
+            0,
+            1,
+            Seq::empty(),
+        ) == Some(0));
+        assert(crucible_yaml::cst::cst_first_undeclared_tag_handle_spec(
+            atoms,
+            tokens,
+            0,
+            1,
+            Seq::empty().push((2u64, 5u64)),
+        ) == None);
+    }
+}
 
 #[test]
 fn pure_builder_entry_warning_and_document_appends_are_exact() {

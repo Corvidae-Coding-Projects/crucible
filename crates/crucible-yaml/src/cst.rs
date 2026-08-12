@@ -4757,22 +4757,158 @@ fn scalar_style(kind: CompletedTokenKind) -> (result: CstNodeStyle)
     }
 }
 
-fn part_of_kind<'a>(token: &'a CompletedToken, kind: CompletedTokenPartKind) -> Option<
+pub open spec fn cst_part_of_kind_from_spec(
+    parts: Seq<crate::token::CompletedTokenPartView>,
+    index: int,
+    kind: CompletedTokenPartKind,
+    fuel: nat,
+) -> Option<crate::token::CompletedTokenPartView>
+    decreases fuel,
+{
+    if index < 0 || index >= parts.len() || fuel == 0 {
+        None
+    } else if parts[index].kind == kind {
+        Some(parts[index])
+    } else {
+        cst_part_of_kind_from_spec(parts, index + 1, kind, (fuel - 1) as nat)
+    }
+}
+
+pub open spec fn cst_part_of_kind_spec(
+    token: crate::token::CompletedTokenView,
+    kind: CompletedTokenPartKind,
+) -> Option<crate::token::CompletedTokenPartView> {
+    cst_part_of_kind_from_spec(token.parts, 0, kind, token.parts.len() as nat + 1)
+}
+
+fn part_of_kind<'a>(token: &'a CompletedToken, kind: CompletedTokenPartKind) -> (result: Option<
     &'a CompletedTokenPart,
-> {
+>)
+    ensures
+        match result {
+            Some(part) => Some(part@),
+            None => None,
+        } == cst_part_of_kind_from_spec(token@.parts, 0, kind, token@.parts.len() as nat + 1),
+{
     let parts = token.parts();
+    let ghost part_views = token@.parts;
+    let ghost expected = cst_part_of_kind_from_spec(
+        token@.parts,
+        0,
+        kind,
+        token@.parts.len() as nat + 1,
+    );
+    proof {
+        crate::token::lemma_completed_token_part_views_len(parts@);
+    }
     let mut index = 0usize;
+    let ghost mut fuel: nat = parts.len() as nat + 1;
     while index < parts.len()
         invariant
             index <= parts.len(),
+            crate::token::completed_token_part_views_spec(parts@) == part_views,
+            part_views.len() == parts.len(),
+            fuel >= parts.len() - index + 1,
+            expected == cst_part_of_kind_from_spec(
+                token@.parts,
+                0,
+                kind,
+                token@.parts.len() as nat + 1,
+            ),
+            expected == cst_part_of_kind_from_spec(part_views, index as int, kind, fuel),
         decreases parts.len() - index,
     {
+        proof {
+            crate::token::lemma_completed_token_part_view_at(parts@, index as int);
+            assert(part_views[index as int] == parts@[index as int]@);
+        }
         if parts[index].kind() == kind {
-            return Some(&parts[index]);
+            let selected = &parts[index];
+            proof {
+                reveal(cst_part_of_kind_from_spec);
+                assert(expected == Some(part_views[index as int]));
+                assert(part_views[index as int] == parts@[index as int]@);
+                assert(selected@ == parts@[index as int]@);
+                assert(Some(selected@) == expected);
+                assert(expected == cst_part_of_kind_from_spec(
+                    token@.parts,
+                    0,
+                    kind,
+                    token@.parts.len() as nat + 1,
+                ));
+            }
+            return Some(selected);
+        }
+        proof {
+            assert(fuel > 0);
+            reveal(cst_part_of_kind_from_spec);
+            assert(expected == cst_part_of_kind_from_spec(
+                part_views,
+                index as int + 1,
+                kind,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
         }
         index += 1;
     }
+    proof {
+        reveal(cst_part_of_kind_spec);
+        reveal(cst_part_of_kind_from_spec);
+    }
     None
+}
+
+pub open spec fn cst_atom_ranges_equal_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    left_start: u64,
+    left_end: u64,
+    right_start: u64,
+    right_end: u64,
+    offset: u64,
+    fuel: nat,
+) -> bool
+    decreases fuel,
+{
+    if left_end < left_start || right_end < right_start || left_end - left_start != right_end
+        - right_start || left_end > atoms.len() || right_end > atoms.len() || fuel == 0 {
+        false
+    } else if offset >= left_end - left_start {
+        true
+    } else {
+        atoms[(left_start + offset) as int].code_point == atoms[(right_start
+            + offset) as int].code_point && cst_atom_ranges_equal_from_spec(
+            atoms,
+            left_start,
+            left_end,
+            right_start,
+            right_end,
+            (offset + 1) as u64,
+            (fuel - 1) as nat,
+        )
+    }
+}
+
+pub open spec fn cst_atom_ranges_equal_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    left_start: u64,
+    left_end: u64,
+    right_start: u64,
+    right_end: u64,
+) -> bool {
+    cst_atom_ranges_equal_from_spec(
+        atoms,
+        left_start,
+        left_end,
+        right_start,
+        right_end,
+        0,
+        if left_end >= left_start {
+            (left_end - left_start) as nat + 1
+        } else {
+            1
+        },
+    )
 }
 
 fn atom_ranges_equal(
@@ -4781,36 +4917,419 @@ fn atom_ranges_equal(
     left_end: u64,
     right_start: u64,
     right_end: u64,
-) -> bool {
+) -> (result: bool)
+    ensures
+        result == cst_atom_ranges_equal_from_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            left_start,
+            left_end,
+            right_start,
+            right_end,
+            0,
+            if left_end >= left_start {
+                (left_end - left_start) as nat + 1
+            } else {
+                1
+            },
+        ),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost canonical_fuel: nat = if left_end >= left_start {
+        (left_end - left_start) as nat + 1
+    } else {
+        1
+    };
     if left_end < left_start || right_end < right_start || left_end - left_start != right_end
         - right_start || left_end > atoms.len() as u64 || right_end > atoms.len() as u64 {
+        proof {
+            reveal(cst_atom_ranges_equal_spec);
+            reveal(cst_atom_ranges_equal_from_spec);
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
         return false;
     }
     let mut offset = 0u64;
+    let ghost expected = cst_atom_ranges_equal_from_spec(
+        atom_views,
+        left_start,
+        left_end,
+        right_start,
+        right_end,
+        0,
+        canonical_fuel,
+    );
+    let ghost mut fuel = canonical_fuel;
     while offset < left_end - left_start
         invariant
             offset <= left_end - left_start,
             left_end <= atoms.len(),
             right_end <= atoms.len(),
             left_end - left_start == right_end - right_start,
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            atom_views.len() == atoms.len(),
+            canonical_fuel == if left_end >= left_start {
+                (left_end - left_start) as nat + 1
+            } else {
+                1
+            },
+            fuel >= left_end - left_start - offset + 1,
+            expected == cst_atom_ranges_equal_from_spec(
+                atom_views,
+                left_start,
+                left_end,
+                right_start,
+                right_end,
+                0,
+                canonical_fuel,
+            ),
+            expected == cst_atom_ranges_equal_from_spec(
+                atom_views,
+                left_start,
+                left_end,
+                right_start,
+                right_end,
+                offset,
+                fuel,
+            ),
         decreases left_end - left_start - offset,
     {
-        if atoms[(left_start + offset) as usize].code_point() != atoms[(right_start
-            + offset) as usize].code_point() {
+        proof {
+            reveal(crate::atom::lexical_atom_views_spec);
+            assert(atom_views[(left_start + offset) as int] == atoms@[(left_start
+                + offset) as int]@);
+            assert(atom_views[(right_start + offset) as int] == atoms@[(right_start
+                + offset) as int]@);
+        }
+        let left_code_point = atoms[(left_start + offset) as usize].code_point();
+        let right_code_point = atoms[(right_start + offset) as usize].code_point();
+        if left_code_point != right_code_point {
+            proof {
+                assert(left_code_point == atom_views[(left_start + offset) as int].code_point);
+                assert(right_code_point == atom_views[(right_start + offset) as int].code_point);
+                assert(atom_views[(left_start + offset) as int].code_point != atom_views[(
+                right_start + offset) as int].code_point);
+                reveal(cst_atom_ranges_equal_from_spec);
+                assert(!expected);
+                assert(expected == cst_atom_ranges_equal_from_spec(
+                    atom_views,
+                    left_start,
+                    left_end,
+                    right_start,
+                    right_end,
+                    0,
+                    canonical_fuel,
+                ));
+            }
             return false;
         }
+        proof {
+            assert(fuel > 0);
+            reveal(cst_atom_ranges_equal_from_spec);
+            assert(expected == cst_atom_ranges_equal_from_spec(
+                atom_views,
+                left_start,
+                left_end,
+                right_start,
+                right_end,
+                (offset + 1) as u64,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
+        }
         offset += 1;
+    }
+    proof {
+        reveal(cst_atom_ranges_equal_from_spec);
+        assert(expected);
     }
     true
 }
 
-fn tag_handle_is_default(atoms: &[LexicalAtom], part: &CompletedTokenPart) -> bool {
-    let start = part.start_atom_index() as usize;
-    let end = part.end_atom_index() as usize;
-    if start >= end || end > atoms.len() {
+pub open spec fn cst_tag_handle_is_default_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    part: crate::token::CompletedTokenPartView,
+) -> bool {
+    let start = part.start_atom_index;
+    let end = part.end_atom_index;
+    start < end && end <= atoms.len() && atoms[start as int].code_point == 0x21 && (end - start == 1
+        || end - start == 2 && atoms[(start + 1) as int].code_point == 0x21)
+}
+
+fn tag_handle_is_default(atoms: &[LexicalAtom], part: &CompletedTokenPart) -> (result: bool)
+    ensures
+        result == cst_tag_handle_is_default_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            part@,
+        ),
+{
+    let start = part.start_atom_index();
+    let end = part.end_atom_index();
+    if start >= end || end > atoms.len() as u64 {
+        proof {
+            reveal(cst_tag_handle_is_default_spec);
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
         return false;
     }
-    end == start + 1 || end == start + 2 && atoms[start + 1].code_point() == 0x21
+    let distance = end - start;
+    let first = atoms[start as usize].code_point();
+    let result = first == 0x21 && (distance == 1 || distance == 2 && atoms[(start
+        + 1) as usize].code_point() == 0x21);
+    proof {
+        reveal(cst_tag_handle_is_default_spec);
+        reveal(crate::atom::lexical_atom_views_spec);
+    }
+    result
+}
+
+pub open spec fn cst_tag_handle_declared_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    handles: Seq<(u64, u64)>,
+    handle: crate::token::CompletedTokenPartView,
+    index: int,
+    fuel: nat,
+) -> bool
+    decreases fuel,
+{
+    if index < 0 || index >= handles.len() || fuel == 0 {
+        false
+    } else if cst_atom_ranges_equal_from_spec(
+        atoms,
+        handles[index].0,
+        handles[index].1,
+        handle.start_atom_index,
+        handle.end_atom_index,
+        0,
+        if handles[index].1 >= handles[index].0 {
+            (handles[index].1 - handles[index].0) as nat + 1
+        } else {
+            1
+        },
+    ) {
+        true
+    } else {
+        cst_tag_handle_declared_from_spec(atoms, handles, handle, index + 1, (fuel - 1) as nat)
+    }
+}
+
+pub open spec fn cst_tag_handle_declared_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    handles: Seq<(u64, u64)>,
+    handle: crate::token::CompletedTokenPartView,
+) -> bool {
+    cst_tag_handle_declared_from_spec(atoms, handles, handle, 0, handles.len() as nat + 1)
+}
+
+fn tag_handle_is_declared(
+    atoms: &[LexicalAtom],
+    handles: &[(u64, u64)],
+    handle: &CompletedTokenPart,
+) -> (result: bool)
+    ensures
+        result == cst_tag_handle_declared_from_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            handles@,
+            handle@,
+            0,
+            handles@.len() as nat + 1,
+        ),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost expected = cst_tag_handle_declared_from_spec(
+        atom_views,
+        handles@,
+        handle@,
+        0,
+        handles@.len() as nat + 1,
+    );
+    let mut handle_index = 0usize;
+    let ghost mut fuel: nat = handles.len() as nat + 1;
+    while handle_index < handles.len()
+        invariant
+            handle_index <= handles.len(),
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            fuel >= handles.len() - handle_index + 1,
+            expected == cst_tag_handle_declared_from_spec(
+                atom_views,
+                handles@,
+                handle@,
+                0,
+                handles@.len() as nat + 1,
+            ),
+            expected == cst_tag_handle_declared_from_spec(
+                atom_views,
+                handles@,
+                handle@,
+                handle_index as int,
+                fuel,
+            ),
+        decreases handles.len() - handle_index,
+    {
+        let declared_range = handles[handle_index];
+        let equal = atom_ranges_equal(
+            atoms,
+            declared_range.0,
+            declared_range.1,
+            handle.start_atom_index(),
+            handle.end_atom_index(),
+        );
+        proof {
+            assert(handles@[handle_index as int] == declared_range);
+            let ghost range_fuel: nat = if declared_range.1 >= declared_range.0 {
+                (declared_range.1 - declared_range.0) as nat + 1
+            } else {
+                1
+            };
+            assert(equal == cst_atom_ranges_equal_from_spec(
+                atom_views,
+                declared_range.0,
+                declared_range.1,
+                handle@.start_atom_index,
+                handle@.end_atom_index,
+                0,
+                range_fuel,
+            ));
+        }
+        if equal {
+            proof {
+                reveal(cst_tag_handle_declared_from_spec);
+                assert(expected);
+            }
+            return true;
+        }
+        proof {
+            assert(fuel > 0);
+            reveal(cst_tag_handle_declared_from_spec);
+            assert(expected == cst_tag_handle_declared_from_spec(
+                atom_views,
+                handles@,
+                handle@,
+                handle_index as int + 1,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
+        }
+        handle_index += 1;
+    }
+    proof {
+        reveal(cst_tag_handle_declared_spec);
+        reveal(cst_tag_handle_declared_from_spec);
+    }
+    false
+}
+
+pub open spec fn cst_tag_property_handle_is_undeclared_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    token: crate::token::CompletedTokenView,
+    handles: Seq<(u64, u64)>,
+) -> bool {
+    if token.kind != CompletedTokenKind::TagProperty {
+        false
+    } else {
+        match cst_part_of_kind_from_spec(
+            token.parts,
+            0,
+            CompletedTokenPartKind::TagHandle,
+            token.parts.len() as nat + 1,
+        ) {
+            Some(part) => !cst_tag_handle_is_default_spec(atoms, part)
+                && !cst_tag_handle_declared_from_spec(
+                atoms,
+                handles,
+                part,
+                0,
+                handles.len() as nat + 1,
+            ),
+            None => false,
+        }
+    }
+}
+
+fn tag_property_handle_is_undeclared(
+    atoms: &[LexicalAtom],
+    token: &CompletedToken,
+    handles: &[(u64, u64)],
+) -> (result: bool)
+    ensures
+        result == cst_tag_property_handle_is_undeclared_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            token@,
+            handles@,
+        ),
+{
+    if token.kind() != CompletedTokenKind::TagProperty {
+        proof {
+            reveal(cst_tag_property_handle_is_undeclared_spec);
+        }
+        return false;
+    }
+    let handle = match part_of_kind(token, CompletedTokenPartKind::TagHandle) {
+        Some(part) => part,
+        None => {
+            proof {
+                reveal(cst_tag_property_handle_is_undeclared_spec);
+            }
+            return false;
+        },
+    };
+    if tag_handle_is_default(atoms, handle) {
+        proof {
+            reveal(cst_tag_property_handle_is_undeclared_spec);
+        }
+        return false;
+    }
+    let result = !tag_handle_is_declared(atoms, handles, handle);
+    proof {
+        reveal(cst_tag_property_handle_is_undeclared_spec);
+    }
+    result
+}
+
+pub open spec fn cst_first_undeclared_tag_handle_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    index: int,
+    end: int,
+    handles: Seq<(u64, u64)>,
+    fuel: nat,
+) -> Option<int>
+    decreases fuel,
+{
+    if index < 0 || end < index || end > tokens.len() || index >= end || fuel == 0 {
+        None
+    } else if cst_tag_property_handle_is_undeclared_spec(atoms, tokens[index], handles) {
+        Some(index)
+    } else {
+        cst_first_undeclared_tag_handle_from_spec(
+            atoms,
+            tokens,
+            index + 1,
+            end,
+            handles,
+            (fuel - 1) as nat,
+        )
+    }
+}
+
+pub open spec fn cst_first_undeclared_tag_handle_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: int,
+    end: int,
+    handles: Seq<(u64, u64)>,
+) -> Option<int> {
+    cst_first_undeclared_tag_handle_from_spec(
+        atoms,
+        tokens,
+        start,
+        end,
+        handles,
+        if 0 <= start <= end {
+            (end - start) as nat + 1
+        } else {
+            1
+        },
+    )
 }
 
 fn first_undeclared_tag_handle(
@@ -4824,43 +5343,103 @@ fn first_undeclared_tag_handle(
         start <= end <= tokens.len(),
     ensures
         result.is_some() ==> start <= result.unwrap() < end,
+        match result {
+            Some(index) => Some(index as int),
+            None => None,
+        } == cst_first_undeclared_tag_handle_from_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            start as int,
+            end as int,
+            handles@,
+            (end - start) as nat + 1,
+        ),
 {
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost expected = cst_first_undeclared_tag_handle_from_spec(
+        atom_views,
+        token_views,
+        start as int,
+        end as int,
+        handles@,
+        (end - start) as nat + 1,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+    }
     let mut index = start;
+    let ghost mut fuel: nat = (end - start) as nat + 1;
     while index < end
         invariant
             start <= index <= end,
             end <= tokens.len(),
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            fuel >= end - index + 1,
+            expected == cst_first_undeclared_tag_handle_from_spec(
+                atom_views,
+                token_views,
+                start as int,
+                end as int,
+                handles@,
+                (end - start) as nat + 1,
+            ),
+            expected == cst_first_undeclared_tag_handle_from_spec(
+                atom_views,
+                token_views,
+                index as int,
+                end as int,
+                handles@,
+                fuel,
+            ),
         decreases end - index,
     {
-        if tokens[index].kind() == CompletedTokenKind::TagProperty {
-            if let Some(handle) = part_of_kind(&tokens[index], CompletedTokenPartKind::TagHandle) {
-                if !tag_handle_is_default(atoms, handle) {
-                    let mut declared = false;
-                    let mut handle_index = 0usize;
-                    while handle_index < handles.len()
-                        invariant
-                            handle_index <= handles.len(),
-                        decreases handles.len() - handle_index,
-                    {
-                        if atom_ranges_equal(
-                            atoms,
-                            handles[handle_index].0,
-                            handles[handle_index].1,
-                            handle.start_atom_index(),
-                            handle.end_atom_index(),
-                        ) {
-                            declared = true;
-                            break;
-                        }
-                        handle_index += 1;
-                    }
-                    if !declared {
-                        return Some(index);
-                    }
-                }
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, index as int);
+            assert(token_views[index as int] == tokens@[index as int]@);
+        }
+        let current = &tokens[index];
+        let undeclared = tag_property_handle_is_undeclared(atoms, current, handles);
+        proof {
+            assert(undeclared == cst_tag_property_handle_is_undeclared_spec(
+                atom_views,
+                current@,
+                handles@,
+            ));
+            assert(current@ == tokens@[index as int]@);
+            assert(undeclared == cst_tag_property_handle_is_undeclared_spec(
+                atom_views,
+                token_views[index as int],
+                handles@,
+            ));
+        }
+        if undeclared {
+            proof {
+                reveal(cst_first_undeclared_tag_handle_from_spec);
+                assert(expected == Some(index as int));
             }
+            return Some(index);
+        }
+        proof {
+            assert(fuel > 0);
+            reveal(cst_first_undeclared_tag_handle_from_spec);
+            assert(expected == cst_first_undeclared_tag_handle_from_spec(
+                atom_views,
+                token_views,
+                index as int + 1,
+                end as int,
+                handles@,
+                (fuel - 1) as nat,
+            ));
+            fuel = (fuel - 1) as nat;
         }
         index += 1;
+    }
+    proof {
+        reveal(cst_first_undeclared_tag_handle_spec);
+        reveal(cst_first_undeclared_tag_handle_from_spec);
     }
     None
 }

@@ -246,6 +246,22 @@ pub closed spec fn completed_token_part_views_spec(parts: Seq<CompletedTokenPart
     parts.map_values(|part: CompletedTokenPart| part@)
 }
 
+pub proof fn lemma_completed_token_part_views_len(parts: Seq<CompletedTokenPart>)
+    ensures
+        completed_token_part_views_spec(parts).len() == parts.len(),
+{
+    reveal(completed_token_part_views_spec);
+}
+
+pub proof fn lemma_completed_token_part_view_at(parts: Seq<CompletedTokenPart>, index: int)
+    requires
+        0 <= index < parts.len(),
+    ensures
+        completed_token_part_views_spec(parts)[index] == parts[index]@,
+{
+    reveal(completed_token_part_views_spec);
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct CompletedToken {
     kind: CompletedTokenKind,
