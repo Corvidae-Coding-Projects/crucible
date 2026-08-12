@@ -195,6 +195,15 @@ impl View for CompletedTokenPart {
 }
 
 impl CompletedTokenPart {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.kind == other.kind && self.start_atom_index == other.start_atom_index
+            && self.end_atom_index == other.end_atom_index && self.byte_start == other.byte_start
+            && self.byte_end == other.byte_end
+    }
+
     pub fn kind(&self) -> (kind: CompletedTokenPartKind)
         ensures
             kind == self@.kind,
@@ -288,6 +297,52 @@ impl View for CompletedToken {
 }
 
 impl CompletedToken {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.kind != other.kind || self.start_line_number != other.start_line_number
+            || self.end_line_number != other.end_line_number || self.start_atom_index
+            != other.start_atom_index || self.end_atom_index != other.end_atom_index
+            || self.byte_start != other.byte_start || self.byte_end != other.byte_end
+            || self.scalar_index != other.scalar_index || self.yaml_major != other.yaml_major
+            || self.yaml_minor != other.yaml_minor {
+            return false;
+        }
+        if self.parts.len() != other.parts.len() {
+            proof {
+                reveal(completed_token_part_views_spec);
+                assert(self@.parts.len() != other@.parts.len());
+            }
+            return false;
+        }
+        let mut index = 0usize;
+        while index < self.parts.len()
+            invariant
+                self.parts.len() == other.parts.len(),
+                index <= self.parts.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.parts[prior]@ == other.parts[prior]@,
+            decreases self.parts.len() - index,
+        {
+            if !self.parts[index].same_as(&other.parts[index]) {
+                proof {
+                    reveal(completed_token_part_views_spec);
+                    assert(self@.parts[index as int] != other@.parts[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(completed_token_part_views_spec);
+            assert(self@.parts =~= other@.parts);
+        }
+        true
+    }
+
     pub fn kind(&self) -> (kind: CompletedTokenKind)
         ensures
             kind == self@.kind,
@@ -371,6 +426,22 @@ pub closed spec fn completed_token_views_spec(tokens: Seq<CompletedToken>) -> Se
     tokens.map_values(|token: CompletedToken| token@)
 }
 
+pub proof fn lemma_completed_token_view_at(tokens: Seq<CompletedToken>, index: int)
+    requires
+        0 <= index < tokens.len(),
+    ensures
+        completed_token_views_spec(tokens)[index] == tokens[index]@,
+{
+    reveal(completed_token_views_spec);
+}
+
+pub proof fn lemma_completed_token_views_len(tokens: Seq<CompletedToken>)
+    ensures
+        completed_token_views_spec(tokens).len() == tokens.len(),
+{
+    reveal(completed_token_views_spec);
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct CompletedTokenSource {
     profile_version: u16,
@@ -428,6 +499,56 @@ impl View for CompletedTokenSource {
 }
 
 impl CompletedTokenSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.layout_transformation_version
+            != other.layout_transformation_version || self.structural_transformation_version
+            != other.structural_transformation_version || self.quoted_transformation_version
+            != other.quoted_transformation_version || self.plain_transformation_version
+            != other.plain_transformation_version || self.block_transformation_version
+            != other.block_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes || self.input_atom_count != other.input_atom_count
+            || self.maximum_flow_depth != other.maximum_flow_depth {
+            return false;
+        }
+        if self.tokens.len() != other.tokens.len() {
+            proof {
+                reveal(completed_token_views_spec);
+                assert(self@.tokens.len() != other@.tokens.len());
+            }
+            return false;
+        }
+        let mut index = 0usize;
+        while index < self.tokens.len()
+            invariant
+                self.tokens.len() == other.tokens.len(),
+                index <= self.tokens.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.tokens[prior]@ == other.tokens[prior]@,
+            decreases self.tokens.len() - index,
+        {
+            if !self.tokens[index].same_as(&other.tokens[index]) {
+                proof {
+                    reveal(completed_token_views_spec);
+                    assert(self@.tokens[index as int] != other@.tokens[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(completed_token_views_spec);
+            assert(self@.tokens =~= other@.tokens);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,

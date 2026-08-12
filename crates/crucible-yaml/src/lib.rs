@@ -3,6 +3,7 @@
 
 pub mod atom;
 pub mod block;
+pub mod cst;
 pub mod layout;
 pub mod plain;
 pub mod quoted;
@@ -23,6 +24,16 @@ pub use block::{
     BLOCK_SCALAR_TRANSFORMATION_VERSION, MAX_PROFILE1_BLOCK_SCALARS,
     MAX_PROFILE1_BLOCK_SCALAR_CONTENT_CODE_POINTS, MAX_PROFILE1_BLOCK_SCALAR_PRESENTATION_ATOMS,
     MAX_PROFILE1_TOTAL_BLOCK_SCALAR_CONTENT_CODE_POINTS,
+};
+
+pub use cst::{
+    canonical_cst_limits, parse_profile1_cst, CstDocument, CstDocumentView, CstError, CstErrorKind,
+    CstErrorView, CstLimits, CstLimitsView, CstMappingEntry, CstMappingEntryView, CstNode,
+    CstNodeKind, CstNodeStyle, CstNodeView, CstSequenceEntry, CstSequenceEntryView, CstSource,
+    CstSourceView, CstSyntaxOwner, CstSyntaxOwnerKind, CstSyntaxOwnerView, CstWarning,
+    CstWarningKind, CstWarningView, CST_TRANSFORMATION_VERSION, MAX_PROFILE1_CST_DEPTH,
+    MAX_PROFILE1_CST_DIRECTIVES, MAX_PROFILE1_CST_DOCUMENTS, MAX_PROFILE1_CST_MAPPING_ENTRIES,
+    MAX_PROFILE1_CST_NODES, MAX_PROFILE1_CST_SEQUENCE_ENTRIES, MAX_PROFILE1_CST_WARNINGS,
 };
 
 pub use layout::{

@@ -1462,6 +1462,12 @@ only when a later nonempty continuation remains in the same scalar. The range's 
 byte offset therefore belong to its final nonspace content atom, not to discarded presentation
 white space.
 
+The parent indentation is the grammar parent carried through compact block productions, not merely
+the physical leading-space count of the line on which the scalar begins. Thus an inline value in
+`- key: value`, a scalar after a compact nested `-`, and a block-scalar header after either form all
+terminate against the nested mapping or sequence indentation. A sibling entry at that indentation
+cannot be folded into the preceding scalar merely because the outer line began at column zero.
+
 Node-property exclusion retains distinct anchor, alias, shorthand-tag, and verbatim-tag substates.
 In particular, the comma and square brackets admitted by `ns-uri-char` inside a `!<...>` verbatim
 tag remain property spelling until the closing `>` and are never exposed as plain-scalar content.
@@ -1659,6 +1665,98 @@ atom/byte partition, exact token-kind spelling, scalar-record identity, trivia m
 and properly nested flow delimiters, deterministic result, and the count/depth limits. Proof tests
 must include nonempty mixed streams and forged token views that attempt gaps, overlap, incorrect byte
 endpoints, scalar-range substitution, header/property leakage, or flow-stack laundering.
+
+Profile 1's concrete-syntax transformation is version 1 and implements YAML 1.2.2 productions 105
+through 211 over the authenticated completed-token stream. It supports the complete presentation
+grammar rather than a configuration-shaped subset: zero or more independent documents; bare,
+explicit, and directive documents; block and flow sequences and mappings; compact collection
+forms; explicit and implicit keys; arbitrary node kinds as mapping keys; empty sequence entries,
+keys, values, and documents where the productions admit them; aliases; node properties in either
+order; and every scalar style. Block collections cannot appear in flow context, while flow nodes
+remain valid in block context. The parser retains duplicate mapping entries in source order because
+duplicate-key rejection is defined after canonical key resolution, not by raw presentation text.
+
+The concrete syntax tree is a nonrecursive, versioned table representation. A stream record names
+ordered document records and the complete token interval. Each document records its prefix,
+directive, explicit-start, root-node, explicit-end, and suffix token intervals, plus every reserved
+directive warning and YAML-version warning. Each node records its kind and presentation style,
+complete token and byte range, optional anchor-property token, optional tag-property token, and an
+exact reference to its authenticated scalar or alias token when applicable. Sequence entries and
+mapping key/value pairs are separate ordered tables. Collection nodes name contiguous entry-table
+ranges; child-node indices are strictly smaller than their completed parent index, so the CST is a
+finite acyclic tree without host recursion. A document root names the final node for that document.
+Zero-width empty nodes record an exact between-token anchor and source byte offset instead of
+fabricating a lexer token or overlapping the lossless token partition.
+
+Trivia remains lossless presentation evidence. Indentation, separation, comments, line feeds, and
+document-prefix BOM tokens are not discarded or reinterpreted as semantic nodes. CST token
+intervals include their surrounding presentation where the YAML production consumes it, while core
+node and entry intervals identify the exact syntax-bearing subrange. Every token belongs to one
+ordered stream-prefix, document, or stream-suffix interval, and every syntax-bearing token is owned
+by exactly one directive, property, marker, node, or collection-entry record. Comments remain
+presentation detail rather than acquiring semantic association with a node; tools may derive a
+display attachment without changing the CST or graph meaning.
+
+Directive state is reset for every document. A directive requires a following directives-end
+marker. At most one YAML directive is permitted in a document, and a TAG handle may be declared at
+most once in that document even when the repeated prefix is identical. `%YAML 1.1`, `%YAML 1.2`, and
+the absence of a version directive are accepted and parsed using profile-1 rules; 1.1 records a
+compatibility warning. A higher `1.x` minor version is attempted using profile-1 rules with a stable
+future-minor warning. A major version other than one is rejected at the version token. Reserved
+directives are retained and produce stable warnings rather than errors. Primary `!` and secondary
+`!!` handles have their YAML defaults, named handles require a declaration, and explicit TAG
+directives may override the two defaults for only that document. Expanded tag URI validity and
+percent decoding are resolution work, but the parser retains the exact declaration and property
+tokens needed to perform it.
+
+A non-alias node admits at most one anchor property and at most one tag property, in either order,
+with the separation and indentation required by its context. A repeated property is a typed parse
+error at the second property. Properties without explicit scalar or collection content form the
+empty scalar node admitted by the applicable production. An alias is a complete node by itself: it
+cannot carry a tag, anchor, scalar, or collection child. Whether an alias names the most recent
+preceding anchor, whether tag handles resolve, and whether an expanded tag is compatible with the
+node kind are mandatory composition checks over the completed CST rather than parser shortcuts.
+
+Flow collection frames enforce comma and key/value placement in addition to the lexer's delimiter
+balance. Flow sequences admit ordinary nodes and compact single-pair mappings; flow mappings admit
+explicit and implicit entries, JSON-style no-space mapping values, empty keys or values where the
+productions allow them, and one optional trailing comma. A leading comma, repeated comma, missing
+comma, second mapping-value indicator, or collection closer while an entry is incomplete reports
+the first token that makes the production impossible. Flow collection depth is inherited from the
+authenticated lexer evidence and is checked again against the parser's caller-lowered stack bound.
+
+Block collection frames are driven by exact token line, indentation width, and parent grammar
+context rather than raw line-prefix heuristics. Entries at one indentation form one collection;
+greater indentation begins only a child permitted by the pending sequence entry, mapping key, or
+mapping value; and lesser indentation closes frames until the owning context is reached. Compact
+forms such as `- key: value`, `? key : value`, a block sequence nested directly under a mapping
+value, and a mapping nested directly under a sequence entry preserve the parent context already
+used by block-scalar formation. Explicit keys may be arbitrary nodes and span the forms admitted by
+the YAML grammar. Implicit keys obey the single-line restriction but do not inherit YAML 1.1's
+removed 1,024-character limit. Indentation or an indicator that cannot belong to any open frame is
+reported at the first offending token.
+
+The absolute document, CST-node, sequence-entry, mapping-entry, directive, and warning caps are each
+1,048,576, matching the token ceiling; the absolute parser frame depth is 4,096. Callers MAY lower
+any cap but cannot raise it. Empty nodes and empty documents count toward the node and document
+caps. Intrinsic document, directive, property, indentation, and collection-grammar errors take
+precedence over the caller cap that would otherwise exclude the same completed record. A count
+error identifies the first token or between-token anchor of the first excluded record; a depth
+error identifies the opener or block entry that would create the first excluded frame. End-of-input
+diagnostics use the original source length. Parsing is all-or-error and exposes no partial public
+CST. A future diagnostic-recovery transformation may retain multiple errors for editors, but its
+output cannot be accepted as executable configuration evidence.
+
+The executable parser uses explicit bounded vectors of document, node, entry, directive, warning,
+and frame records; production parsing and frame completion are iterative Verus Rust even where a
+recursive implementation would be shorter. The pure model is total under explicit token and frame
+fuel and fixes the complete CST or the first typed diagnostic. Public contracts prove canonical
+token authentication, strict token progress or frame reduction on every step, bounded indexing and
+arithmetic, exact node/property/scalar identity, document and entry ordering, child-before-parent
+acyclicity, token ownership without syntax leakage, deterministic results, and every absolute and
+caller-lowered limit. Proof tests include nonempty multidocument block/flow mixtures and forged CSTs
+that attempt cycles, forward child references, duplicated token ownership, property substitution,
+cross-document directive leakage, invalid empty-node anchors, or incomplete frame laundering.
 
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions

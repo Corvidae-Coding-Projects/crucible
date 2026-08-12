@@ -1076,12 +1076,81 @@ fn candidate_terminates_plain(candidate: &StructuralLexeme, flow_depth: u64) -> 
         == StructuralCandidateRole::FlowMappingEnd || role == StructuralCandidateRole::FlowEntry))
 }
 
+closed spec fn candidate_is_contextual_explicit_key_spec(
+    atoms: Seq<LexicalAtomView>,
+    candidate: StructuralLexemeView,
+) -> bool {
+    candidate.kind == StructuralCandidateRole::Content && candidate.end_atom_index
+        == candidate.start_atom_index + 1 && candidate.end_atom_index <= atoms.len()
+        && atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Indicator(
+        YamlIndicator::ExplicitMappingKey,
+    )
+}
+
+fn candidate_is_contextual_explicit_key(
+    atoms: &[LexicalAtom],
+    candidate: &StructuralLexeme,
+) -> (result: bool)
+    requires
+        candidate@.start_atom_index < candidate@.end_atom_index,
+        candidate@.end_atom_index <= atoms@.len(),
+    ensures
+        result == candidate_is_contextual_explicit_key_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            candidate@,
+        ),
+{
+    candidate.candidate_role() == StructuralCandidateRole::Content && candidate.end_atom_index()
+        == candidate.start_atom_index() + 1 && atoms[candidate.start_atom_index() as usize].kind()
+        == LexicalAtomKind::Indicator(YamlIndicator::ExplicitMappingKey)
+}
+
+closed spec fn candidate_starts_property_or_alias_spec(
+    atoms: Seq<LexicalAtomView>,
+    candidate: StructuralLexemeView,
+) -> bool {
+    candidate.kind == StructuralCandidateRole::Content && candidate.start_atom_index
+        < candidate.end_atom_index && candidate.end_atom_index <= atoms.len() && (
+    atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Indicator(
+        YamlIndicator::Anchor,
+    ) || atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Indicator(
+        YamlIndicator::Alias,
+    ) || atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Indicator(
+        YamlIndicator::Tag,
+    ))
+}
+
+fn candidate_starts_property_or_alias(
+    atoms: &[LexicalAtom],
+    candidate: &StructuralLexeme,
+) -> (result: bool)
+    requires
+        candidate@.start_atom_index < candidate@.end_atom_index,
+        candidate@.end_atom_index <= atoms@.len(),
+    ensures
+        result == candidate_starts_property_or_alias_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            candidate@,
+        ),
+{
+    if candidate.candidate_role() != StructuralCandidateRole::Content {
+        return false;
+    }
+    let kind = atoms[candidate.start_atom_index() as usize].kind();
+    kind == LexicalAtomKind::Indicator(YamlIndicator::Anchor) || kind == LexicalAtomKind::Indicator(
+        YamlIndicator::Alias,
+    ) || kind == LexicalAtomKind::Indicator(YamlIndicator::Tag)
+}
+
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
 struct PlainContextView {
     flow_depth: u64,
     line_indentation: u64,
+    plain_parent_indentation: u64,
+    last_block_node_start_column: u64,
+    explicit_key_indentation: Option<u64>,
     at_line_start: bool,
     after_node: bool,
     block_mode: u8,
@@ -1095,6 +1164,9 @@ struct PlainContextView {
 struct PlainContext {
     flow_depth: u64,
     line_indentation: u64,
+    plain_parent_indentation: u64,
+    last_block_node_start_column: u64,
+    explicit_key_indentation: Option<u64>,
     at_line_start: bool,
     after_node: bool,
     block_mode: u8,
@@ -1111,6 +1183,9 @@ impl View for PlainContext {
         PlainContextView {
             flow_depth: self.flow_depth,
             line_indentation: self.line_indentation,
+            plain_parent_indentation: self.plain_parent_indentation,
+            last_block_node_start_column: self.last_block_node_start_column,
+            explicit_key_indentation: self.explicit_key_indentation,
             at_line_start: self.at_line_start,
             after_node: self.after_node,
             block_mode: self.block_mode,
@@ -1126,6 +1201,9 @@ closed spec fn initial_plain_context_spec() -> PlainContextView {
     PlainContextView {
         flow_depth: 0,
         line_indentation: 0,
+        plain_parent_indentation: 0,
+        last_block_node_start_column: 0,
+        explicit_key_indentation: None,
         at_line_start: true,
         after_node: false,
         block_mode: 0,
@@ -1143,6 +1221,9 @@ fn initial_plain_context() -> (context: PlainContext)
     PlainContext {
         flow_depth: 0,
         line_indentation: 0,
+        plain_parent_indentation: 0,
+        last_block_node_start_column: 0,
+        explicit_key_indentation: None,
         at_line_start: true,
         after_node: false,
         block_mode: 0,
@@ -2244,6 +2325,7 @@ fn prepare_block_context(
 closed spec fn context_after_line_feed_spec(context: PlainContextView) -> PlainContextView {
     PlainContextView {
         line_indentation: 0,
+        plain_parent_indentation: 0,
         at_line_start: true,
         block_mode: if context.block_mode == 1 {
             2
@@ -2262,11 +2344,17 @@ closed spec fn context_after_line_feed_spec(context: PlainContextView) -> PlainC
 }
 
 closed spec fn context_after_plain_spec(
+    atoms: Seq<LexicalAtomView>,
     context: PlainContextView,
     body: PlainBodySuccessView,
 ) -> PlainContextView {
     PlainContextView {
         line_indentation: body.line_indentation,
+        last_block_node_start_column: if context.flow_depth == 0 {
+            atoms[body.scalar.start_atom_index as int].span.start.column
+        } else {
+            context.last_block_node_start_column
+        },
         at_line_start: body.at_line_start,
         after_node: true,
         property_payload_mode: 0,
@@ -2417,6 +2505,7 @@ closed spec fn scan_plain_tail_spec(
                             quote_index,
                             PlainContextView {
                                 line_indentation: indentation_width_spec(candidate),
+                                plain_parent_indentation: indentation_width_spec(candidate),
                                 at_line_start: true,
                                 ..prepared
                             },
@@ -2480,6 +2569,11 @@ closed spec fn scan_plain_tail_spec(
                                 next,
                                 quote_index + 1,
                                 PlainContextView {
+                                    last_block_node_start_column: if prepared.flow_depth == 0 {
+                                        atoms[quote.start_atom_index as int].span.start.column
+                                    } else {
+                                        prepared.last_block_node_start_column
+                                    },
                                     at_line_start: false,
                                     after_node: true,
                                     property_payload_mode: 0,
@@ -2500,6 +2594,76 @@ closed spec fn scan_plain_tail_spec(
                             candidate_index + 1,
                             quote_index,
                             PlainContextView {
+                                at_line_start: false,
+                                after_node: false,
+                                property_payload_mode: 0,
+                                ..prepared
+                            },
+                            built,
+                            scalar_limit,
+                            scalar_atom_limit,
+                            (fuel - 1) as nat,
+                        )
+                    } else if candidate_starts_property_or_alias_spec(atoms, candidate) {
+                        let indicator = atoms[candidate.start_atom_index as int].kind;
+                        let open_verbatim_tag = indicator == LexicalAtomKind::Indicator(
+                            YamlIndicator::Tag,
+                        ) && candidate.start_atom_index + 1 < candidate.end_atom_index
+                            && atoms[candidate.start_atom_index as int + 1].code_point == 0x3c
+                            && atoms[(candidate.end_atom_index - 1) as int].code_point != 0x3e;
+                        scan_plain_tail_spec(
+                            atoms,
+                            candidates,
+                            quotes,
+                            candidate_index + 1,
+                            quote_index,
+                            PlainContextView {
+                                last_block_node_start_column: if prepared.flow_depth == 0 {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.last_block_node_start_column
+                                },
+                                at_line_start: false,
+                                after_node: if indicator == LexicalAtomKind::Indicator(
+                                    YamlIndicator::Alias,
+                                ) {
+                                    true
+                                } else {
+                                    false
+                                },
+                                property_payload_mode: if open_verbatim_tag {
+                                    4
+                                } else {
+                                    0
+                                },
+                                ..prepared
+                            },
+                            built,
+                            scalar_limit,
+                            scalar_atom_limit,
+                            (fuel - 1) as nat,
+                        )
+                    } else if candidate_is_contextual_explicit_key_spec(atoms, candidate) && (
+                    prepared.flow_depth == 0 || candidate_index + 1 < candidates.len()
+                        && candidates[candidate_index + 1].kind
+                        == StructuralCandidateRole::Separation) {
+                        scan_plain_tail_spec(
+                            atoms,
+                            candidates,
+                            quotes,
+                            candidate_index + 1,
+                            quote_index,
+                            PlainContextView {
+                                plain_parent_indentation: if prepared.flow_depth == 0 {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.plain_parent_indentation
+                                },
+                                explicit_key_indentation: if prepared.flow_depth == 0 {
+                                    Some(atoms[candidate.start_atom_index as int].span.start.column)
+                                } else {
+                                    prepared.explicit_key_indentation
+                                },
                                 at_line_start: false,
                                 after_node: false,
                                 property_payload_mode: 0,
@@ -2643,9 +2807,9 @@ closed spec fn scan_plain_tail_spec(
                                                             candidate_index + 1,
                                                             start as int,
                                                             end as int,
-                                                            prepared.line_indentation,
+                                                            prepared.plain_parent_indentation,
                                                             prepared.flow_depth,
-                                                            prepared.line_indentation,
+                                                            prepared.plain_parent_indentation,
                                                             false,
                                                             scalar_atom_limit,
                                                             (candidates.len()
@@ -2659,6 +2823,7 @@ closed spec fn scan_plain_tail_spec(
                                                                 body.next_candidate_index,
                                                                 quote_index,
                                                                 context_after_plain_spec(
+                                                                    atoms,
                                                                     prepared,
                                                                     body,
                                                                 ),
@@ -2703,9 +2868,14 @@ closed spec fn scan_plain_tail_spec(
                             quote_index,
                             PlainContextView {
                                 block_mode: 1,
-                                block_parent_indentation: prepared.line_indentation,
+                                block_parent_indentation: prepared.plain_parent_indentation,
                                 block_content_indentation: 0,
                                 block_line_active: false,
+                                last_block_node_start_column: if prepared.flow_depth == 0 {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.last_block_node_start_column
+                                },
                                 at_line_start: false,
                                 after_node: true,
                                 ..prepared
@@ -2729,6 +2899,11 @@ closed spec fn scan_plain_tail_spec(
                             quote_index,
                             PlainContextView {
                                 at_line_start: false,
+                                last_block_node_start_column: if prepared.flow_depth == 0 {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.last_block_node_start_column
+                                },
                                 property_payload_mode: if candidate.kind
                                     == StructuralCandidateRole::Indicator(YamlIndicator::Alias) {
                                     2
@@ -2758,6 +2933,11 @@ closed spec fn scan_plain_tail_spec(
                                     (prepared.flow_depth + 1) as u64
                                 } else {
                                     prepared.flow_depth
+                                },
+                                last_block_node_start_column: if prepared.flow_depth == 0 {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.last_block_node_start_column
                                 },
                                 at_line_start: false,
                                 after_node: false,
@@ -2812,6 +2992,37 @@ closed spec fn scan_plain_tail_spec(
                                     false
                                 } else {
                                     prepared.after_node
+                                },
+                                plain_parent_indentation: if prepared.flow_depth == 0
+                                    && candidate.kind == StructuralCandidateRole::Indicator(
+                                    YamlIndicator::MappingValue,
+                                ) {
+                                    match prepared.explicit_key_indentation {
+                                        Some(value) => value,
+                                        None => prepared.last_block_node_start_column,
+                                    }
+                                } else if prepared.flow_depth == 0 && (candidate.kind
+                                    == StructuralCandidateRole::Indicator(
+                                    YamlIndicator::BlockSequenceEntry,
+                                ) || candidate.kind == StructuralCandidateRole::Indicator(
+                                    YamlIndicator::ExplicitMappingKey,
+                                )) {
+                                    atoms[candidate.start_atom_index as int].span.start.column
+                                } else {
+                                    prepared.plain_parent_indentation
+                                },
+                                explicit_key_indentation: if prepared.flow_depth == 0
+                                    && candidate.kind == StructuralCandidateRole::Indicator(
+                                    YamlIndicator::ExplicitMappingKey,
+                                ) {
+                                    Some(atoms[candidate.start_atom_index as int].span.start.column)
+                                } else if prepared.flow_depth == 0 && candidate.kind
+                                    == StructuralCandidateRole::Indicator(
+                                    YamlIndicator::MappingValue,
+                                ) {
+                                    None
+                                } else {
+                                    prepared.explicit_key_indentation
                                 },
                                 property_payload_mode: 0,
                                 ..prepared
@@ -3579,6 +3790,7 @@ pub fn scan_profile1_plain_scalars(
         if context.block_mode == 2 && context.block_line_active {
             if role == StructuralCandidateRole::LineFeed {
                 context.line_indentation = 0;
+                context.plain_parent_indentation = 0;
                 context.at_line_start = true;
                 context.block_line_active = false;
                 if context.property_payload_mode == 2 {
@@ -3619,6 +3831,7 @@ pub fn scan_profile1_plain_scalars(
         }
         if role == StructuralCandidateRole::LineFeed {
             context.line_indentation = 0;
+            context.plain_parent_indentation = 0;
             context.at_line_start = true;
             if context.block_mode == 1 {
                 context.block_mode = 2;
@@ -3637,6 +3850,7 @@ pub fn scan_profile1_plain_scalars(
         }
         if role == StructuralCandidateRole::Indentation {
             context.line_indentation = candidate_end_u64 - candidate_start_u64;
+            context.plain_parent_indentation = context.line_indentation;
             context.at_line_start = true;
             proof {
                 reveal(scan_plain_tail_spec);
@@ -3701,6 +3915,10 @@ pub fn scan_profile1_plain_scalars(
                 quote.end_atom_index(),
             );
             quote_index += 1;
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[quote.start_atom_index() as usize].span().start().column();
+            }
             context.at_line_start = false;
             context.after_node = true;
             context.property_payload_mode = 0;
@@ -3721,6 +3939,46 @@ pub fn scan_profile1_plain_scalars(
         }
         let json_mapping_colon = candidate_is_json_mapping_colon(atoms, candidate, context);
         if json_mapping_colon && candidate_end_u64 == candidate_start_u64 + 1 {
+            context.at_line_start = false;
+            context.after_node = false;
+            context.property_payload_mode = 0;
+            proof {
+                reveal(scan_plain_tail_spec);
+                fuel = (fuel - 1) as nat;
+            }
+            candidate_index += 1;
+            continue;
+        }
+        if candidate_starts_property_or_alias(atoms, candidate) {
+            let indicator = atoms[candidate_start].kind();
+            let open_verbatim_tag = indicator == LexicalAtomKind::Indicator(YamlIndicator::Tag)
+                && candidate_start + 1 < candidate_end && atoms[candidate_start + 1].code_point()
+                == 0x3c && atoms[candidate_end - 1].code_point() != 0x3e;
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[candidate_start].span().start().column();
+            }
+            context.at_line_start = false;
+            context.after_node = indicator == LexicalAtomKind::Indicator(YamlIndicator::Alias);
+            context.property_payload_mode = if open_verbatim_tag {
+                4
+            } else {
+                0
+            };
+            proof {
+                reveal(scan_plain_tail_spec);
+                fuel = (fuel - 1) as nat;
+            }
+            candidate_index += 1;
+            continue;
+        }
+        if candidate_is_contextual_explicit_key(atoms, candidate) && (context.flow_depth == 0
+            || candidate_index + 1 < candidates.len() && candidates[candidate_index
+            + 1].candidate_role() == StructuralCandidateRole::Separation) {
+            if context.flow_depth == 0 {
+                context.plain_parent_indentation = atoms[candidate_start].span().start().column();
+                context.explicit_key_indentation = Some(context.plain_parent_indentation);
+            }
             context.at_line_start = false;
             context.after_node = false;
             context.property_payload_mode = 0;
@@ -3848,7 +4106,7 @@ pub fn scan_profile1_plain_scalars(
                 candidate_index,
                 start_u64 as usize,
                 end_u64 as usize,
-                context.line_indentation,
+                context.plain_parent_indentation,
                 context.flow_depth,
                 scalar_atom_limit,
             ) {
@@ -3865,6 +4123,10 @@ pub fn scan_profile1_plain_scalars(
             let ghost old_scalars = scalars@;
             candidate_index = body.next_candidate_index;
             context.line_indentation = body.line_indentation;
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[body.scalar.start_atom_index() as usize].span().start().column();
+            }
             context.at_line_start = body.at_line_start;
             context.after_node = true;
             context.property_payload_mode = 0;
@@ -3927,9 +4189,13 @@ pub fn scan_profile1_plain_scalars(
         if role == StructuralCandidateRole::Indicator(YamlIndicator::LiteralBlockScalar) || role
             == StructuralCandidateRole::Indicator(YamlIndicator::FoldedBlockScalar) {
             context.block_mode = 1;
-            context.block_parent_indentation = context.line_indentation;
+            context.block_parent_indentation = context.plain_parent_indentation;
             context.block_content_indentation = 0;
             context.block_line_active = false;
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[candidate_start].span().start().column();
+            }
             context.at_line_start = false;
             context.after_node = true;
             proof {
@@ -3951,6 +4217,10 @@ pub fn scan_profile1_plain_scalars(
             } else {
                 1
             };
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[candidate_start].span().start().column();
+            }
             context.at_line_start = false;
             proof {
                 reveal(scan_plain_tail_spec);
@@ -3961,6 +4231,10 @@ pub fn scan_profile1_plain_scalars(
         }
         if role == StructuralCandidateRole::FlowSequenceStart || role
             == StructuralCandidateRole::FlowMappingStart {
+            if context.flow_depth == 0 {
+                context.last_block_node_start_column
+                    = atoms[candidate_start].span().start().column();
+            }
             if context.flow_depth < MAX_PROFILE1_LEXICAL_ATOMS {
                 context.flow_depth += 1;
             }
@@ -3990,6 +4264,22 @@ pub fn scan_profile1_plain_scalars(
             continue;
         }
         context.at_line_start = false;
+        if context.flow_depth == 0 && role == StructuralCandidateRole::Indicator(
+            YamlIndicator::MappingValue,
+        ) {
+            context.plain_parent_indentation = match context.explicit_key_indentation {
+                Some(value) => value,
+                None => context.last_block_node_start_column,
+            };
+            context.explicit_key_indentation = None;
+        } else if context.flow_depth == 0 && (role == StructuralCandidateRole::Indicator(
+            YamlIndicator::BlockSequenceEntry,
+        ) || role == StructuralCandidateRole::Indicator(YamlIndicator::ExplicitMappingKey)) {
+            context.plain_parent_indentation = atoms[candidate_start].span().start().column();
+            if role == StructuralCandidateRole::Indicator(YamlIndicator::ExplicitMappingKey) {
+                context.explicit_key_indentation = Some(context.plain_parent_indentation);
+            }
+        }
         if role == StructuralCandidateRole::FlowEntry || role == StructuralCandidateRole::Indicator(
             YamlIndicator::MappingValue,
         ) || role == StructuralCandidateRole::Indicator(YamlIndicator::BlockSequenceEntry) || role
