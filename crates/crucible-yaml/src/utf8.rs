@@ -433,6 +433,21 @@ pub closed spec fn decoded_source_well_formed_spec(source: DecodedSourceView) ->
     )
 }
 
+/// Expose the normalized-scalar obligation of a valid decoded source to downstream proof stages.
+pub proof fn lemma_decoded_source_well_formed_scalar_is_normalized(
+    source: DecodedSourceView,
+    index: int,
+)
+    requires
+        decoded_source_well_formed_spec(source),
+        0 <= index < source.scalars.len(),
+    ensures
+        normalized_scalar_view_spec(source.scalars[index]),
+{
+    reveal(decoded_source_well_formed_spec);
+    reveal(decoded_prefix_view_well_formed_spec);
+}
+
 proof fn lemma_empty_prefix(bom_bytes: u64)
     ensures
         decoded_prefix_well_formed_spec(Seq::empty(), bom_bytes, bom_bytes),

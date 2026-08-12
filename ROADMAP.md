@@ -24,6 +24,8 @@ Current work establishes and extends:
 - project-owned Crucible YAML profile-1 byte decoding with exact source spans, typed UTF-8
   diagnostics, explicit BOM behavior, line-ending normalization, resource caps, and Verus
   total-result correspondence proofs;
+- bounded verified lexical atomization with exhaustive indicator classification and one-to-one
+  decoded-scalar/span preservation as the context-free foundation of the remaining YAML lexer;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

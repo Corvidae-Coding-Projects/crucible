@@ -27,5 +27,8 @@ begin.
   explicit BOM policy, CR/CRLF normalization, typed malformed-input diagnostics, absolute and
   caller-lowered resource caps, private invariant-bearing constructors, a total pure success-or-error
   specification, and exact executable correspondence proofs.
+- Verified profile-1 lexical atomization with exhaustive YAML-indicator classification, one-to-one
+  decoded-scalar and source-span preservation, private constructors, bounded all-or-error output,
+  exhaustive Unicode tests, and total executable-to-pure correspondence.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

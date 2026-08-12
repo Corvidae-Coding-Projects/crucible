@@ -1265,6 +1265,10 @@ The implementation pipeline is:
 ```text
 untrusted bytes
     ↓ verified UTF decoding or byte-level diagnostic
+normalized decoded scalars with exact source spans
+    ↓ verified lexical atomization
+scalar-preserving lexical atoms
+    ↓ verified context-sensitive lexer
 tokens with exact spans
     ↓ verified parser
 concrete syntax tree
@@ -1327,6 +1331,24 @@ overlong, surrogate, and out-of-range errors identify the leader; continuation e
 offending byte; and truncation identifies the end-of-input offset. The pure Verus transformation is
 total over bytes, limits, and BOM policy. Its result fixes both every successful decoded source and
 every error kind and offset, and executable correspondence is required for both result variants.
+
+Profile 1's lexical-atom transformation is version 1 and is the verified context-free first stage
+of lexing. It consumes only a successfully decoded source and produces exactly one atom for every
+decoded scalar, preserving the code point and source span without alteration. It distinguishes LF,
+space, tab, the YAML indicator characters `-?:,[]{}#&*!|>'"%@` plus the grave accent, and all other
+content. Indicators retain distinct kinds, including the reserved at-sign and grave-accent kinds,
+so a later stage can reject or interpret them using position and context rather than losing source
+evidence. A stripped leading BOM has no atom; a non-leading `U+FEFF` is content.
+
+The version-1 absolute lexical-atom limit is 1,048,576, equal to the decoded-scalar cap. Callers MAY
+lower it but cannot raise it. Exceeding the effective limit returns a typed error at the first scalar
+that would be excluded and constructs no partial public result. The pure Verus transformation is
+total and fixes both the complete atom sequence and the exact limit error. Its exact-correspondence
+predicate remains usable over arbitrary ghost views, while semantic atom-source validity also
+requires a well-formed decoded source; downstream proofs can recover that obligation instead of
+silently laundering forged decoded views. Lexical atomization does not replace context-sensitive
+token formation: indentation, comments, directives, document markers, flow delimiters, and plain,
+quoted, and block scalar boundaries remain mandatory verified lexer behavior.
 
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
