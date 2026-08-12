@@ -15,6 +15,193 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_flow_mapping_completion_is_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 3,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let token0 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowMappingStart,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let token1 = CompletedTokenView {
+            kind: CompletedTokenKind::ExplicitMappingKey,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            ..token0
+        };
+        let token2 = CompletedTokenView {
+            kind: CompletedTokenKind::MappingValue,
+            start_atom_index: 2,
+            end_atom_index: 3,
+            byte_start: 2,
+            byte_end: 3,
+            ..token0
+        };
+        let token3 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowEntry,
+            start_atom_index: 3,
+            end_atom_index: 4,
+            byte_start: 3,
+            byte_end: 4,
+            ..token0
+        };
+        let token4 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowMappingEnd,
+            start_atom_index: 4,
+            end_atom_index: 5,
+            byte_start: 4,
+            byte_end: 5,
+            ..token0
+        };
+        let tokens = Seq::empty().push(token0).push(token1).push(token2).push(token3).push(token4);
+        let empty0 = CstNodeView {
+            kind: CstNodeKind::Empty,
+            style: CstNodeStyle::Empty,
+            token_start: 1,
+            token_end: 1,
+            byte_start: 1,
+            byte_end: 1,
+            anchor_property_token: None,
+            tag_property_token: None,
+            scalar_or_alias_token: None,
+            collection_start_token: None,
+            collection_end_token: None,
+            entry_start: 0,
+            entry_end: 0,
+            empty_anchor_token: Some(1),
+            empty_anchor_byte: Some(1),
+        };
+        let empty1 = CstNodeView {
+            token_start: 2,
+            token_end: 2,
+            byte_start: 2,
+            byte_end: 2,
+            empty_anchor_token: Some(2),
+            empty_anchor_byte: Some(2),
+            ..empty0
+        };
+        let empty_builder = crucible_yaml::cst::cst_empty_builder_spec(5, limits, 5);
+        let initial = crucible_yaml::cst::CstBuilderView {
+            nodes: Seq::empty().push(empty0).push(empty1),
+            ..empty_builder
+        };
+        let mapping_entry = CstMappingEntryView {
+            key_node_index: 0,
+            value_node_index: 1,
+            token_start: 1,
+            token_end: 3,
+            explicit_key_token: Some(1),
+            mapping_value_token: Some(2),
+        };
+        let base = crucible_yaml::cst::cst_node_task_spec(0, 5, false, 1);
+        let task = crucible_yaml::cst::ParseTaskView {
+            kind: crucible_yaml::cst::ParseTaskKind::FlowMapping,
+            cursor: 5,
+            opener: 0,
+            pending_mapping: Seq::empty().push(mapping_entry),
+            flow_entry_tokens: Seq::empty().push(3),
+            ..base
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_finish_iterative_mapping_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_push_mapping_entries_from_spec, 3);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_flow_entries_from_spec, 3);
+        reveal(crucible_yaml::cst::cst_push_mapping_entry_spec);
+        reveal(crucible_yaml::cst::cst_claim_mapping_entry_references_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let result = crucible_yaml::cst::cst_finish_iterative_mapping_spec(
+            tokens,
+            task,
+            Some(4),
+            initial,
+        );
+        assert(result.is_ok());
+        let (built, parsed) = match result {
+            Ok(value) => value,
+            Err(_) => (
+                initial,
+                crucible_yaml::cst::ParsedNodeView { node_index: 99, next_token: 99 },
+            ),
+        };
+        assert(parsed.node_index == 2 && parsed.next_token == 5);
+        assert(built.mapping_entries == Seq::empty().push(mapping_entry));
+        assert(built.nodes.len() == 3);
+        let node = built.nodes[2];
+        assert(node.kind == CstNodeKind::Mapping && node.style == CstNodeStyle::Flow);
+        assert(node.token_start == 0 && node.token_end == 5);
+        assert(node.byte_start == 0 && node.byte_end == 5);
+        assert(node.collection_start_token == Some(0));
+        assert(node.collection_end_token == Some(4));
+        assert(node.entry_start == 0 && node.entry_end == 1);
+        assert(built.syntax_owner_slots[0] == Some(
+            CstSyntaxOwnerView {
+                token_index: 0,
+                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                record_index: 2,
+            },
+        ));
+        assert(built.syntax_owner_slots[1] == Some(
+            CstSyntaxOwnerView {
+                token_index: 1,
+                kind: CstSyntaxOwnerKind::MappingEntryIndicator,
+                record_index: 0,
+            },
+        ));
+        assert(built.syntax_owner_slots[2] == Some(
+            CstSyntaxOwnerView {
+                token_index: 2,
+                kind: CstSyntaxOwnerKind::MappingEntryIndicator,
+                record_index: 0,
+            },
+        ));
+        assert(built.syntax_owner_slots[3] == Some(
+            CstSyntaxOwnerView {
+                token_index: 3,
+                kind: CstSyntaxOwnerKind::FlowEntryIndicator,
+                record_index: 2,
+            },
+        ));
+        assert(built.syntax_owner_slots[4] == Some(
+            CstSyntaxOwnerView {
+                token_index: 4,
+                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                record_index: 2,
+            },
+        ));
+        assert(crucible_yaml::cst::cst_finish_iterative_mapping_spec(tokens, task, Some(5), initial)
+            == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_flow_sequence_completion_is_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {
