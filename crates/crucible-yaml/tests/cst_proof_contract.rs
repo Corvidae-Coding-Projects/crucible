@@ -119,6 +119,43 @@ fn pure_parser_fuel_initialization_and_consumption_are_exact() {
 }
 
 #[test]
+fn pure_parser_frame_state_domains_and_updates_are_exact() {
+    proof {
+        let base = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4);
+        let flow = crucible_yaml::cst::ParseTaskView {
+            kind: crucible_yaml::cst::ParseTaskKind::FlowSequence,
+            ..base
+        };
+        reveal(crucible_yaml::cst::cst_parse_task_state_is_valid_spec);
+        reveal(crucible_yaml::cst::cst_task_set_state_spec);
+        assert(crucible_yaml::cst::cst_parse_task_state_is_valid_spec(
+            crucible_yaml::cst::ParseTaskKind::Node,
+            0,
+        ));
+        assert(!crucible_yaml::cst::cst_parse_task_state_is_valid_spec(
+            crucible_yaml::cst::ParseTaskKind::Node,
+            1,
+        ));
+        assert(crucible_yaml::cst::cst_parse_task_state_is_valid_spec(
+            crucible_yaml::cst::ParseTaskKind::FlowSequence,
+            4,
+        ));
+        assert(!crucible_yaml::cst::cst_parse_task_state_is_valid_spec(
+            crucible_yaml::cst::ParseTaskKind::FlowSequence,
+            5,
+        ));
+        assert(crucible_yaml::cst::cst_parse_task_state_is_valid_spec(
+            crucible_yaml::cst::ParseTaskKind::BlockMapping,
+            6,
+        ));
+        let resumed = crucible_yaml::cst::cst_task_set_state_spec(flow, 4);
+        assert(resumed.state == 4);
+        assert(resumed.kind == flow.kind && resumed.cursor == flow.cursor);
+        assert(resumed.pending_sequence == flow.pending_sequence);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

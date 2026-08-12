@@ -7335,6 +7335,34 @@ impl View for ParseTask {
     }
 }
 
+pub open spec fn cst_parse_task_state_is_valid_spec(kind: ParseTaskKind, state: u8) -> bool {
+    match kind {
+        ParseTaskKind::Node => state == 0,
+        ParseTaskKind::FlowSequence => state <= 4,
+        ParseTaskKind::FlowMapping => state <= 4,
+        ParseTaskKind::BlockSequence => state <= 2,
+        ParseTaskKind::BlockMapping => state <= 6,
+    }
+}
+
+pub open spec fn cst_task_set_state_spec(task: ParseTaskView, state: u8) -> ParseTaskView {
+    ParseTaskView { state, ..task }
+}
+
+fn task_set_state(task: &mut ParseTask, state: u8)
+    requires
+        cst_parse_task_state_is_valid_spec(old(task)@.kind, state),
+    ensures
+        final(task)@ == cst_task_set_state_spec(old(task)@, state),
+        cst_parse_task_state_is_valid_spec(final(task)@.kind, final(task)@.state),
+{
+    task.state = state;
+    proof {
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_task_set_state_spec);
+    }
+}
+
 pub open spec fn cst_parse_task_views_spec(tasks: Seq<ParseTask>) -> Seq<ParseTaskView> {
     tasks.map_values(|task: ParseTask| task@)
 }
@@ -9049,12 +9077,12 @@ fn parse_node_iterative(
                         Ok(node) => node,
                         Err(error) => return Err(error),
                     };
-                    task.state = 2;
+                    task_set_state(&mut task, 2);
                     resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
-                    task.state = 1;
+                    task_set_state(&mut task, 1);
                     resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
@@ -9077,7 +9105,7 @@ fn parse_node_iterative(
                 }
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
-                task.state = 2;
+                task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9144,12 +9172,12 @@ fn parse_node_iterative(
                             },
                             &mut task,
                         );
-                        task.state = 4;
+                        task_set_state(&mut task, 4);
                         resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
-                        task.state = 3;
+                        task_set_state(&mut task, 3);
                         resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
@@ -9194,7 +9222,7 @@ fn parse_node_iterative(
                         },
                         &mut task,
                     );
-                    task.state = 4;
+                    task_set_state(&mut task, 4);
                     resume_parse_task(&mut tasks, task);
                 }
                 continue;
@@ -9237,7 +9265,7 @@ fn parse_node_iterative(
                     },
                     &mut task,
                 );
-                task.state = 4;
+                task_set_state(&mut task, 4);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9274,7 +9302,7 @@ fn parse_node_iterative(
                     ),
                 );
             }
-            task.state = 0;
+            task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
         }
@@ -9319,12 +9347,12 @@ fn parse_node_iterative(
                         Ok(node) => node,
                         Err(error) => return Err(error),
                     };
-                    task.state = 2;
+                    task_set_state(&mut task, 2);
                     resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
-                    task.state = 1;
+                    task_set_state(&mut task, 1);
                     resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
@@ -9347,7 +9375,7 @@ fn parse_node_iterative(
                 }
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
-                task.state = 2;
+                task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9390,12 +9418,12 @@ fn parse_node_iterative(
                             },
                             &mut task,
                         );
-                        task.state = 4;
+                        task_set_state(&mut task, 4);
                         resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
-                        task.state = 3;
+                        task_set_state(&mut task, 3);
                         resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
@@ -9426,7 +9454,7 @@ fn parse_node_iterative(
                         },
                         &mut task,
                     );
-                    task.state = 4;
+                    task_set_state(&mut task, 4);
                     resume_parse_task(&mut tasks, task);
                 }
                 continue;
@@ -9455,7 +9483,7 @@ fn parse_node_iterative(
                     },
                     &mut task,
                 );
-                task.state = 4;
+                task_set_state(&mut task, 4);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9492,7 +9520,7 @@ fn parse_node_iterative(
                     ),
                 );
             }
-            task.state = 0;
+            task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
         }
@@ -9547,7 +9575,7 @@ fn parse_node_iterative(
                         },
                         &mut task,
                     );
-                    task.state = 2;
+                    task_set_state(&mut task, 2);
                     resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
@@ -9562,7 +9590,7 @@ fn parse_node_iterative(
                         None => task.end,
                     };
                     let child = node_task(task.cursor, child_end, true, task.depth_left);
-                    task.state = 1;
+                    task_set_state(&mut task, 1);
                     resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
@@ -9597,14 +9625,14 @@ fn parse_node_iterative(
                     },
                     &mut task,
                 );
-                task.state = 2;
+                task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
                 task.cursor = next;
-                task.state = 0;
+                task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9612,7 +9640,7 @@ fn parse_node_iterative(
             if tokens[next].kind() == CompletedTokenKind::BlockSequenceEntry && next_column
                 == task.indentation {
                 task.cursor = next;
-                task.state = 0;
+                task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9622,7 +9650,7 @@ fn parse_node_iterative(
                 );
             }
             task.cursor = next;
-            task.state = 0;
+            task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
         }
@@ -9693,7 +9721,7 @@ fn parse_node_iterative(
                             Ok(node) => node,
                             Err(error) => return Err(error),
                         };
-                        task.state = 5;
+                        task_set_state(&mut task, 5);
                         resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
@@ -9709,7 +9737,7 @@ fn parse_node_iterative(
                             allow_block_collection,
                             task.depth_left,
                         );
-                        task.state = 4;
+                        task_set_state(&mut task, 4);
                         resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
@@ -9728,7 +9756,7 @@ fn parse_node_iterative(
                         Ok(node) => node,
                         Err(error) => return Err(error),
                     };
-                    task.state = 2;
+                    task_set_state(&mut task, 2);
                     resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
@@ -9744,7 +9772,7 @@ fn parse_node_iterative(
                         allow_block_collection,
                         task.depth_left,
                     );
-                    task.state = 1;
+                    task_set_state(&mut task, 1);
                     resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
@@ -9772,7 +9800,7 @@ fn parse_node_iterative(
                     );
                 }
                 task.key_node_index = child.node_index;
-                task.state = 2;
+                task_set_state(&mut task, 2);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9818,7 +9846,7 @@ fn parse_node_iterative(
                         },
                         &mut task,
                     );
-                    task.state = 6;
+                    task_set_state(&mut task, 6);
                     resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
@@ -9844,7 +9872,7 @@ fn parse_node_iterative(
                         allow_block_collection,
                         task.depth_left,
                     );
-                    task.state = 3;
+                    task_set_state(&mut task, 3);
                     resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
@@ -9886,7 +9914,7 @@ fn parse_node_iterative(
                     },
                     &mut task,
                 );
-                task.state = 6;
+                task_set_state(&mut task, 6);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9900,7 +9928,7 @@ fn parse_node_iterative(
                 }
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
-                task.state = 5;
+                task_set_state(&mut task, 5);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9928,7 +9956,7 @@ fn parse_node_iterative(
                     },
                     &mut task,
                 );
-                task.state = 6;
+                task_set_state(&mut task, 6);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9938,7 +9966,7 @@ fn parse_node_iterative(
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
                 task.cursor = next;
-                task.state = 0;
+                task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9950,7 +9978,7 @@ fn parse_node_iterative(
                 task.end,
             ).is_some()) {
                 task.cursor = next;
-                task.state = 0;
+                task_set_state(&mut task, 0);
                 resume_parse_task(&mut tasks, task);
                 continue;
             }
@@ -9960,7 +9988,7 @@ fn parse_node_iterative(
                 );
             }
             task.cursor = next;
-            task.state = 0;
+            task_set_state(&mut task, 0);
             resume_parse_task(&mut tasks, task);
             continue;
         }
