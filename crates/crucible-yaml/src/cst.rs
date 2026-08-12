@@ -9070,6 +9070,19 @@ pub open spec fn cst_initial_parse_fuel_spec() -> u64 {
     ((MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32) as u64
 }
 
+pub proof fn lemma_cst_initial_parse_fuel_is_positive()
+    ensures
+        cst_initial_parse_fuel_spec() > 0,
+{
+    assert(MAX_PROFILE1_COMPLETED_TOKENS == 1_048_576);
+    assert(MAX_PROFILE1_CST_DEPTH == 4_096);
+    assert(
+        (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32
+            == 137_472_639_008
+    );
+    reveal(cst_initial_parse_fuel_spec);
+}
+
 fn initial_parse_fuel() -> (fuel: u64)
     ensures
         fuel == cst_initial_parse_fuel_spec(),
@@ -9091,6 +9104,59 @@ pub open spec fn cst_initial_parse_machine_spec(
         completed: None,
         fuel: cst_initial_parse_fuel_spec(),
     }
+}
+
+pub open spec fn cst_initial_parse_machine_after_begin_spec() -> ParseMachineView {
+    ParseMachineView {
+        tasks: Seq::empty(),
+        completed: None,
+        fuel: (cst_initial_parse_fuel_spec() - 1) as u64,
+    }
+}
+
+pub proof fn lemma_cst_initial_parse_machine_begins_with_node_task(
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_left: u64,
+)
+    ensures
+        cst_machine_begin_step_spec(cst_initial_parse_machine_spec(
+            start,
+            end,
+            allow_block_mapping,
+            depth_left,
+        )) == Ok((
+            cst_initial_parse_machine_after_begin_spec(),
+            cst_node_task_spec(start, end, allow_block_mapping, depth_left),
+        )),
+{
+    lemma_cst_initial_parse_fuel_is_positive();
+    let initial = cst_initial_parse_machine_spec(
+        start,
+        end,
+        allow_block_mapping,
+        depth_left,
+    );
+    let task = cst_node_task_spec(start, end, allow_block_mapping, depth_left);
+    let after = cst_initial_parse_machine_after_begin_spec();
+    let consumed = ParseMachineView {
+        fuel: (cst_initial_parse_fuel_spec() - 1) as u64,
+        ..initial
+    };
+    reveal(cst_initial_parse_machine_spec);
+    reveal(cst_initial_parse_machine_after_begin_spec);
+    reveal(cst_initial_parse_tasks_spec);
+    reveal(cst_machine_begin_step_spec);
+    reveal(cst_machine_consume_fuel_spec);
+    reveal(cst_consume_parse_fuel_spec);
+    reveal(cst_machine_pop_task_spec);
+    reveal(cst_pop_parse_task_spec);
+    assert(initial.tasks == Seq::empty().push(task));
+    assert(cst_consume_parse_fuel_spec(initial.fuel) == Ok(after.fuel));
+    assert(cst_machine_consume_fuel_spec(initial) == Ok(consumed));
+    assert(cst_pop_parse_task_spec(consumed.tasks) == Some((Seq::empty(), task)));
+    assert(cst_machine_pop_task_spec(consumed) == Some((after, task)));
 }
 
 fn initial_parse_machine(
@@ -9191,6 +9257,25 @@ pub open spec fn cst_machine_begin_step_spec(machine: ParseMachineView) -> Resul
         },
         Err(error) => Err(error),
     }
+}
+
+pub proof fn lemma_cst_machine_begin_step_strict_progress(
+    machine: ParseMachineView,
+    next: ParseMachineView,
+    task: ParseTaskView,
+)
+    requires
+        cst_machine_begin_step_spec(machine) == Ok((next, task)),
+    ensures
+        next.fuel < machine.fuel,
+        next.fuel + 1 == machine.fuel,
+        next.tasks.len() + 1 == machine.tasks.len(),
+{
+    reveal(cst_machine_begin_step_spec);
+    reveal(cst_machine_consume_fuel_spec);
+    reveal(cst_consume_parse_fuel_spec);
+    reveal(cst_machine_pop_task_spec);
+    reveal(cst_pop_parse_task_spec);
 }
 
 pub open spec fn cst_machine_finish_spec(
@@ -10860,6 +10945,7 @@ pub open spec fn cst_step_block_mapping_state_zero_spec(
     }
 }
 
+#[verifier::opaque]
 pub open spec fn cst_dispatch_parse_task_spec(
     atoms: Seq<crate::atom::LexicalAtomView>,
     tokens: Seq<crate::token::CompletedTokenView>,
@@ -10996,6 +11082,495 @@ pub open spec fn cst_dispatch_parse_task_spec(
             }
         },
     }
+}
+
+pub closed spec fn cst_parse_node_iterative_from_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView>
+    decreases fuel,
+{
+    if start > end || end > tokens.len() || depth_limit > MAX_PROFILE1_CST_DEPTH {
+        Err(cst_step_node_internal_error_spec())
+    } else if machine.tasks.len() == 0 {
+        match cst_machine_finish_spec(machine, start, end, builder.nodes.len() as u64) {
+            Ok(parsed) => Ok((builder, parsed)),
+            Err(error) => Err(error),
+        }
+    } else if fuel == 0 {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        match cst_parse_node_iteration_spec(
+            atoms,
+            tokens,
+            machine,
+            builder,
+            depth_limit,
+        ) {
+            Err(error) => Err(error),
+            Ok((next_machine, next_builder)) => cst_parse_node_iterative_from_spec(
+                atoms,
+                tokens,
+                start,
+                end,
+                depth_limit,
+                next_machine,
+                next_builder,
+                (fuel - 1) as nat,
+            ),
+        }
+    }
+}
+
+pub open spec fn cst_parse_node_iteration_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    match cst_machine_begin_step_spec(machine) {
+        Err(error) => Err(error),
+        Ok((stepped, task)) => cst_dispatch_parse_task_spec(
+            atoms,
+            tokens,
+            task,
+            stepped,
+            builder,
+            depth_limit,
+        ),
+    }
+}
+
+pub open spec fn cst_parse_node_iterative_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_limit: u64,
+    builder: CstBuilderView,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    cst_parse_node_iterative_from_spec(
+        atoms,
+        tokens,
+        start,
+        end,
+        depth_limit,
+        cst_initial_parse_machine_spec(start, end, allow_block_mapping, depth_limit),
+        builder,
+        cst_initial_parse_fuel_spec() as nat + 1,
+    )
+}
+
+pub proof fn lemma_cst_parse_node_iterative_unfold_terminal(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() == 0,
+    ensures
+        cst_parse_node_iterative_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ) == match cst_machine_finish_spec(
+            machine,
+            start,
+            end,
+            builder.nodes.len() as u64,
+        ) {
+            Ok(parsed) => Ok((builder, parsed)),
+            Err(error) => Err(error),
+        },
+{
+    reveal(cst_parse_node_iterative_from_spec);
+}
+
+pub proof fn lemma_cst_parse_node_iterative_unfold_success(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+    next_machine: ParseMachineView,
+    next_builder: CstBuilderView,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() > 0,
+        fuel > 0,
+        cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok((
+            next_machine,
+            next_builder,
+        )),
+    ensures
+        cst_parse_node_iterative_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ) == cst_parse_node_iterative_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            next_machine,
+            next_builder,
+            (fuel - 1) as nat,
+        ),
+{
+    reveal(cst_parse_node_iterative_from_spec);
+}
+
+pub proof fn lemma_cst_parse_node_iterative_unfold_error(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+    error: CstErrorView,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() > 0,
+        fuel > 0,
+        cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Err(error),
+    ensures
+        cst_parse_node_iterative_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ) == Err(error),
+{
+    reveal(cst_parse_node_iterative_from_spec);
+}
+
+pub proof fn lemma_cst_parse_node_iterative_fuel_exhausted(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() > 0,
+    ensures
+        cst_parse_node_iterative_from_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            0,
+        ) == Err(cst_step_node_internal_error_spec()),
+{
+    reveal(cst_parse_node_iterative_from_spec);
+}
+
+pub proof fn lemma_cst_parse_node_iterative_is_deterministic(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_limit: u64,
+    builder: CstBuilderView,
+    left: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+    right: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+)
+    requires
+        left == cst_parse_node_iterative_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            allow_block_mapping,
+            depth_limit,
+            builder,
+        ),
+        right == cst_parse_node_iterative_spec(
+            atoms,
+            tokens,
+            start,
+            end,
+            allow_block_mapping,
+            depth_limit,
+            builder,
+        ),
+    ensures
+        left == right,
+{
+}
+
+closed spec fn cst_parse_node_remaining_matches_spec(
+    expected: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+) -> bool {
+    expected == cst_parse_node_iterative_from_spec(
+        atoms,
+        tokens,
+        start,
+        end,
+        depth_limit,
+        machine,
+        builder,
+        fuel,
+    )
+}
+
+proof fn lemma_cst_parse_node_remaining_initial(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_limit: u64,
+    builder: CstBuilderView,
+)
+    ensures
+        cst_parse_node_remaining_matches_spec(
+            cst_parse_node_iterative_spec(
+                atoms,
+                tokens,
+                start,
+                end,
+                allow_block_mapping,
+                depth_limit,
+                builder,
+            ),
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            cst_initial_parse_machine_spec(
+                start,
+                end,
+                allow_block_mapping,
+                depth_limit,
+            ),
+            builder,
+            cst_initial_parse_fuel_spec() as nat + 1,
+        ),
+{
+    reveal(cst_parse_node_remaining_matches_spec);
+    reveal(cst_parse_node_iterative_spec);
+}
+
+proof fn lemma_cst_parse_node_remaining_terminal(
+    expected: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() == 0,
+        cst_parse_node_remaining_matches_spec(
+            expected,
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ),
+    ensures
+        expected == match cst_machine_finish_spec(
+            machine,
+            start,
+            end,
+            builder.nodes.len() as u64,
+        ) {
+            Ok(parsed) => Ok((builder, parsed)),
+            Err(error) => Err(error),
+        },
+{
+    reveal(cst_parse_node_remaining_matches_spec);
+    lemma_cst_parse_node_iterative_unfold_terminal(
+        atoms,
+        tokens,
+        start,
+        end,
+        depth_limit,
+        machine,
+        builder,
+        fuel,
+    );
+}
+
+proof fn lemma_cst_parse_node_remaining_success(
+    expected: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+    iteration: Result<(ParseMachineView, CstBuilderView), CstErrorView>,
+    next_machine: ParseMachineView,
+    next_builder: CstBuilderView,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() > 0,
+        fuel > 0,
+        cst_parse_node_remaining_matches_spec(
+            expected,
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ),
+        iteration == cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit),
+        iteration == Ok((next_machine, next_builder)),
+    ensures
+        cst_parse_node_remaining_matches_spec(
+            expected,
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            next_machine,
+            next_builder,
+            (fuel - 1) as nat,
+        ),
+{
+    assert(cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Ok((
+        next_machine,
+        next_builder,
+    )));
+    reveal(cst_parse_node_remaining_matches_spec);
+    lemma_cst_parse_node_iterative_unfold_success(
+        atoms,
+        tokens,
+        start,
+        end,
+        depth_limit,
+        machine,
+        builder,
+        fuel,
+        next_machine,
+        next_builder,
+    );
+}
+
+proof fn lemma_cst_parse_node_remaining_error(
+    expected: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    start: u64,
+    end: u64,
+    depth_limit: u64,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    fuel: nat,
+    iteration: Result<(ParseMachineView, CstBuilderView), CstErrorView>,
+    error: CstErrorView,
+)
+    requires
+        start <= end <= tokens.len(),
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        machine.tasks.len() > 0,
+        fuel > 0,
+        cst_parse_node_remaining_matches_spec(
+            expected,
+            atoms,
+            tokens,
+            start,
+            end,
+            depth_limit,
+            machine,
+            builder,
+            fuel,
+        ),
+        iteration == cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit),
+        iteration == Err(error),
+    ensures
+        expected == Err(error),
+{
+    assert(cst_parse_node_iteration_spec(atoms, tokens, machine, builder, depth_limit) == Err(
+        error,
+    ));
+    reveal(cst_parse_node_remaining_matches_spec);
+    lemma_cst_parse_node_iterative_unfold_error(
+        atoms,
+        tokens,
+        start,
+        end,
+        depth_limit,
+        machine,
+        builder,
+        fuel,
+        error,
+    );
 }
 
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
@@ -11204,6 +11779,7 @@ fn machine_begin_step(machine: &mut ParseMachine) -> (result: Result<ParseTask, 
             Err(error) => Err(error@),
         },
         result.is_ok() ==> final(machine)@.fuel < old(machine)@.fuel,
+        result.is_ok() ==> final(machine)@.fuel + 1 == old(machine)@.fuel,
         result.is_ok() ==> final(machine).tasks.len() + 1 == old(machine).tasks.len(),
         cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
             ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
@@ -14742,11 +15318,15 @@ fn dispatch_parse_task(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
     task: ParseTask,
+    Ghost(machine_view): Ghost<ParseMachineView>,
+    Ghost(builder_view): Ghost<CstBuilderView>,
     machine: &mut ParseMachine,
     builder: &mut CstBuilder,
     depth_limit: u64,
 ) -> (result: Result<(), CstError>)
     requires
+        machine_view == old(machine)@,
+        builder_view == old(builder)@,
         cst_parse_task_is_valid_spec(task@),
         task.cursor <= task.end,
         task.token_start <= task.end,
@@ -14757,8 +15337,8 @@ fn dispatch_parse_task(
             crate::atom::lexical_atom_views_spec(atoms@),
             crate::token::completed_token_views_spec(tokens@),
             task@,
-            old(machine)@,
-            old(builder)@,
+            machine_view,
+            builder_view,
             depth_limit,
         ) == match result {
             Ok(()) => Ok((final(machine)@, final(builder)@)),
@@ -15073,7 +15653,7 @@ fn dispatch_parse_task(
     result
 }
 
-#[verifier::rlimit(500)]
+#[verifier::rlimit(600)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -15081,45 +15661,267 @@ fn parse_node_iterative(
     end: usize,
     allow_block_mapping: bool,
     depth_limit: u64,
-    builder: &mut CstBuilder,
-) -> (result: Result<ParsedNode, CstError>)
+    Ghost(builder_view): Ghost<CstBuilderView>,
+    builder: CstBuilder,
+) -> (result: Result<(CstBuilder, ParsedNode), CstError>)
     requires
         start <= end <= tokens.len(),
         end <= MAX_PROFILE1_COMPLETED_TOKENS,
         depth_limit <= MAX_PROFILE1_CST_DEPTH,
+        builder_view == builder@,
     ensures
-        result.is_ok() ==> result.unwrap().node_index < final(builder).nodes.len(),
-        result.is_ok() ==> start <= result.unwrap().next_token <= end,
-        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_parse_node_iterative_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            start as u64,
+            end as u64,
+            allow_block_mapping,
+            depth_limit,
+            builder_view,
+        ) == match result {
+            Ok((next_builder, parsed)) => Ok((next_builder@, parsed@)),
+            Err(error) => Err(error@),
+        },
+        result.is_ok() ==> result.unwrap().1.node_index < result.unwrap().0.nodes.len(),
+        result.is_ok() ==> start <= result.unwrap().1.next_token <= end,
+        result.is_ok() ==> result.unwrap().0.syntax_owner_slots.len()
+            == builder_view.syntax_owner_slots.len(),
 {
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost initial_builder = builder_view;
+    let ghost expected = cst_parse_node_iterative_spec(
+        atom_views,
+        token_views,
+        start as u64,
+        end as u64,
+        allow_block_mapping,
+        depth_limit,
+        initial_builder,
+    );
+    let mut working_builder = builder;
     let mut machine = initial_parse_machine(start, end, allow_block_mapping, depth_limit);
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        lemma_cst_parse_node_remaining_initial(
+            atom_views,
+            token_views,
+            start as u64,
+            end as u64,
+            allow_block_mapping,
+            depth_limit,
+            initial_builder,
+        );
+    }
     loop
         invariant
             depth_limit <= MAX_PROFILE1_CST_DEPTH,
+            start <= end <= token_views.len(),
+            atom_views == crate::atom::lexical_atom_views_spec(atoms@),
+            token_views == crate::token::completed_token_views_spec(tokens@),
+            token_views.len() == tokens.len(),
+            initial_builder == builder_view,
+            expected == cst_parse_node_iterative_spec(
+                atom_views,
+                token_views,
+                start as u64,
+                end as u64,
+                allow_block_mapping,
+                depth_limit,
+                initial_builder,
+            ),
             machine.tasks.len() <= depth_limit + 2,
             cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(machine.tasks@)),
-            builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+            working_builder.syntax_owner_slots.len()
+                == initial_builder.syntax_owner_slots.len(),
             machine.fuel <= (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32,
+            cst_parse_node_remaining_matches_spec(
+                expected,
+                atom_views,
+                token_views,
+                start as u64,
+                end as u64,
+                depth_limit,
+                machine@,
+                working_builder@,
+                machine@.fuel as nat + 1,
+            ),
         decreases machine.fuel,
     {
         if machine.tasks.len() == 0 {
-            return machine_finish(&machine, start, end, builder.nodes.len() as u64);
+            let result = machine_finish(
+                &machine,
+                start,
+                end,
+                working_builder.nodes.len() as u64,
+            );
+            match result {
+                Ok(parsed) => {
+                    proof {
+                        lemma_cst_parse_node_remaining_terminal(
+                            expected,
+                            atom_views,
+                            token_views,
+                            start as u64,
+                            end as u64,
+                            depth_limit,
+                            machine@,
+                            working_builder@,
+                            machine@.fuel as nat + 1,
+                        );
+                        assert(expected == Ok((working_builder@, parsed@)));
+                    }
+                    return Ok((working_builder, parsed));
+                },
+                Err(error) => {
+                    proof {
+                        lemma_cst_parse_node_remaining_terminal(
+                            expected,
+                            atom_views,
+                            token_views,
+                            start as u64,
+                            end as u64,
+                            depth_limit,
+                            machine@,
+                            working_builder@,
+                            machine@.fuel as nat + 1,
+                        );
+                        assert(expected == Err(error@));
+                    }
+                    return Err(error);
+                },
+            }
+        }
+        let ghost before_machine = machine@;
+        let ghost before_builder = working_builder@;
+        let ghost iteration = cst_parse_node_iteration_spec(
+            atom_views,
+            token_views,
+            before_machine,
+            before_builder,
+            depth_limit,
+        );
+        proof {
+            reveal(cst_parse_node_iteration_spec);
         }
         let task = match machine_begin_step(&mut machine) {
-            Ok(value) => value,
-            Err(error) => return Err(error),
+            Ok(task) => task,
+            Err(error) => {
+                proof {
+                    assert(cst_machine_begin_step_spec(before_machine) == Err(error@));
+                    assert(iteration == Err(error@));
+                    lemma_cst_parse_node_remaining_error(
+                        expected,
+                        atom_views,
+                        token_views,
+                        start as u64,
+                        end as u64,
+                        depth_limit,
+                        before_machine,
+                        before_builder,
+                        before_machine.fuel as nat + 1,
+                        iteration,
+                        error@,
+                    );
+                    assert(expected == Err(error@));
+                    assert(cst_parse_node_iterative_spec(
+                        crate::atom::lexical_atom_views_spec(atoms@),
+                        crate::token::completed_token_views_spec(tokens@),
+                        start as u64,
+                        end as u64,
+                        allow_block_mapping,
+                        depth_limit,
+                        builder_view,
+                    ) == Err(error@));
+                }
+                return Err(error);
+            },
         };
-        match dispatch_parse_task(
+        let ghost stepped_machine = machine@;
+        proof {
+            assert(cst_machine_begin_step_spec(before_machine) == Ok((stepped_machine, task@)));
+            assert(machine.tasks.len() <= depth_limit + 1);
+            assert(cst_parse_task_is_valid_spec(task@));
+        }
+        let ghost task_view = task@;
+        let ghost dispatch_expected = cst_dispatch_parse_task_spec(
+            atom_views,
+            token_views,
+            task_view,
+            stepped_machine,
+            before_builder,
+            depth_limit,
+        );
+        let dispatch_result = dispatch_parse_task(
             atoms,
             tokens,
             task,
+            Ghost(stepped_machine),
+            Ghost(before_builder),
             &mut machine,
-            builder,
+            &mut working_builder,
             depth_limit,
-        ) {
-            Ok(()) => continue,
-            Err(error) => return Err(error),
+        );
+        proof {
+            assert(dispatch_expected == match dispatch_result {
+                Ok(()) => Ok((machine@, working_builder@)),
+                Err(error) => Err(error@),
+            });
         }
+        match dispatch_result {
+            Ok(()) => {
+                proof {
+                    assert(dispatch_expected == Ok((machine@, working_builder@)));
+                    assert(iteration == Ok((machine@, working_builder@)));
+                    lemma_cst_parse_node_remaining_success(
+                        expected,
+                        atom_views,
+                        token_views,
+                        start as u64,
+                        end as u64,
+                        depth_limit,
+                        before_machine,
+                        before_builder,
+                        before_machine.fuel as nat + 1,
+                        iteration,
+                        machine@,
+                        working_builder@,
+                    );
+                    assert(before_machine.fuel as nat == machine@.fuel as nat + 1);
+                }
+            },
+            Err(error) => {
+                proof {
+                    assert(dispatch_expected == Err(error@));
+                    assert(iteration == Err(error@));
+                    lemma_cst_parse_node_remaining_error(
+                        expected,
+                        atom_views,
+                        token_views,
+                        start as u64,
+                        end as u64,
+                        depth_limit,
+                        before_machine,
+                        before_builder,
+                        before_machine.fuel as nat + 1,
+                        iteration,
+                        error@,
+                    );
+                    assert(expected == Err(error@));
+                    assert(cst_parse_node_iterative_spec(
+                        crate::atom::lexical_atom_views_spec(atoms@),
+                        crate::token::completed_token_views_spec(tokens@),
+                        start as u64,
+                        end as u64,
+                        allow_block_mapping,
+                        depth_limit,
+                        builder_view,
+                    ) == Err(error@));
+                }
+                return Err(error);
+            },
+        }
+        continue;
     }
 }
 
@@ -15438,18 +16240,21 @@ pub fn parse_profile1_cst(
                 Err(error) => return Err(error),
             }
         } else {
-            let parsed = match parse_node_iterative(
+            let ghost builder_view = builder@;
+            let (next_builder, parsed) = match parse_node_iterative(
                 atoms,
                 tokens,
                 content_start,
                 boundary,
                 true,
                 depth_limit,
-                &mut builder,
+                Ghost(builder_view),
+                builder,
             ) {
-                Ok(parsed) => parsed,
+                Ok(result) => result,
                 Err(error) => return Err(error),
             };
+            builder = next_builder;
             let remaining = skip_trivia(tokens, parsed.next_token, boundary);
             if remaining != boundary {
                 return Err(

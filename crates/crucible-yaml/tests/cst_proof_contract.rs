@@ -2438,6 +2438,162 @@ fn pure_parser_dispatch_is_exact_and_rejects_invalid_frame_states() {
 }
 
 #[test]
+fn pure_total_parser_fixes_the_complete_empty_node_result_and_fuel_error() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 4,
+        };
+        let builder = crucible_yaml::cst::cst_empty_builder_spec(0, limits, 0);
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_parse_node_iterative_spec);
+        reveal(crucible_yaml::cst::cst_initial_parse_machine_spec);
+        reveal(crucible_yaml::cst::cst_initial_parse_tasks_spec);
+        reveal(crucible_yaml::cst::cst_initial_parse_fuel_spec);
+        reveal(crucible_yaml::cst::cst_parse_node_iteration_spec);
+        reveal(crucible_yaml::cst::cst_machine_begin_step_spec);
+        reveal(crucible_yaml::cst::cst_machine_consume_fuel_spec);
+        reveal(crucible_yaml::cst::cst_consume_parse_fuel_spec);
+        reveal(crucible_yaml::cst::cst_machine_pop_task_spec);
+        reveal(crucible_yaml::cst::cst_pop_parse_task_spec);
+        reveal(crucible_yaml::cst::cst_dispatch_parse_task_spec);
+        reveal(crucible_yaml::cst::cst_validate_dispatched_task_spec);
+        reveal(crucible_yaml::cst::cst_parse_task_state_is_valid_spec);
+        reveal(crucible_yaml::cst::cst_step_node_task_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_skip_trivia_spec, 2);
+        reveal(crucible_yaml::cst::cst_step_node_store_empty_spec);
+        reveal(crucible_yaml::cst::cst_empty_node_spec);
+        reveal(crucible_yaml::cst::cst_byte_at_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_machine_store_completed_spec);
+        reveal(crucible_yaml::cst::cst_store_completed_node_spec);
+        reveal(crucible_yaml::cst::cst_machine_finish_spec);
+        reveal(crucible_yaml::cst::cst_finish_parse_node_spec);
+        let initial = crucible_yaml::cst::cst_initial_parse_machine_spec(0, 0, false, 4);
+        let task = crucible_yaml::cst::cst_node_task_spec(0, 0, false, 4);
+        let stepped = crucible_yaml::cst::cst_initial_parse_machine_after_begin_spec();
+        crucible_yaml::cst::lemma_cst_initial_parse_machine_begins_with_node_task(
+            0, 0, false, 4,
+        );
+        assert(crucible_yaml::cst::cst_machine_begin_step_spec(initial) == Ok((stepped, task)));
+        let dispatched = crucible_yaml::cst::cst_dispatch_parse_task_spec(
+            Seq::empty(),
+            Seq::empty(),
+            task,
+            stepped,
+            builder,
+            4,
+        );
+        assert(dispatched.is_ok());
+        let iteration = crucible_yaml::cst::cst_parse_node_iteration_spec(
+            Seq::empty(),
+            Seq::empty(),
+            initial,
+            builder,
+            4,
+        );
+        assert(iteration == dispatched);
+        assert(iteration.is_ok());
+        let (next_machine, next_builder) = match iteration {
+            Ok(value) => value,
+            Err(_) => (initial, builder),
+        };
+        assert(next_machine.tasks.len() == 0);
+        crucible_yaml::cst::lemma_cst_parse_node_iterative_unfold_success(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            4,
+            initial,
+            builder,
+            crucible_yaml::cst::cst_initial_parse_fuel_spec() as nat + 1,
+            next_machine,
+            next_builder,
+        );
+        crucible_yaml::cst::lemma_cst_parse_node_iterative_unfold_terminal(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            4,
+            next_machine,
+            next_builder,
+            crucible_yaml::cst::cst_initial_parse_fuel_spec() as nat,
+        );
+        let result = crucible_yaml::cst::cst_parse_node_iterative_spec(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            false,
+            4,
+            builder,
+        );
+        assert(result.is_ok());
+        let (parsed_builder, parsed) = match result {
+            Ok(value) => value,
+            Err(_) => (
+                builder,
+                crucible_yaml::cst::ParsedNodeView { node_index: 1, next_token: 1 },
+            ),
+        };
+        assert(parsed_builder.nodes.len() == 1);
+        assert(parsed_builder.nodes[0].kind == CstNodeKind::Empty);
+        assert(parsed.node_index == 0);
+        assert(parsed.next_token == 0);
+        let task = crucible_yaml::cst::cst_node_task_spec(0, 0, false, 4);
+        let exhausted = crucible_yaml::cst::ParseMachineView {
+            tasks: seq![task],
+            completed: None,
+            fuel: 0,
+        };
+        crucible_yaml::cst::lemma_cst_parse_node_iterative_fuel_exhausted(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            4,
+            exhausted,
+            builder,
+        );
+        assert(crucible_yaml::cst::cst_parse_node_iterative_from_spec(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            4,
+            exhausted,
+            builder,
+            0,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+        crucible_yaml::cst::lemma_cst_parse_node_iterative_is_deterministic(
+            Seq::empty(),
+            Seq::empty(),
+            0,
+            0,
+            false,
+            4,
+            builder,
+            result,
+            result,
+        );
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
