@@ -8567,6 +8567,28 @@ fn pop_parse_task(tasks: &mut Vec<ParseTask>) -> (result: Option<ParseTask>)
     }
 }
 
+pub open spec fn cst_resume_parse_task_spec(tasks: Seq<ParseTaskView>, task: ParseTaskView) -> Seq<
+    ParseTaskView,
+> {
+    tasks.push(task)
+}
+
+fn resume_parse_task(tasks: &mut Vec<ParseTask>, task: ParseTask)
+    ensures
+        final(tasks).len() == old(tasks).len() + 1,
+        cst_parse_task_views_spec(final(tasks)@) == cst_resume_parse_task_spec(
+            cst_parse_task_views_spec(old(tasks)@),
+            task@,
+        ),
+{
+    let ghost old_tasks = tasks@;
+    tasks.push(task);
+    proof {
+        lemma_cst_parse_task_views_push(old_tasks, task);
+        reveal(cst_resume_parse_task_spec);
+    }
+}
+
 pub open spec fn cst_push_parse_task_spec(
     tasks: Seq<ParseTaskView>,
     task: ParseTaskView,
@@ -8747,7 +8769,7 @@ fn parse_node_iterative(
                     };
                     let opened_depth = depth_limit - prior_depth_left + 1;
                     builder.observe_depth(opened_depth);
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     continue;
                 }
                 completed =
@@ -8805,7 +8827,7 @@ fn parse_node_iterative(
             };
             let opened_depth = depth_limit - prior_depth_left + 1;
             builder.observe_depth(opened_depth);
-            tasks.push(task);
+            resume_parse_task(&mut tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::FlowSequence {
@@ -8850,12 +8872,12 @@ fn parse_node_iterative(
                         Err(error) => return Err(error),
                     };
                     task.state = 2;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
                     task.state = 1;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
                         child,
@@ -8878,7 +8900,7 @@ fn parse_node_iterative(
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
                 task.state = 2;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -8945,12 +8967,12 @@ fn parse_node_iterative(
                             &mut task,
                         );
                         task.state = 4;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
                         task.state = 3;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
                             child,
@@ -8995,7 +9017,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task.state = 4;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 }
                 continue;
             }
@@ -9038,7 +9060,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task.state = 4;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.cursor >= task.end {
@@ -9075,7 +9097,7 @@ fn parse_node_iterative(
                 );
             }
             task.state = 0;
-            tasks.push(task);
+            resume_parse_task(&mut tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::FlowMapping {
@@ -9120,12 +9142,12 @@ fn parse_node_iterative(
                         Err(error) => return Err(error),
                     };
                     task.state = 2;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
                     task.state = 1;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
                         child,
@@ -9148,7 +9170,7 @@ fn parse_node_iterative(
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
                 task.state = 2;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -9191,12 +9213,12 @@ fn parse_node_iterative(
                             &mut task,
                         );
                         task.state = 4;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
                         task.state = 3;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
                             child,
@@ -9227,7 +9249,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task.state = 4;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 }
                 continue;
             }
@@ -9256,7 +9278,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task.state = 4;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.cursor >= task.end {
@@ -9293,7 +9315,7 @@ fn parse_node_iterative(
                 );
             }
             task.state = 0;
-            tasks.push(task);
+            resume_parse_task(&mut tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::BlockSequence {
@@ -9348,7 +9370,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task.state = 2;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child_end = match block_property_only_end(
@@ -9363,7 +9385,7 @@ fn parse_node_iterative(
                     };
                     let child = node_task(task.cursor, child_end, true, task.depth_left);
                     task.state = 1;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
                         child,
@@ -9398,14 +9420,14 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task.state = 2;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
                 task.cursor = next;
                 task.state = 0;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             let next_column = token_column(atoms, &tokens[next]);
@@ -9413,7 +9435,7 @@ fn parse_node_iterative(
                 == task.indentation {
                 task.cursor = next;
                 task.state = 0;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if next_column > task.indentation {
@@ -9423,7 +9445,7 @@ fn parse_node_iterative(
             }
             task.cursor = next;
             task.state = 0;
-            tasks.push(task);
+            resume_parse_task(&mut tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::BlockMapping {
@@ -9494,7 +9516,7 @@ fn parse_node_iterative(
                             Err(error) => return Err(error),
                         };
                         task.state = 5;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let allow_block_collection = block_value_allows_collection(
@@ -9510,7 +9532,7 @@ fn parse_node_iterative(
                             task.depth_left,
                         );
                         task.state = 4;
-                        tasks.push(task);
+                        resume_parse_task(&mut tasks, task);
                         if let Err(error) = push_iterative_task(
                             &mut tasks,
                             child,
@@ -9529,7 +9551,7 @@ fn parse_node_iterative(
                         Err(error) => return Err(error),
                     };
                     task.state = 2;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let allow_block_collection = task.explicit_key && block_value_allows_collection(
@@ -9545,7 +9567,7 @@ fn parse_node_iterative(
                         task.depth_left,
                     );
                     task.state = 1;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
                         child,
@@ -9573,7 +9595,7 @@ fn parse_node_iterative(
                 }
                 task.key_node_index = child.node_index;
                 task.state = 2;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -9619,7 +9641,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task.state = 6;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child_end = match block_property_only_end(
@@ -9645,7 +9667,7 @@ fn parse_node_iterative(
                         task.depth_left,
                     );
                     task.state = 3;
-                    tasks.push(task);
+                    resume_parse_task(&mut tasks, task);
                     if let Err(error) = push_iterative_task(
                         &mut tasks,
                         child,
@@ -9687,7 +9709,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task.state = 6;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.state == 4 {
@@ -9701,7 +9723,7 @@ fn parse_node_iterative(
                 task.key_node_index = child.node_index;
                 task.cursor = skip_trivia(tokens, child.next_token, task.end);
                 task.state = 5;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.state == 5 {
@@ -9729,7 +9751,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task.state = 6;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if task.entry_token_end > task.node_token_end {
@@ -9739,7 +9761,7 @@ fn parse_node_iterative(
             if next >= task.end {
                 task.cursor = next;
                 task.state = 0;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             let next_column = token_column(atoms, &tokens[next]);
@@ -9751,7 +9773,7 @@ fn parse_node_iterative(
             ).is_some()) {
                 task.cursor = next;
                 task.state = 0;
-                tasks.push(task);
+                resume_parse_task(&mut tasks, task);
                 continue;
             }
             if next_column > task.indentation {
@@ -9761,7 +9783,7 @@ fn parse_node_iterative(
             }
             task.cursor = next;
             task.state = 0;
-            tasks.push(task);
+            resume_parse_task(&mut tasks, task);
             continue;
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));

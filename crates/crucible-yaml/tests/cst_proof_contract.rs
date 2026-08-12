@@ -32,6 +32,22 @@ fn pure_parser_task_stack_initialization_and_pop_are_exact() {
 }
 
 #[test]
+fn pure_parser_parent_frame_resumption_is_exact() {
+    proof {
+        let first = crucible_yaml::cst::cst_node_task_spec(1, 9, true, 4);
+        let resumed = crucible_yaml::cst::ParseTaskView { state: 2, cursor: 5, ..first };
+        let tasks = Seq::empty().push(first);
+        reveal(crucible_yaml::cst::cst_resume_parse_task_spec);
+        assert(crucible_yaml::cst::cst_resume_parse_task_spec(tasks, resumed) == tasks.push(
+            resumed,
+        ));
+        assert(crucible_yaml::cst::cst_resume_parse_task_spec(Seq::empty(), resumed) == seq![
+            resumed,
+        ]);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
