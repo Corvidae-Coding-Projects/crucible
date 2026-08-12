@@ -7306,6 +7306,19 @@ pub struct ParseTaskView {
     pub explicit_key: bool,
 }
 
+struct ParseMachine {
+    tasks: Vec<ParseTask>,
+    completed: Option<ParsedNode>,
+    fuel: u64,
+}
+
+#[verifier::ext_equal]
+pub struct ParseMachineView {
+    pub tasks: Seq<ParseTaskView>,
+    pub completed: Option<ParsedNodeView>,
+    pub fuel: u64,
+}
+
 impl View for ParseTask {
     type V = ParseTaskView;
 
@@ -7331,6 +7344,18 @@ impl View for ParseTask {
             colon_token: self.colon_token as u64,
             node_token_end: self.node_token_end as u64,
             explicit_key: self.explicit_key,
+        }
+    }
+}
+
+impl View for ParseMachine {
+    type V = ParseMachineView;
+
+    closed spec fn view(&self) -> ParseMachineView {
+        ParseMachineView {
+            tasks: cst_parse_task_views_spec(self.tasks@),
+            completed: cst_completed_node_view_spec(self.completed),
+            fuel: self.fuel,
         }
     }
 }
@@ -9055,6 +9080,46 @@ fn initial_parse_fuel() -> (fuel: u64)
     (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32
 }
 
+pub open spec fn cst_initial_parse_machine_spec(
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_left: u64,
+) -> ParseMachineView {
+    ParseMachineView {
+        tasks: cst_initial_parse_tasks_spec(start, end, allow_block_mapping, depth_left),
+        completed: None,
+        fuel: cst_initial_parse_fuel_spec(),
+    }
+}
+
+fn initial_parse_machine(
+    start: usize,
+    end: usize,
+    allow_block_mapping: bool,
+    depth_left: u64,
+) -> (machine: ParseMachine)
+    requires
+        start <= end,
+    ensures
+        machine@ == cst_initial_parse_machine_spec(
+            start as u64,
+            end as u64,
+            allow_block_mapping,
+            depth_left,
+        ),
+        machine.tasks.len() == 1,
+        cst_parse_task_stack_is_valid_spec(machine@.tasks),
+{
+    let tasks = initial_parse_tasks(start, end, allow_block_mapping, depth_left);
+    let fuel = initial_parse_fuel();
+    let machine = ParseMachine { tasks, completed: None, fuel };
+    proof {
+        reveal(cst_initial_parse_machine_spec);
+    }
+    machine
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -9167,25 +9232,23 @@ fn parse_node_iterative(
         result.is_ok() ==> start <= result.unwrap().next_token <= end,
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
 {
-    let mut tasks = initial_parse_tasks(start, end, allow_block_mapping, depth_limit);
-    let mut completed: Option<ParsedNode> = None;
-    let mut fuel = initial_parse_fuel();
+    let mut machine = initial_parse_machine(start, end, allow_block_mapping, depth_limit);
     loop
         invariant
             depth_limit <= MAX_PROFILE1_CST_DEPTH,
-            tasks.len() <= depth_limit + 2,
-            cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(tasks@)),
+            machine.tasks.len() <= depth_limit + 2,
+            cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(machine.tasks@)),
             builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
-            fuel <= (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32,
-        decreases fuel,
+            machine.fuel <= (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32,
+        decreases machine.fuel,
     {
-        if tasks.len() == 0 {
-            return finish_parse_node(&tasks, completed, start, end, builder.nodes.len() as u64);
+        if machine.tasks.len() == 0 {
+            return finish_parse_node(&machine.tasks, machine.completed, start, end, builder.nodes.len() as u64);
         }
-        if let Err(error) = consume_parse_fuel(&mut fuel) {
+        if let Err(error) = consume_parse_fuel(&mut machine.fuel) {
             return Err(error);
         }
-        let mut task = match pop_parse_task(&mut tasks) {
+        let mut task = match pop_parse_task(&mut machine.tasks) {
             Some(value) => value,
             None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
         };
@@ -9195,7 +9258,7 @@ fn parse_node_iterative(
         if task.kind == ParseTaskKind::Node {
             let mut index = skip_trivia(tokens, task.cursor, task.end);
             if index >= task.end {
-                completed =
+                machine.completed =
                 match empty_node(builder, tokens, index) {
                     Ok(node_index) => store_completed_node(
                         ParsedNode { node_index, next_token: index },
@@ -9213,7 +9276,7 @@ fn parse_node_iterative(
             let anchor_property_token = properties.anchor_property_token;
             let tag_property_token = properties.tag_property_token;
             if index >= task.end {
-                completed =
+                machine.completed =
                 match finish_property_empty_node(
                     builder,
                     tokens,
@@ -9237,7 +9300,7 @@ fn parse_node_iterative(
                         ),
                     );
                 }
-                completed =
+                machine.completed =
                 match finish_alias_node(builder, tokens, token_start, index) {
                     Ok(parsed) => store_completed_node(parsed),
                     Err(error) => return Err(error),
@@ -9274,10 +9337,10 @@ fn parse_node_iterative(
                     };
                     let opened_depth = depth_limit - prior_depth_left + 1;
                     builder.observe_depth(opened_depth);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     continue;
                 }
-                completed =
+                machine.completed =
                 match finish_scalar_node(
                     builder,
                     tokens,
@@ -9332,7 +9395,7 @@ fn parse_node_iterative(
             };
             let opened_depth = depth_limit - prior_depth_left + 1;
             builder.observe_depth(opened_depth);
-            resume_parse_task(&mut tasks, task);
+            resume_parse_task(&mut machine.tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::FlowSequence {
@@ -9345,7 +9408,7 @@ fn parse_node_iterative(
                 }
                 if tokens[task.cursor].kind() == CompletedTokenKind::FlowSequenceEnd {
                     let closer = task.cursor;
-                    completed =
+                    machine.completed =
                     store_completed_node(
                         match finish_iterative_sequence(tokens, task, Some(closer), builder) {
                             Ok(parsed) => parsed,
@@ -9380,14 +9443,14 @@ fn parse_node_iterative(
                     };
                     task_set_key_node(key_node_index, &mut task);
                     task_set_state(&mut task, 2);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
                     task_set_state(&mut task, 1);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     if let Err(error) = push_iterative_task(
-                        &mut tasks,
+                        &mut machine.tasks,
                         child,
                         depth_limit,
                         child_offset,
@@ -9398,7 +9461,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9408,7 +9471,7 @@ fn parse_node_iterative(
                 task_set_key_node(child.node_index, &mut task);
                 task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 2);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -9475,14 +9538,14 @@ fn parse_node_iterative(
                             &mut task,
                         );
                         task_set_state(&mut task, 4);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
                         task_set_state(&mut task, 3);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                         if let Err(error) = push_iterative_task(
-                            &mut tasks,
+                            &mut machine.tasks,
                             child,
                             depth_limit,
                             child_offset,
@@ -9525,12 +9588,12 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task_set_state(&mut task, 4);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 }
                 continue;
             }
             if task.state == 3 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9568,7 +9631,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task_set_state(&mut task, 4);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.cursor >= task.end {
@@ -9578,7 +9641,7 @@ fn parse_node_iterative(
             }
             if tokens[task.cursor].kind() == CompletedTokenKind::FlowSequenceEnd {
                 let closer = task.cursor;
-                completed =
+                machine.completed =
                 store_completed_node(
                     match finish_iterative_sequence(tokens, task, Some(closer), builder) {
                         Ok(parsed) => parsed,
@@ -9605,7 +9668,7 @@ fn parse_node_iterative(
                 );
             }
             task_set_state(&mut task, 0);
-            resume_parse_task(&mut tasks, task);
+            resume_parse_task(&mut machine.tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::FlowMapping {
@@ -9618,7 +9681,7 @@ fn parse_node_iterative(
                 }
                 if tokens[task.cursor].kind() == CompletedTokenKind::FlowMappingEnd {
                     let closer = task.cursor;
-                    completed =
+                    machine.completed =
                     store_completed_node(
                         match finish_iterative_mapping(tokens, task, Some(closer), builder) {
                             Ok(parsed) => parsed,
@@ -9653,14 +9716,14 @@ fn parse_node_iterative(
                     };
                     task_set_key_node(key_node_index, &mut task);
                     task_set_state(&mut task, 2);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child = node_task(task.cursor, task.end, false, task.depth_left);
                     task_set_state(&mut task, 1);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     if let Err(error) = push_iterative_task(
-                        &mut tasks,
+                        &mut machine.tasks,
                         child,
                         depth_limit,
                         child_offset,
@@ -9671,7 +9734,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9681,7 +9744,7 @@ fn parse_node_iterative(
                 task_set_key_node(child.node_index, &mut task);
                 task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 2);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -9724,14 +9787,14 @@ fn parse_node_iterative(
                             &mut task,
                         );
                         task_set_state(&mut task, 4);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let child = node_task(task.cursor, task.end, false, task.depth_left);
                         task_set_state(&mut task, 3);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                         if let Err(error) = push_iterative_task(
-                            &mut tasks,
+                            &mut machine.tasks,
                             child,
                             depth_limit,
                             child_offset,
@@ -9760,12 +9823,12 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task_set_state(&mut task, 4);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 }
                 continue;
             }
             if task.state == 3 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9789,7 +9852,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task_set_state(&mut task, 4);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.cursor >= task.end {
@@ -9799,7 +9862,7 @@ fn parse_node_iterative(
             }
             if tokens[task.cursor].kind() == CompletedTokenKind::FlowMappingEnd {
                 let closer = task.cursor;
-                completed =
+                machine.completed =
                 store_completed_node(
                     match finish_iterative_mapping(tokens, task, Some(closer), builder) {
                         Ok(parsed) => parsed,
@@ -9826,7 +9889,7 @@ fn parse_node_iterative(
                 );
             }
             task_set_state(&mut task, 0);
-            resume_parse_task(&mut tasks, task);
+            resume_parse_task(&mut machine.tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::BlockSequence {
@@ -9845,7 +9908,7 @@ fn parse_node_iterative(
                             ),
                         );
                     }
-                    completed =
+                    machine.completed =
                     store_completed_node(
                         match finish_iterative_sequence(tokens, task, None, builder) {
                             Ok(parsed) => parsed,
@@ -9880,7 +9943,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task_set_state(&mut task, 2);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child_end = match block_property_only_end(
@@ -9895,9 +9958,9 @@ fn parse_node_iterative(
                     };
                     let child = node_task(task.cursor, child_end, true, task.depth_left);
                     task_set_state(&mut task, 1);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     if let Err(error) = push_iterative_task(
-                        &mut tasks,
+                        &mut machine.tasks,
                         child,
                         depth_limit,
                         child_offset,
@@ -9908,7 +9971,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -9928,14 +9991,14 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task_set_state(&mut task, 2);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             let next = skip_trivia(tokens, task.cursor, task.end);
             if next >= task.end {
                 task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             let next_column = token_column(atoms, &tokens[next]);
@@ -9943,7 +10006,7 @@ fn parse_node_iterative(
                 == task.indentation {
                 task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if next_column > task.indentation {
@@ -9953,7 +10016,7 @@ fn parse_node_iterative(
             }
             task_set_cursor(next, &mut task);
             task_set_state(&mut task, 0);
-            resume_parse_task(&mut tasks, task);
+            resume_parse_task(&mut machine.tasks, task);
             continue;
         }
         if task.kind == ParseTaskKind::BlockMapping {
@@ -9969,7 +10032,7 @@ fn parse_node_iterative(
                             ),
                         );
                     }
-                    completed =
+                    machine.completed =
                     store_completed_node(
                         match finish_iterative_mapping(tokens, task, None, builder) {
                             Ok(parsed) => parsed,
@@ -10007,7 +10070,7 @@ fn parse_node_iterative(
                                 ),
                             );
                         }
-                        completed =
+                        machine.completed =
                         store_completed_node(
                             match finish_iterative_mapping(tokens, task, None, builder) {
                                 Ok(parsed) => parsed,
@@ -10027,7 +10090,7 @@ fn parse_node_iterative(
                         };
                         task_set_key_node(key_node_index, &mut task);
                         task_set_state(&mut task, 5);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                     } else {
                         let child_offset = tokens[task.cursor].byte_start();
                         let allow_block_collection = block_value_allows_collection(
@@ -10043,9 +10106,9 @@ fn parse_node_iterative(
                             task.depth_left,
                         );
                         task_set_state(&mut task, 4);
-                        resume_parse_task(&mut tasks, task);
+                        resume_parse_task(&mut machine.tasks, task);
                         if let Err(error) = push_iterative_task(
-                            &mut tasks,
+                            &mut machine.tasks,
                             child,
                             depth_limit,
                             child_offset,
@@ -10063,7 +10126,7 @@ fn parse_node_iterative(
                     };
                     task_set_key_node(key_node_index, &mut task);
                     task_set_state(&mut task, 2);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let allow_block_collection = task.explicit_key && block_value_allows_collection(
@@ -10079,9 +10142,9 @@ fn parse_node_iterative(
                         task.depth_left,
                     );
                     task_set_state(&mut task, 1);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     if let Err(error) = push_iterative_task(
-                        &mut tasks,
+                        &mut machine.tasks,
                         child,
                         depth_limit,
                         child_offset,
@@ -10092,7 +10155,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 1 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -10107,7 +10170,7 @@ fn parse_node_iterative(
                 }
                 task_set_key_node(child.node_index, &mut task);
                 task_set_state(&mut task, 2);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.state == 2 {
@@ -10154,7 +10217,7 @@ fn parse_node_iterative(
                         &mut task,
                     );
                     task_set_state(&mut task, 6);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                 } else {
                     let child_offset = tokens[task.cursor].byte_start();
                     let child_end = match block_property_only_end(
@@ -10180,9 +10243,9 @@ fn parse_node_iterative(
                         task.depth_left,
                     );
                     task_set_state(&mut task, 3);
-                    resume_parse_task(&mut tasks, task);
+                    resume_parse_task(&mut machine.tasks, task);
                     if let Err(error) = push_iterative_task(
-                        &mut tasks,
+                        &mut machine.tasks,
                         child,
                         depth_limit,
                         child_offset,
@@ -10193,7 +10256,7 @@ fn parse_node_iterative(
                 continue;
             }
             if task.state == 3 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -10223,11 +10286,11 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task_set_state(&mut task, 6);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.state == 4 {
-                let child = match take_completed_node(&mut completed) {
+                let child = match take_completed_node(&mut machine.completed) {
                     Some(parsed) => parsed,
                     None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
                 };
@@ -10237,7 +10300,7 @@ fn parse_node_iterative(
                 task_set_key_node(child.node_index, &mut task);
                 task_set_cursor(skip_trivia(tokens, child.next_token, task.end), &mut task);
                 task_set_state(&mut task, 5);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if task.state == 5 {
@@ -10266,7 +10329,7 @@ fn parse_node_iterative(
                     &mut task,
                 );
                 task_set_state(&mut task, 6);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             task_extend_node_end(task.entry_token_end, &mut task);
@@ -10274,7 +10337,7 @@ fn parse_node_iterative(
             if next >= task.end {
                 task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             let next_column = token_column(atoms, &tokens[next]);
@@ -10286,7 +10349,7 @@ fn parse_node_iterative(
             ).is_some()) {
                 task_set_cursor(next, &mut task);
                 task_set_state(&mut task, 0);
-                resume_parse_task(&mut tasks, task);
+                resume_parse_task(&mut machine.tasks, task);
                 continue;
             }
             if next_column > task.indentation {
@@ -10296,7 +10359,7 @@ fn parse_node_iterative(
             }
             task_set_cursor(next, &mut task);
             task_set_state(&mut task, 0);
-            resume_parse_task(&mut tasks, task);
+            resume_parse_task(&mut machine.tasks, task);
             continue;
         }
         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));

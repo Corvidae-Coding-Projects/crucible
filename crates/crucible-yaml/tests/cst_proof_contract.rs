@@ -229,6 +229,19 @@ fn pure_parser_stack_rejects_invalid_frames_and_preserves_valid_ones() {
 }
 
 #[test]
+fn pure_parser_machine_initialization_is_exact() {
+    proof {
+        reveal(crucible_yaml::cst::cst_initial_parse_machine_spec);
+        let machine = crucible_yaml::cst::cst_initial_parse_machine_spec(1, 8, true, 4);
+        assert(machine.tasks == crucible_yaml::cst::cst_initial_parse_tasks_spec(1, 8, true, 4));
+        assert(machine.completed.is_none());
+        assert(machine.fuel == crucible_yaml::cst::cst_initial_parse_fuel_spec());
+        crucible_yaml::cst::lemma_cst_initial_parse_tasks_are_valid(1, 8, true, 4);
+        assert(crucible_yaml::cst::cst_parse_task_stack_is_valid_spec(machine.tasks));
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
