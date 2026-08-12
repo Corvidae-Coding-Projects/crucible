@@ -5583,6 +5583,321 @@ fn empty_node(builder: &mut CstBuilder, tokens: &[CompletedToken], anchor: usize
     result
 }
 
+pub open spec fn cst_finish_leaf_node_spec(
+    builder: CstBuilderView,
+    node: CstNodeView,
+    offset: u64,
+    next_token: u64,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    match cst_push_node_spec(builder, node, offset) {
+        Ok((next, node_index)) => Ok((next, ParsedNodeView { node_index, next_token })),
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_finish_property_empty_node_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    token_start: u64,
+    token_end: u64,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    if token_start >= tokens.len() || token_start > token_end || token_end > tokens.len() {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        let byte = cst_byte_at_spec(tokens, token_end, builder.source_len_bytes);
+        cst_finish_leaf_node_spec(
+            builder,
+            CstNodeView {
+                kind: CstNodeKind::Empty,
+                style: CstNodeStyle::Empty,
+                token_start,
+                token_end,
+                byte_start: tokens[token_start as int].byte_start,
+                byte_end: byte,
+                anchor_property_token,
+                tag_property_token,
+                scalar_or_alias_token: None,
+                collection_start_token: None,
+                collection_end_token: None,
+                entry_start: 0,
+                entry_end: 0,
+                empty_anchor_token: Some(token_end),
+                empty_anchor_byte: Some(byte),
+            },
+            byte,
+            token_end,
+        )
+    }
+}
+
+pub open spec fn cst_finish_alias_node_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    token_start: u64,
+    alias_token: u64,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    if token_start > alias_token || alias_token >= tokens.len() || tokens[alias_token as int].kind
+        != CompletedTokenKind::Alias {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        cst_finish_leaf_node_spec(
+            builder,
+            CstNodeView {
+                kind: CstNodeKind::Alias,
+                style: CstNodeStyle::Alias,
+                token_start,
+                token_end: (alias_token + 1) as u64,
+                byte_start: tokens[token_start as int].byte_start,
+                byte_end: tokens[alias_token as int].byte_end,
+                anchor_property_token: None,
+                tag_property_token: None,
+                scalar_or_alias_token: Some(alias_token),
+                collection_start_token: None,
+                collection_end_token: None,
+                entry_start: 0,
+                entry_end: 0,
+                empty_anchor_token: None,
+                empty_anchor_byte: None,
+            },
+            tokens[alias_token as int].byte_start,
+            (alias_token + 1) as u64,
+        )
+    }
+}
+
+pub open spec fn cst_finish_scalar_node_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    token_start: u64,
+    scalar_token: u64,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    if token_start > scalar_token || scalar_token >= tokens.len() || !cst_token_is_scalar_spec(
+        tokens[scalar_token as int].kind,
+    ) {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        cst_finish_leaf_node_spec(
+            builder,
+            CstNodeView {
+                kind: CstNodeKind::Scalar,
+                style: cst_scalar_style_spec(tokens[scalar_token as int].kind),
+                token_start,
+                token_end: (scalar_token + 1) as u64,
+                byte_start: tokens[token_start as int].byte_start,
+                byte_end: tokens[scalar_token as int].byte_end,
+                anchor_property_token,
+                tag_property_token,
+                scalar_or_alias_token: Some(scalar_token),
+                collection_start_token: None,
+                collection_end_token: None,
+                entry_start: 0,
+                entry_end: 0,
+                empty_anchor_token: None,
+                empty_anchor_byte: None,
+            },
+            tokens[scalar_token as int].byte_start,
+            (scalar_token + 1) as u64,
+        )
+    }
+}
+
+fn finish_leaf_node(
+    builder: &mut CstBuilder,
+    node: CstNode,
+    offset: u64,
+    next_token: usize,
+) -> (result: Result<ParsedNode, CstError>)
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_finish_leaf_node_spec(old(builder)@, node@, offset, next_token as u64) == match result {
+            Ok(parsed) => Ok((final(builder)@, parsed@)),
+            Err(error) => Err(error@),
+        },
+{
+    let node_index = match builder.push_node(node, offset) {
+        Ok(index) => index,
+        Err(error) => {
+            proof {
+                reveal(cst_finish_leaf_node_spec);
+            }
+            return Err(error);
+        },
+    };
+    let parsed = ParsedNode { node_index, next_token };
+    proof {
+        reveal(cst_finish_leaf_node_spec);
+    }
+    Ok(parsed)
+}
+
+fn finish_property_empty_node(
+    builder: &mut CstBuilder,
+    tokens: &[CompletedToken],
+    token_start: usize,
+    token_end: usize,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+) -> (result: Result<ParsedNode, CstError>)
+    requires
+        token_start < tokens.len(),
+        token_start <= token_end <= tokens.len(),
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_finish_property_empty_node_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            token_start as u64,
+            token_end as u64,
+            anchor_property_token,
+            tag_property_token,
+        ) == match result {
+            Ok(parsed) => Ok((final(builder)@, parsed@)),
+            Err(error) => Err(error@),
+        },
+{
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        crate::token::lemma_completed_token_view_at(tokens@, token_start as int);
+    }
+    let byte = byte_at(tokens, token_end, builder.source_len_bytes);
+    let node = CstNode {
+        kind: CstNodeKind::Empty,
+        style: CstNodeStyle::Empty,
+        token_start: token_start as u64,
+        token_end: token_end as u64,
+        byte_start: tokens[token_start].byte_start(),
+        byte_end: byte,
+        anchor_property_token,
+        tag_property_token,
+        scalar_or_alias_token: None,
+        collection_start_token: None,
+        collection_end_token: None,
+        entry_start: 0,
+        entry_end: 0,
+        empty_anchor_token: Some(token_end as u64),
+        empty_anchor_byte: Some(byte),
+    };
+    let result = finish_leaf_node(builder, node, byte, token_end);
+    proof {
+        reveal(cst_finish_property_empty_node_spec);
+    }
+    result
+}
+
+fn finish_alias_node(
+    builder: &mut CstBuilder,
+    tokens: &[CompletedToken],
+    token_start: usize,
+    alias_token: usize,
+) -> (result: Result<ParsedNode, CstError>)
+    requires
+        token_start <= alias_token < tokens.len(),
+        tokens@[alias_token as int]@.kind == CompletedTokenKind::Alias,
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_finish_alias_node_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            token_start as u64,
+            alias_token as u64,
+        ) == match result {
+            Ok(parsed) => Ok((final(builder)@, parsed@)),
+            Err(error) => Err(error@),
+        },
+{
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        crate::token::lemma_completed_token_view_at(tokens@, token_start as int);
+        crate::token::lemma_completed_token_view_at(tokens@, alias_token as int);
+    }
+    let node = CstNode {
+        kind: CstNodeKind::Alias,
+        style: CstNodeStyle::Alias,
+        token_start: token_start as u64,
+        token_end: (alias_token + 1) as u64,
+        byte_start: tokens[token_start].byte_start(),
+        byte_end: tokens[alias_token].byte_end(),
+        anchor_property_token: None,
+        tag_property_token: None,
+        scalar_or_alias_token: Some(alias_token as u64),
+        collection_start_token: None,
+        collection_end_token: None,
+        entry_start: 0,
+        entry_end: 0,
+        empty_anchor_token: None,
+        empty_anchor_byte: None,
+    };
+    let result = finish_leaf_node(builder, node, tokens[alias_token].byte_start(), alias_token + 1);
+    proof {
+        reveal(cst_finish_alias_node_spec);
+    }
+    result
+}
+
+fn finish_scalar_node(
+    builder: &mut CstBuilder,
+    tokens: &[CompletedToken],
+    token_start: usize,
+    scalar_token: usize,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+) -> (result: Result<ParsedNode, CstError>)
+    requires
+        token_start <= scalar_token < tokens.len(),
+        cst_token_is_scalar_spec(tokens@[scalar_token as int]@.kind),
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_finish_scalar_node_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            token_start as u64,
+            scalar_token as u64,
+            anchor_property_token,
+            tag_property_token,
+        ) == match result {
+            Ok(parsed) => Ok((final(builder)@, parsed@)),
+            Err(error) => Err(error@),
+        },
+{
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        crate::token::lemma_completed_token_view_at(tokens@, token_start as int);
+        crate::token::lemma_completed_token_view_at(tokens@, scalar_token as int);
+    }
+    let kind = tokens[scalar_token].kind();
+    let node = CstNode {
+        kind: CstNodeKind::Scalar,
+        style: scalar_style(kind),
+        token_start: token_start as u64,
+        token_end: (scalar_token + 1) as u64,
+        byte_start: tokens[token_start].byte_start(),
+        byte_end: tokens[scalar_token].byte_end(),
+        anchor_property_token,
+        tag_property_token,
+        scalar_or_alias_token: Some(scalar_token as u64),
+        collection_start_token: None,
+        collection_end_token: None,
+        entry_start: 0,
+        entry_end: 0,
+        empty_anchor_token: None,
+        empty_anchor_byte: None,
+    };
+    let result = finish_leaf_node(
+        builder,
+        node,
+        tokens[scalar_token].byte_start(),
+        scalar_token + 1,
+    );
+    proof {
+        reveal(cst_finish_scalar_node_spec);
+    }
+    result
+}
+
 pub open spec fn cst_single_pair_mapping_spec(
     builder: CstBuilderView,
     tokens: Seq<crate::token::CompletedTokenView>,
@@ -7923,27 +8238,16 @@ fn parse_node_iterative(
                 }
             }
             if index >= task.end {
-                let byte = byte_at(tokens, index, builder.source_len_bytes);
-                let node = CstNode {
-                    kind: CstNodeKind::Empty,
-                    style: CstNodeStyle::Empty,
-                    token_start: token_start as u64,
-                    token_end: index as u64,
-                    byte_start: tokens[token_start].byte_start(),
-                    byte_end: byte,
+                completed =
+                match finish_property_empty_node(
+                    builder,
+                    tokens,
+                    token_start,
+                    index,
                     anchor_property_token,
                     tag_property_token,
-                    scalar_or_alias_token: None,
-                    collection_start_token: None,
-                    collection_end_token: None,
-                    entry_start: 0,
-                    entry_end: 0,
-                    empty_anchor_token: Some(index as u64),
-                    empty_anchor_byte: Some(byte),
-                };
-                completed =
-                match builder.push_node(node, byte) {
-                    Ok(node_index) => Some(ParsedNode { node_index, next_token: index }),
+                ) {
+                    Ok(parsed) => Some(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -7958,26 +8262,9 @@ fn parse_node_iterative(
                         ),
                     );
                 }
-                let node = CstNode {
-                    kind: CstNodeKind::Alias,
-                    style: CstNodeStyle::Alias,
-                    token_start: token_start as u64,
-                    token_end: (index + 1) as u64,
-                    byte_start: tokens[token_start].byte_start(),
-                    byte_end: tokens[index].byte_end(),
-                    anchor_property_token: None,
-                    tag_property_token: None,
-                    scalar_or_alias_token: Some(index as u64),
-                    collection_start_token: None,
-                    collection_end_token: None,
-                    entry_start: 0,
-                    entry_end: 0,
-                    empty_anchor_token: None,
-                    empty_anchor_byte: None,
-                };
                 completed =
-                match builder.push_node(node, tokens[index].byte_start()) {
-                    Ok(node_index) => Some(ParsedNode { node_index, next_token: index + 1 }),
+                match finish_alias_node(builder, tokens, token_start, index) {
+                    Ok(parsed) => Some(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;
@@ -8015,26 +8302,16 @@ fn parse_node_iterative(
                     tasks.push(task);
                     continue;
                 }
-                let node = CstNode {
-                    kind: CstNodeKind::Scalar,
-                    style: scalar_style(kind),
-                    token_start: token_start as u64,
-                    token_end: (index + 1) as u64,
-                    byte_start: tokens[token_start].byte_start(),
-                    byte_end: tokens[index].byte_end(),
+                completed =
+                match finish_scalar_node(
+                    builder,
+                    tokens,
+                    token_start,
+                    index,
                     anchor_property_token,
                     tag_property_token,
-                    scalar_or_alias_token: Some(index as u64),
-                    collection_start_token: None,
-                    collection_end_token: None,
-                    entry_start: 0,
-                    entry_end: 0,
-                    empty_anchor_token: None,
-                    empty_anchor_byte: None,
-                };
-                completed =
-                match builder.push_node(node, tokens[index].byte_start()) {
-                    Ok(node_index) => Some(ParsedNode { node_index, next_token: index + 1 }),
+                ) {
+                    Ok(parsed) => Some(parsed),
                     Err(error) => return Err(error),
                 };
                 continue;

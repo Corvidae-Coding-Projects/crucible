@@ -15,6 +15,139 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_leaf_node_constructors_are_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let property = CompletedTokenView {
+            kind: CompletedTokenKind::AnchorProperty,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 2,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let scalar = CompletedTokenView {
+            kind: CompletedTokenKind::DoubleQuotedScalar,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 3,
+            byte_end: 6,
+            scalar_index: Some(0),
+            ..property
+        };
+        let property_tokens = Seq::empty().push(property);
+        let scalar_tokens = property_tokens.push(scalar);
+        let property_builder = crucible_yaml::cst::cst_empty_builder_spec(1, limits, 2);
+        let scalar_builder = crucible_yaml::cst::cst_empty_builder_spec(2, limits, 6);
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_finish_property_empty_node_spec);
+        reveal(crucible_yaml::cst::cst_finish_alias_node_spec);
+        reveal(crucible_yaml::cst::cst_finish_scalar_node_spec);
+        reveal(crucible_yaml::cst::cst_scalar_style_spec);
+        reveal(crucible_yaml::cst::cst_byte_at_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let property_result = crucible_yaml::cst::cst_finish_property_empty_node_spec(
+            property_builder,
+            property_tokens,
+            0,
+            1,
+            Some(0),
+            None,
+        );
+        assert(property_result.is_ok());
+        let (property_built, property_parsed) = match property_result {
+            Ok(value) => value,
+            Err(_) => (
+                property_builder,
+                crucible_yaml::cst::ParsedNodeView { node_index: 99, next_token: 99 },
+            ),
+        };
+        let property_node = property_built.nodes[0];
+        assert(property_parsed.node_index == 0 && property_parsed.next_token == 1);
+        assert(property_node.kind == CstNodeKind::Empty);
+        assert(property_node.anchor_property_token == Some(0));
+        assert(property_node.empty_anchor_token == Some(1));
+        assert(property_node.empty_anchor_byte == Some(2));
+        let scalar_result = crucible_yaml::cst::cst_finish_scalar_node_spec(
+            scalar_builder,
+            scalar_tokens,
+            0,
+            1,
+            Some(0),
+            None,
+        );
+        assert(scalar_result.is_ok());
+        let (scalar_built, scalar_parsed) = match scalar_result {
+            Ok(value) => value,
+            Err(_) => (
+                scalar_builder,
+                crucible_yaml::cst::ParsedNodeView { node_index: 99, next_token: 99 },
+            ),
+        };
+        let scalar_node = scalar_built.nodes[0];
+        assert(scalar_parsed.node_index == 0 && scalar_parsed.next_token == 2);
+        assert(scalar_node.kind == CstNodeKind::Scalar);
+        assert(scalar_node.style == CstNodeStyle::DoubleQuoted);
+        assert(scalar_node.token_start == 0 && scalar_node.token_end == 2);
+        assert(scalar_node.byte_start == 0 && scalar_node.byte_end == 6);
+        assert(scalar_node.anchor_property_token == Some(0));
+        assert(scalar_node.scalar_or_alias_token == Some(1));
+        let alias = CompletedTokenView {
+            kind: CompletedTokenKind::Alias,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 4,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let alias_tokens = Seq::empty().push(alias);
+        let alias_builder = crucible_yaml::cst::cst_empty_builder_spec(1, limits, 4);
+        let alias_result = crucible_yaml::cst::cst_finish_alias_node_spec(
+            alias_builder,
+            alias_tokens,
+            0,
+            0,
+        );
+        assert(alias_result.is_ok());
+        let (alias_built, alias_parsed) = match alias_result {
+            Ok(value) => value,
+            Err(_) => (
+                alias_builder,
+                crucible_yaml::cst::ParsedNodeView { node_index: 99, next_token: 99 },
+            ),
+        };
+        let alias_node = alias_built.nodes[0];
+        assert(alias_parsed.node_index == 0 && alias_parsed.next_token == 1);
+        assert(alias_node.kind == CstNodeKind::Alias && alias_node.style == CstNodeStyle::Alias);
+        assert(alias_node.scalar_or_alias_token == Some(0));
+        assert(alias_node.anchor_property_token.is_none()
+            && alias_node.tag_property_token.is_none());
+    }
+}
+
+#[test]
 fn pure_compact_single_pair_mapping_is_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {
