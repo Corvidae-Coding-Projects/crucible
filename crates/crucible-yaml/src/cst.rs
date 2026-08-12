@@ -9858,6 +9858,104 @@ pub open spec fn cst_step_flow_sequence_state_four_spec(
     }
 }
 
+pub open spec fn cst_step_flow_mapping_state_zero_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::FlowMapping || task.state != 0 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        let cursor = cst_skip_trivia_spec(
+            tokens,
+            task.cursor as int,
+            task.end as int,
+            (task.end - task.cursor) as nat + 1,
+        );
+        let positioned = cst_task_set_cursor_spec(task, cursor as u64);
+        if cursor >= task.end {
+            Err(
+                CstErrorView {
+                    kind: CstErrorKind::UnexpectedEndOfInput,
+                    byte_offset: builder.source_len_bytes,
+                },
+            )
+        } else {
+            let kind = tokens[cursor].kind;
+            if kind == CompletedTokenKind::FlowMappingEnd {
+                cst_step_node_store_parsed_spec(
+                    machine,
+                    cst_finish_iterative_mapping_spec(
+                        tokens,
+                        positioned,
+                        Some(cursor as u64),
+                        builder,
+                    ),
+                )
+            } else if kind == CompletedTokenKind::FlowEntry {
+                Err(
+                    CstErrorView {
+                        kind: CstErrorKind::UnexpectedFlowEntry,
+                        byte_offset: tokens[cursor].byte_start,
+                    },
+                )
+            } else {
+                let explicit = kind == CompletedTokenKind::ExplicitMappingKey;
+                let started = cst_task_begin_keyed_entry_spec(
+                    positioned,
+                    cursor as u64,
+                    explicit,
+                );
+                let keyed = if explicit {
+                    let next = cst_skip_trivia_spec(
+                        tokens,
+                        cursor + 1,
+                        task.end as int,
+                        (task.end as int - cursor) as nat,
+                    );
+                    cst_task_set_cursor_spec(started, next as u64)
+                } else {
+                    started
+                };
+                if keyed.cursor >= task.end || tokens[keyed.cursor as int].kind
+                    == CompletedTokenKind::MappingValue || tokens[keyed.cursor as int].kind
+                    == CompletedTokenKind::FlowEntry || tokens[keyed.cursor as int].kind
+                    == CompletedTokenKind::FlowMappingEnd {
+                    match cst_empty_node_spec(builder, tokens, keyed.cursor) {
+                        Ok((next_builder, node_index)) => {
+                            let with_key = cst_task_set_key_node_spec(keyed, node_index);
+                            let waiting = cst_task_set_state_spec(with_key, 2);
+                            Ok((cst_machine_resume_task_spec(machine, waiting), next_builder))
+                        },
+                        Err(error) => Err(error),
+                    }
+                } else {
+                    let child = cst_node_task_spec(
+                        keyed.cursor,
+                        task.end,
+                        false,
+                        task.depth_left,
+                    );
+                    let waiting = cst_task_set_state_spec(keyed, 1);
+                    let resumed = cst_machine_resume_task_spec(machine, waiting);
+                    match cst_machine_push_task_spec(
+                        resumed,
+                        child,
+                        depth_limit,
+                        tokens[keyed.cursor as int].byte_start,
+                    ) {
+                        Ok(next_machine) => Ok((next_machine, builder)),
+                        Err(error) => Err(error),
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -11472,6 +11570,238 @@ fn step_flow_sequence_state_four(
 }
 
 #[verifier::rlimit(500)]
+fn step_flow_mapping_state_zero(
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+    depth_limit: u64,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::FlowMapping,
+        task@.state == 0,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+        machine.tasks.len() <= depth_limit + 1,
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+    ensures
+        cst_step_flow_mapping_state_zero_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+            depth_limit,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_flow_mapping_state_zero_spec(
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+        depth_limit,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_flow_mapping_state_zero_spec);
+    }
+    let cursor = skip_trivia(tokens, task.cursor, task.end);
+    task_set_cursor(cursor, &mut task);
+    let ghost positioned = task@;
+    if task.cursor >= task.end {
+        let error = CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes);
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+        assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+    }
+    let kind = tokens[task.cursor].kind();
+    proof {
+        assert(kind == token_views[task.cursor as int].kind);
+        assert(positioned.cursor == task.cursor as u64);
+    }
+    if kind == CompletedTokenKind::FlowMappingEnd {
+        let closer = task.cursor;
+        let ghost prior_builder = builder@;
+        let parsed = match finish_iterative_mapping(tokens, task, Some(closer), builder) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_iterative_mapping_spec(
+                        token_views,
+                        positioned,
+                        Some(closer as u64),
+                        prior_builder,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_iterative_mapping_spec(
+                token_views,
+                positioned,
+                Some(closer as u64),
+                prior_builder,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    if kind == CompletedTokenKind::FlowEntry {
+        let error = CstError::at(
+            CstErrorKind::UnexpectedFlowEntry,
+            tokens[task.cursor].byte_start(),
+        );
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    let explicit_key = kind == CompletedTokenKind::ExplicitMappingKey;
+    let entry_start = task.cursor;
+    task_begin_keyed_entry(entry_start, explicit_key, &mut task);
+    let ghost started = task@;
+    proof {
+        assert(started == cst_task_begin_keyed_entry_spec(
+            positioned,
+            positioned.cursor,
+            explicit_key,
+        ));
+        assert(started.explicit_key == explicit_key);
+    }
+    if task.explicit_key {
+        let _prior_cursor = task.cursor;
+        let cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+        task_set_cursor(cursor, &mut task);
+        proof {
+            assert(_prior_cursor as u64 == positioned.cursor);
+            assert(cursor as int == cst_skip_trivia_spec(
+                token_views,
+                positioned.cursor as int + 1,
+                task_view.end as int,
+                (task_view.end as int - positioned.cursor as int) as nat,
+            ));
+            assert(task@ == cst_task_set_cursor_spec(started, cursor as u64));
+        }
+    }
+    let ghost keyed = task@;
+    proof {
+        if explicit_key {
+            assert(keyed == cst_task_set_cursor_spec(
+                started,
+                cst_skip_trivia_spec(
+                    token_views,
+                    positioned.cursor as int + 1,
+                    task_view.end as int,
+                    (task_view.end as int - positioned.cursor as int) as nat,
+                ) as u64,
+            ));
+        } else {
+            assert(keyed == started);
+        }
+        if keyed.cursor < task_view.end {
+            crate::token::lemma_completed_token_view_at(tokens@, keyed.cursor as int);
+            assert(tokens@[keyed.cursor as int]@ == token_views[keyed.cursor as int]);
+        }
+    }
+    if task.cursor >= task.end || tokens[task.cursor].kind()
+        == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
+        == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
+        == CompletedTokenKind::FlowMappingEnd {
+        let ghost prior_builder = builder@;
+        let node = match empty_node(builder, tokens, task.cursor) {
+            Ok(node) => node,
+            Err(error) => {
+                proof {
+                    assert(cst_empty_node_spec(
+                        prior_builder,
+                        token_views,
+                        keyed.cursor,
+                    ) == Err(error@));
+                    assert(keyed.cursor >= task_view.end || token_views[keyed.cursor as int].kind
+                        == CompletedTokenKind::MappingValue || token_views[keyed.cursor as int].kind
+                        == CompletedTokenKind::FlowEntry || token_views[keyed.cursor as int].kind
+                        == CompletedTokenKind::FlowMappingEnd);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        task_set_key_node(node, &mut task);
+        task_set_state(&mut task, 2);
+        machine_resume_task(task, machine);
+        proof {
+            assert(cst_empty_node_spec(prior_builder, token_views, keyed.cursor) == Ok(
+                (builder@, node),
+            ));
+            assert(keyed.cursor >= task_view.end || token_views[keyed.cursor as int].kind
+                == CompletedTokenKind::MappingValue || token_views[keyed.cursor as int].kind
+                == CompletedTokenKind::FlowEntry || token_views[keyed.cursor as int].kind
+                == CompletedTokenKind::FlowMappingEnd);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+        assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+    }
+    let child_offset = tokens[task.cursor].byte_start();
+    let child = node_task(task.cursor, task.end, false, task.depth_left);
+    task_set_state(&mut task, 1);
+    machine_resume_task(task, machine);
+    let ghost resumed = machine@;
+    match machine_push_task(child, depth_limit, child_offset, machine) {
+        Ok(()) => {
+            proof {
+                reveal(cst_machine_push_task_spec);
+                reveal(cst_push_parse_task_spec);
+                assert(machine@.fuel == initial_machine.fuel);
+                assert(expected == Ok((machine@, builder@)));
+            }
+            Ok(())
+        },
+        Err(error) => {
+            proof {
+                assert(cst_machine_push_task_spec(
+                    resumed,
+                    child@,
+                    depth_limit,
+                    child_offset,
+                ) == Err(error@));
+                reveal(cst_machine_push_task_spec);
+                reveal(cst_push_parse_task_spec);
+                assert(machine@.fuel == initial_machine.fuel);
+                assert(expected == Err(error@));
+            }
+            Err(error)
+        },
+    }
+}
+
+#[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -11563,63 +11893,16 @@ fn parse_node_iterative(
         }
         if task.kind == ParseTaskKind::FlowMapping {
             if task.state == 0 {
-                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
-                if task.cursor >= task.end {
-                    return Err(
-                        CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes),
-                    );
+                match step_flow_mapping_state_zero(
+                    tokens,
+                    task,
+                    &mut machine,
+                    builder,
+                    depth_limit,
+                ) {
+                    Ok(()) => continue,
+                    Err(error) => return Err(error),
                 }
-                if tokens[task.cursor].kind() == CompletedTokenKind::FlowMappingEnd {
-                    let closer = task.cursor;
-                    let parsed = match finish_iterative_mapping(
-                        tokens,
-                        task,
-                        Some(closer),
-                        builder,
-                    ) {
-                        Ok(parsed) => parsed,
-                        Err(error) => return Err(error),
-                    };
-                    machine_store_completed(parsed, &mut machine);
-                    continue;
-                }
-                if tokens[task.cursor].kind() == CompletedTokenKind::FlowEntry {
-                    return Err(
-                        CstError::at(
-                            CstErrorKind::UnexpectedFlowEntry,
-                            tokens[task.cursor].byte_start(),
-                        ),
-                    );
-                }
-                task_begin_keyed_entry(
-                    task.cursor,
-                    tokens[task.cursor].kind() == CompletedTokenKind::ExplicitMappingKey,
-                    &mut task,
-                );
-                if task.explicit_key {
-                    task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
-                }
-                if task.cursor >= task.end || tokens[task.cursor].kind()
-                    == CompletedTokenKind::MappingValue || tokens[task.cursor].kind()
-                    == CompletedTokenKind::FlowEntry || tokens[task.cursor].kind()
-                    == CompletedTokenKind::FlowMappingEnd {
-                    let key_node_index = match empty_node(builder, tokens, task.cursor) {
-                        Ok(node) => node,
-                        Err(error) => return Err(error),
-                    };
-                    task_set_key_node(key_node_index, &mut task);
-                    task_set_state(&mut task, 2);
-                    machine_resume_task(task, &mut machine);
-                } else {
-                    let child_offset = tokens[task.cursor].byte_start();
-                    let child = node_task(task.cursor, task.end, false, task.depth_left);
-                    task_set_state(&mut task, 1);
-                    machine_resume_task(task, &mut machine);
-                    if let Err(error) = machine_push_task(child, depth_limit, child_offset, &mut machine) {
-                        return Err(error);
-                    }
-                }
-                continue;
             }
             if task.state == 1 {
                 let child = match machine_take_completed(&mut machine) {
