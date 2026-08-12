@@ -10188,6 +10188,108 @@ pub open spec fn cst_step_flow_mapping_state_four_spec(
     }
 }
 
+pub open spec fn cst_step_block_sequence_state_zero_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::BlockSequence || task.state != 0 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        let cursor = cst_skip_trivia_spec(
+            tokens,
+            task.cursor as int,
+            task.end as int,
+            (task.end - task.cursor) as nat + 1,
+        );
+        let positioned = cst_task_set_cursor_spec(task, cursor as u64);
+        if cursor >= task.end || tokens[cursor].kind != CompletedTokenKind::BlockSequenceEntry
+            || cst_token_column_spec(atoms, tokens[cursor]) != task.indentation {
+            if task.pending_sequence.len() == 0 {
+                Err(
+                    CstErrorView {
+                        kind: CstErrorKind::UnexpectedToken,
+                        byte_offset: cst_byte_at_spec(tokens, task.opener, builder.source_len_bytes),
+                    },
+                )
+            } else {
+                cst_step_node_store_parsed_spec(
+                    machine,
+                    cst_finish_iterative_sequence_spec(tokens, positioned, None, builder),
+                )
+            }
+        } else {
+            let dash = cursor;
+            let dash_line = tokens[dash].start_line_number;
+            let next = cst_skip_trivia_spec(
+                tokens,
+                dash + 1,
+                task.end as int,
+                (task.end as int - dash) as nat,
+            );
+            let advanced = cst_task_set_cursor_spec(positioned, next as u64);
+            let started = cst_task_begin_sequence_entry_spec(advanced, dash as u64);
+            if next >= task.end || tokens[next].start_line_number > dash_line
+                && cst_token_column_spec(atoms, tokens[next]) <= task.indentation
+                || tokens[next].kind == CompletedTokenKind::BlockSequenceEntry
+                && cst_token_column_spec(atoms, tokens[next]) == task.indentation {
+                match cst_empty_node_spec(builder, tokens, next as u64) {
+                    Err(error) => Err(error),
+                    Ok((next_builder, node)) => {
+                        let entry = CstSequenceEntryView {
+                            node_index: node,
+                            token_start: dash as u64,
+                            token_end: if next > dash + 1 {
+                                next as u64
+                            } else {
+                                (dash + 1) as u64
+                            },
+                            indicator_token: Some(dash as u64),
+                        };
+                        let appended = cst_task_push_sequence_entry_spec(started, entry);
+                        let waiting = cst_task_set_state_spec(appended, 2);
+                        Ok((cst_machine_resume_task_spec(machine, waiting), next_builder))
+                    },
+                }
+            } else {
+                let boundary = cst_block_property_only_end_spec(
+                    atoms,
+                    tokens,
+                    next,
+                    task.end as int,
+                    task.indentation,
+                    (task.end as int - next) as nat + 1,
+                );
+                let child_end = match boundary {
+                    Some(index) => index as u64,
+                    None => task.end,
+                };
+                let child = cst_node_task_spec(
+                    next as u64,
+                    child_end,
+                    true,
+                    task.depth_left,
+                );
+                let waiting = cst_task_set_state_spec(started, 1);
+                let resumed = cst_machine_resume_task_spec(machine, waiting);
+                match cst_machine_push_task_spec(
+                    resumed,
+                    child,
+                    depth_limit,
+                    tokens[next].byte_start,
+                ) {
+                    Ok(next_machine) => Ok((next_machine, builder)),
+                    Err(error) => Err(error),
+                }
+            }
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -12566,6 +12668,207 @@ fn step_flow_mapping_state_four(
     Ok(())
 }
 
+#[verifier::rlimit(800)]
+fn step_block_sequence_state_zero(
+    atoms: &[LexicalAtom],
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+    depth_limit: u64,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::BlockSequence,
+        task@.state == 0,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+        machine.tasks.len() <= depth_limit + 1,
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+    ensures
+        cst_step_block_sequence_state_zero_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+            depth_limit,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() <= depth_limit + 2,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_block_sequence_state_zero_spec(
+        atom_views,
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+        depth_limit,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_block_sequence_state_zero_spec);
+    }
+    let cursor = skip_trivia(tokens, task.cursor, task.end);
+    task_set_cursor(cursor, &mut task);
+    let ghost positioned = task@;
+    if task.cursor < task.end {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+            assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+        }
+    }
+    let entry_at_indentation = if task.cursor < task.end && tokens[task.cursor].kind()
+        == CompletedTokenKind::BlockSequenceEntry {
+        token_column(atoms, &tokens[task.cursor]) == task.indentation
+    } else {
+        false
+    };
+    if !entry_at_indentation {
+        if task.pending_sequence.len() == 0 {
+            let offset = byte_at(tokens, task.opener, builder.source_len_bytes);
+            let error = CstError::at(CstErrorKind::UnexpectedToken, offset);
+            proof {
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        }
+        let ghost prior_builder = builder@;
+        let parsed = match finish_iterative_sequence(tokens, task, None, builder) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_iterative_sequence_spec(
+                        token_views,
+                        positioned,
+                        None,
+                        prior_builder,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_iterative_sequence_spec(
+                token_views,
+                positioned,
+                None,
+                prior_builder,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let dash = task.cursor;
+    let dash_line = tokens[dash].start_line_number();
+    let cursor = skip_trivia(tokens, dash + 1, task.end);
+    task_set_cursor(cursor, &mut task);
+    task_begin_sequence_entry(dash, &mut task);
+    let ghost started = task@;
+    if task.cursor < task.end {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+            assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+        }
+    }
+    let empty_entry = if task.cursor >= task.end {
+        true
+    } else {
+        let column = token_column(atoms, &tokens[task.cursor]);
+        tokens[task.cursor].start_line_number() > dash_line && column <= task.indentation
+            || tokens[task.cursor].kind() == CompletedTokenKind::BlockSequenceEntry
+                && column == task.indentation
+    };
+    if empty_entry {
+        let ghost prior_builder = builder@;
+        let node = match empty_node(builder, tokens, task.cursor) {
+            Ok(node) => node,
+            Err(error) => {
+                proof {
+                    assert(cst_empty_node_spec(prior_builder, token_views, started.cursor) == Err(
+                        error@,
+                    ));
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        let token_end = if task.cursor > dash + 1 {
+            task.cursor
+        } else {
+            dash + 1
+        };
+        let entry = CstSequenceEntry {
+            node_index: node,
+            token_start: dash as u64,
+            token_end: token_end as u64,
+            indicator_token: Some(dash as u64),
+        };
+        task_push_sequence_entry(entry, &mut task);
+        task_set_state(&mut task, 2);
+        machine_resume_task(task, machine);
+        proof {
+            assert(cst_empty_node_spec(prior_builder, token_views, started.cursor) == Ok(
+                (builder@, node),
+            ));
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let child_offset = tokens[task.cursor].byte_start();
+    let boundary = block_property_only_end(
+        atoms,
+        tokens,
+        task.cursor,
+        task.end,
+        task.indentation,
+    );
+    let child_end = match boundary {
+        Some(end) => end,
+        None => task.end,
+    };
+    let child = node_task(task.cursor, child_end, true, task.depth_left);
+    task_set_state(&mut task, 1);
+    machine_resume_task(task, machine);
+    let ghost resumed = machine@;
+    match machine_push_task(child, depth_limit, child_offset, machine) {
+        Ok(()) => {
+            proof {
+                assert(expected == Ok((machine@, builder@)));
+            }
+            Ok(())
+        },
+        Err(error) => {
+            proof {
+                assert(cst_machine_push_task_spec(
+                    resumed,
+                    child@,
+                    depth_limit,
+                    child_offset,
+                ) == Err(error@));
+                assert(expected == Err(error@));
+            }
+            Err(error)
+        },
+    }
+}
+
 #[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
@@ -12703,74 +13006,17 @@ fn parse_node_iterative(
         }
         if task.kind == ParseTaskKind::BlockSequence {
             if task.state == 0 {
-                task_set_cursor(skip_trivia(tokens, task.cursor, task.end), &mut task);
-                if task.cursor >= task.end || tokens[task.cursor].kind()
-                    != CompletedTokenKind::BlockSequenceEntry || token_column(
+                match step_block_sequence_state_zero(
                     atoms,
-                    &tokens[task.cursor],
-                ) != task.indentation {
-                    if task.pending_sequence.len() == 0 {
-                        return Err(
-                            CstError::at(
-                                CstErrorKind::UnexpectedToken,
-                                byte_at(tokens, task.opener, builder.source_len_bytes),
-                            ),
-                        );
-                    }
-                    let parsed = match finish_iterative_sequence(tokens, task, None, builder) {
-                        Ok(parsed) => parsed,
-                        Err(error) => return Err(error),
-                    };
-                    machine_store_completed(parsed, &mut machine);
-                    continue;
+                    tokens,
+                    task,
+                    &mut machine,
+                    builder,
+                    depth_limit,
+                ) {
+                    Ok(()) => continue,
+                    Err(error) => return Err(error),
                 }
-                let dash = task.cursor;
-                let dash_line = tokens[dash].start_line_number();
-                task_set_cursor(skip_trivia(tokens, dash + 1, task.end), &mut task);
-                task_begin_sequence_entry(dash, &mut task);
-                if task.cursor >= task.end || tokens[task.cursor].start_line_number() > dash_line
-                    && token_column(atoms, &tokens[task.cursor]) <= task.indentation
-                    || tokens[task.cursor].kind() == CompletedTokenKind::BlockSequenceEntry
-                    && token_column(atoms, &tokens[task.cursor]) == task.indentation {
-                    let node = match empty_node(builder, tokens, task.cursor) {
-                        Ok(node) => node,
-                        Err(error) => return Err(error),
-                    };
-                    task_push_sequence_entry(
-                        CstSequenceEntry {
-                            node_index: node,
-                            token_start: dash as u64,
-                            token_end: if task.cursor > dash + 1 {
-                                task.cursor as u64
-                            } else {
-                                (dash + 1) as u64
-                            },
-                            indicator_token: Some(dash as u64),
-                        },
-                        &mut task,
-                    );
-                    task_set_state(&mut task, 2);
-                    machine_resume_task(task, &mut machine);
-                } else {
-                    let child_offset = tokens[task.cursor].byte_start();
-                    let child_end = match block_property_only_end(
-                        atoms,
-                        tokens,
-                        task.cursor,
-                        task.end,
-                        task.indentation,
-                    ) {
-                        Some(end) => end,
-                        None => task.end,
-                    };
-                    let child = node_task(task.cursor, child_end, true, task.depth_left);
-                    task_set_state(&mut task, 1);
-                    machine_resume_task(task, &mut machine);
-                    if let Err(error) = machine_push_task(child, depth_limit, child_offset, &mut machine) {
-                        return Err(error);
-                    }
-                }
-                continue;
             }
             if task.state == 1 {
                 let child = match machine_take_completed(&mut machine) {
