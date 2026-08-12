@@ -9173,6 +9173,35 @@ pub open spec fn cst_machine_push_task_spec(
     }
 }
 
+pub open spec fn cst_machine_begin_step_spec(machine: ParseMachineView) -> Result<
+    (ParseMachineView, ParseTaskView),
+    CstErrorView,
+> {
+    match cst_machine_consume_fuel_spec(machine) {
+        Ok(consumed) => {
+            match cst_machine_pop_task_spec(consumed) {
+                Some((next, task)) => Ok((next, task)),
+                None => Err(
+                    CstErrorView {
+                        kind: CstErrorKind::InternalInvariantViolation,
+                        byte_offset: 0,
+                    },
+                ),
+            }
+        },
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_machine_finish_spec(
+    machine: ParseMachineView,
+    start: u64,
+    end: u64,
+    node_count: u64,
+) -> Result<ParsedNodeView, CstErrorView> {
+    cst_finish_parse_node_spec(machine.tasks, machine.completed, start, end, node_count)
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -9330,6 +9359,8 @@ fn machine_consume_fuel(machine: &mut ParseMachine) -> (result: Result<(), CstEr
     ensures
         result.is_ok() ==> final(machine)@.fuel < old(machine)@.fuel,
         final(machine).tasks.len() == old(machine).tasks.len(),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
         cst_machine_consume_fuel_spec(old(machine)@) == match result {
             Ok(()) => Ok(final(machine)@),
             Err(error) => Err(error@),
@@ -9368,6 +9399,62 @@ fn machine_push_task(
     result
 }
 
+fn machine_begin_step(machine: &mut ParseMachine) -> (result: Result<ParseTask, CstError>)
+    ensures
+        cst_machine_begin_step_spec(old(machine)@) == match result {
+            Ok(task) => Ok((final(machine)@, task@)),
+            Err(error) => Err(error@),
+        },
+        result.is_ok() ==> final(machine)@.fuel < old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() + 1 == old(machine).tasks.len(),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks) && result.is_ok()
+            ==> cst_parse_task_is_valid_spec(result.unwrap()@),
+{
+    if let Err(error) = machine_consume_fuel(machine) {
+        proof {
+            reveal(cst_machine_begin_step_spec);
+        }
+        return Err(error);
+    }
+    match machine_pop_task(machine) {
+        Some(task) => {
+            proof {
+                reveal(cst_machine_begin_step_spec);
+            }
+            Ok(task)
+        },
+        None => {
+            proof {
+                reveal(cst_machine_begin_step_spec);
+            }
+            Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0))
+        },
+    }
+}
+
+fn machine_finish(
+    machine: &ParseMachine,
+    start: usize,
+    end: usize,
+    node_count: u64,
+) -> (result: Result<ParsedNode, CstError>)
+    ensures
+        result.is_ok() ==> result.unwrap().node_index < node_count,
+        result.is_ok() ==> start <= result.unwrap().next_token <= end,
+        cst_machine_finish_spec(machine@, start as u64, end as u64, node_count) == match result {
+            Ok(parsed) => Ok(parsed@),
+            Err(error) => Err(error@),
+        },
+{
+    let result = finish_parse_node(&machine.tasks, machine.completed, start, end, node_count);
+    proof {
+        reveal(cst_machine_finish_spec);
+    }
+    result
+}
+
 #[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
@@ -9398,14 +9485,11 @@ fn parse_node_iterative(
         decreases machine.fuel,
     {
         if machine.tasks.len() == 0 {
-            return finish_parse_node(&machine.tasks, machine.completed, start, end, builder.nodes.len() as u64);
+            return machine_finish(&machine, start, end, builder.nodes.len() as u64);
         }
-        if let Err(error) = machine_consume_fuel(&mut machine) {
-            return Err(error);
-        }
-        let mut task = match machine_pop_task(&mut machine) {
-            Some(value) => value,
-            None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
+        let mut task = match machine_begin_step(&mut machine) {
+            Ok(value) => value,
+            Err(error) => return Err(error),
         };
         if task.end > tokens.len() || task.cursor > task.end || task.token_start > task.end {
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));

@@ -275,6 +275,37 @@ fn pure_parser_machine_channels_and_fuel_are_exact() {
 }
 
 #[test]
+fn pure_parser_machine_dispatch_and_terminal_result_are_total() {
+    proof {
+        let initial = crucible_yaml::cst::cst_initial_parse_machine_spec(1, 8, true, 4);
+        let ready = crucible_yaml::cst::ParseMachineView { fuel: 2, ..initial };
+        reveal(crucible_yaml::cst::cst_machine_begin_step_spec);
+        reveal(crucible_yaml::cst::cst_machine_finish_spec);
+        match crucible_yaml::cst::cst_machine_begin_step_spec(ready) {
+            Ok((next, task)) => {
+                assert(task == crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4));
+                assert(next.tasks.len() == 0 && next.completed.is_none() && next.fuel == 1);
+            },
+            Err(_) => assert(false),
+        }
+        let exhausted = crucible_yaml::cst::ParseMachineView { fuel: 0, ..initial };
+        assert(crucible_yaml::cst::cst_machine_begin_step_spec(exhausted) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+        let parsed = crucible_yaml::cst::ParsedNodeView { node_index: 2, next_token: 7 };
+        let terminal = crucible_yaml::cst::ParseMachineView {
+            tasks: Seq::empty(),
+            completed: Some(parsed),
+            fuel: 1,
+        };
+        assert(crucible_yaml::cst::cst_machine_finish_spec(terminal, 1, 8, 3) == Ok(parsed));
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
