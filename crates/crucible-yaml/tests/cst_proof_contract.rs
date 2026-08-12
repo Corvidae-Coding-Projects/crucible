@@ -174,6 +174,33 @@ fn pure_parser_frame_cursor_bounds_and_updates_are_exact() {
 }
 
 #[test]
+fn pure_parser_entry_scratch_updates_are_exact() {
+    proof {
+        let base = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4);
+        reveal(crucible_yaml::cst::cst_task_begin_keyed_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_begin_sequence_entry_spec);
+        reveal(crucible_yaml::cst::cst_task_set_key_node_spec);
+        reveal(crucible_yaml::cst::cst_task_set_colon_spec);
+        reveal(crucible_yaml::cst::cst_task_set_entry_end_spec);
+        reveal(crucible_yaml::cst::cst_task_extend_node_end_spec);
+        let keyed = crucible_yaml::cst::cst_task_begin_keyed_entry_spec(base, 3, true);
+        assert(keyed.entry_token_start == 3 && keyed.explicit_key);
+        assert(keyed.kind == base.kind && keyed.cursor == base.cursor);
+        let keyed = crucible_yaml::cst::cst_task_set_key_node_spec(keyed, 7);
+        let keyed = crucible_yaml::cst::cst_task_set_colon_spec(keyed, 4);
+        let keyed = crucible_yaml::cst::cst_task_set_entry_end_spec(keyed, 6);
+        assert(keyed.key_node_index == 7 && keyed.colon_token == 4);
+        assert(keyed.entry_token_start == 3 && keyed.entry_token_end == 6);
+        let extended = crucible_yaml::cst::cst_task_extend_node_end_spec(keyed, 6);
+        assert(extended.node_token_end == 6);
+        assert(crucible_yaml::cst::cst_task_extend_node_end_spec(extended, 4) == extended);
+        let sequence = crucible_yaml::cst::cst_task_begin_sequence_entry_spec(base, 2);
+        assert(sequence.entry_token_start == 2 && sequence.entry_token_end == 3);
+        assert(sequence.pending_sequence == base.pending_sequence);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
