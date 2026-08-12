@@ -100,6 +100,25 @@ fn pure_parser_terminal_state_is_exact_and_total() {
 }
 
 #[test]
+fn pure_parser_fuel_initialization_and_consumption_are_exact() {
+    proof {
+        reveal(crucible_yaml::cst::cst_initial_parse_fuel_spec);
+        reveal(crucible_yaml::cst::cst_consume_parse_fuel_spec);
+        let initial = crucible_yaml::cst::cst_initial_parse_fuel_spec();
+        assert(initial == crucible_yaml::cst::cst_initial_parse_fuel_spec());
+        crucible_yaml::cst::lemma_consume_parse_fuel_strictly_decreases(2);
+        assert(crucible_yaml::cst::cst_consume_parse_fuel_spec(2) == Ok(1u64));
+        assert(crucible_yaml::cst::cst_consume_parse_fuel_spec(1) == Ok(0u64));
+        assert(crucible_yaml::cst::cst_consume_parse_fuel_spec(0) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

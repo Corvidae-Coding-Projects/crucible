@@ -8722,6 +8722,60 @@ fn finish_parse_node(
     }
 }
 
+pub open spec fn cst_initial_parse_fuel_spec() -> u64 {
+    ((MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32) as u64
+}
+
+fn initial_parse_fuel() -> (fuel: u64)
+    ensures
+        fuel == cst_initial_parse_fuel_spec(),
+{
+    proof {
+        reveal(cst_initial_parse_fuel_spec);
+    }
+    (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32
+}
+
+pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
+    if fuel == 0 {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        Ok((fuel - 1) as u64)
+    }
+}
+
+pub proof fn lemma_consume_parse_fuel_strictly_decreases(fuel: u64)
+    requires
+        fuel > 0,
+    ensures
+        cst_consume_parse_fuel_spec(fuel) == Ok((fuel - 1) as u64),
+        ((fuel - 1) as u64) < fuel,
+{
+    reveal(cst_consume_parse_fuel_spec);
+}
+
+fn consume_parse_fuel(fuel: &mut u64) -> (result: Result<(), CstError>)
+    ensures
+        result.is_ok() ==> *final(fuel) < *old(fuel),
+        result.is_ok() ==> *final(fuel) + 1 == *old(fuel),
+        cst_consume_parse_fuel_spec(*old(fuel)) == match result {
+            Ok(()) => Ok(*final(fuel)),
+            Err(error) => Err(error@),
+        },
+{
+    if *fuel == 0 {
+        proof {
+            reveal(cst_consume_parse_fuel_spec);
+        }
+        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+    }
+    *fuel -= 1;
+    proof {
+        reveal(cst_consume_parse_fuel_spec);
+    }
+    Ok(())
+}
+
 pub open spec fn cst_push_parse_task_spec(
     tasks: Seq<ParseTaskView>,
     task: ParseTaskView,
@@ -8789,7 +8843,7 @@ fn parse_node_iterative(
 {
     let mut tasks = initial_parse_tasks(start, end, allow_block_mapping, depth_limit);
     let mut completed: Option<ParsedNode> = None;
-    let mut fuel = (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32;
+    let mut fuel = initial_parse_fuel();
     loop
         invariant
             depth_limit <= MAX_PROFILE1_CST_DEPTH,
@@ -8801,10 +8855,9 @@ fn parse_node_iterative(
         if tasks.len() == 0 {
             return finish_parse_node(&tasks, completed, start, end, builder.nodes.len() as u64);
         }
-        if fuel == 0 {
-            return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+        if let Err(error) = consume_parse_fuel(&mut fuel) {
+            return Err(error);
         }
-        fuel -= 1;
         let mut task = match pop_parse_task(&mut tasks) {
             Some(value) => value,
             None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
