@@ -8476,6 +8476,97 @@ fn finish_iterative_mapping(
     Ok(parsed)
 }
 
+pub open spec fn cst_initial_parse_tasks_spec(
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_left: u64,
+) -> Seq<ParseTaskView> {
+    Seq::empty().push(cst_node_task_spec(start, end, allow_block_mapping, depth_left))
+}
+
+fn initial_parse_tasks(
+    start: usize,
+    end: usize,
+    allow_block_mapping: bool,
+    depth_left: u64,
+) -> (tasks: Vec<ParseTask>)
+    ensures
+        tasks.len() == 1,
+        cst_parse_task_views_spec(tasks@) == cst_initial_parse_tasks_spec(
+            start as u64,
+            end as u64,
+            allow_block_mapping,
+            depth_left,
+        ),
+{
+    let task = node_task(start, end, allow_block_mapping, depth_left);
+    let mut tasks = Vec::new();
+    let ghost old_tasks = tasks@;
+    tasks.push(task);
+    proof {
+        lemma_cst_parse_task_views_push(old_tasks, task);
+        reveal(cst_parse_task_views_spec);
+        reveal(cst_initial_parse_tasks_spec);
+    }
+    tasks
+}
+
+pub open spec fn cst_pop_parse_task_spec(tasks: Seq<ParseTaskView>) -> Option<
+    (Seq<ParseTaskView>, ParseTaskView),
+> {
+    if tasks.len() == 0 {
+        None
+    } else {
+        Some((tasks.drop_last(), tasks.last()))
+    }
+}
+
+proof fn lemma_cst_parse_task_views_subrange(tasks: Seq<ParseTask>, start: int, end: int)
+    requires
+        0 <= start <= end <= tasks.len(),
+    ensures
+        cst_parse_task_views_spec(tasks.subrange(start, end)) == cst_parse_task_views_spec(
+            tasks,
+        ).subrange(start, end),
+{
+    reveal(cst_parse_task_views_spec);
+    assert(tasks.subrange(start, end).map_values(|task: ParseTask| task@) =~= tasks.map_values(
+        |task: ParseTask| task@,
+    ).subrange(start, end));
+}
+
+fn pop_parse_task(tasks: &mut Vec<ParseTask>) -> (result: Option<ParseTask>)
+    ensures
+        result.is_some() ==> old(tasks).len() > 0,
+        result.is_some() ==> final(tasks).len() + 1 == old(tasks).len(),
+        result.is_none() ==> old(tasks).len() == 0,
+        result.is_none() ==> final(tasks).len() == 0,
+        cst_pop_parse_task_spec(cst_parse_task_views_spec(old(tasks)@)) == match result {
+            Some(task) => Some((cst_parse_task_views_spec(final(tasks)@), task@)),
+            None => None,
+        },
+{
+    let ghost old_tasks = tasks@;
+    match tasks.pop() {
+        Some(task) => {
+            proof {
+                lemma_cst_parse_task_views_subrange(old_tasks, 0, old_tasks.len() - 1);
+                reveal(cst_parse_task_views_spec);
+                reveal(cst_pop_parse_task_spec);
+            }
+            Some(task)
+        },
+        None => {
+            proof {
+                reveal(cst_parse_task_views_spec);
+                reveal(cst_pop_parse_task_spec);
+            }
+            None
+        },
+    }
+}
+
 pub open spec fn cst_push_parse_task_spec(
     tasks: Seq<ParseTaskView>,
     task: ParseTaskView,
@@ -8541,8 +8632,7 @@ fn parse_node_iterative(
         result.is_ok() ==> start <= result.unwrap().next_token <= end,
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
 {
-    let mut tasks: Vec<ParseTask> = Vec::new();
-    tasks.push(node_task(start, end, allow_block_mapping, depth_limit));
+    let mut tasks = initial_parse_tasks(start, end, allow_block_mapping, depth_limit);
     let mut completed: Option<ParsedNode> = None;
     let mut fuel = (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32;
     loop
@@ -8570,7 +8660,7 @@ fn parse_node_iterative(
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
         }
         fuel -= 1;
-        let mut task = match tasks.pop() {
+        let mut task = match pop_parse_task(&mut tasks) {
             Some(value) => value,
             None => return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
         };

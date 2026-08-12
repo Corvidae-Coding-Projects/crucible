@@ -15,6 +15,23 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_parser_task_stack_initialization_and_pop_are_exact() {
+    proof {
+        let first = crucible_yaml::cst::cst_node_task_spec(1, 9, true, 4);
+        let second = crucible_yaml::cst::cst_node_task_spec(3, 7, false, 3);
+        reveal(crucible_yaml::cst::cst_initial_parse_tasks_spec);
+        reveal(crucible_yaml::cst::cst_pop_parse_task_spec);
+        let initial = crucible_yaml::cst::cst_initial_parse_tasks_spec(1, 9, true, 4);
+        assert(initial == Seq::empty().push(first));
+        assert(crucible_yaml::cst::cst_pop_parse_task_spec(initial.push(second)) == Some(
+            (initial, second),
+        ));
+        assert(crucible_yaml::cst::cst_pop_parse_task_spec(initial) == Some((Seq::empty(), first)));
+        assert(crucible_yaml::cst::cst_pop_parse_task_spec(Seq::empty()).is_none());
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
