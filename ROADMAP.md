@@ -65,6 +65,10 @@ Current work establishes and extends:
   integer, finite decimal, infinity, and NaN spellings; explicit exclusion of YAML 1.1 boolean and
   octal coercions; exact numeric digit subranges; caller-lowered absolute scalar limits; and exact
   executable-to-pure correspondence as the first semantic-resolution submachine;
+- verified host-width-independent Core integer conversion into canonical little-endian
+  base-1,000,000,000 limbs, with decimal/octal/hex equivalence, positive-zero normalization,
+  per-digit canonicalization, caller-lowered absolute limb limits, overflow proofs, and exact
+  executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

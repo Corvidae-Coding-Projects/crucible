@@ -8,6 +8,7 @@ pub mod layout;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
+pub mod resolve_integer;
 pub mod structural;
 pub mod token;
 pub mod utf8;
@@ -54,6 +55,11 @@ pub use resolve::{
     classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarError,
     CoreScalarErrorKind, CoreScalarLimits, CoreScalarRange, CORE_SCALAR_CLASSIFIER_VERSION,
     MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS,
+};
+
+pub use resolve_integer::{
+    convert_core_integer, CoreInteger, CoreIntegerError, CoreIntegerErrorKind, CoreIntegerLimits,
+    CORE_INTEGER_CONVERSION_VERSION, CORE_INTEGER_MAGNITUDE_RADIX, MAX_PROFILE1_CORE_INTEGER_LIMBS,
 };
 
 pub use plain::{

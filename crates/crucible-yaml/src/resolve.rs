@@ -196,6 +196,38 @@ pub open spec fn core_digit_run_end_spec(
     }
 }
 
+pub proof fn lemma_core_digit_run_to_end_has_only_digits(
+    input: Seq<u32>,
+    index: int,
+    base: CoreIntegerBase,
+    fuel: nat,
+)
+    requires
+        0 <= index <= input.len(),
+        fuel >= (input.len() - index) as nat,
+        core_digit_run_end_spec(input, index, base, fuel) == input.len(),
+    ensures
+        forall|candidate: int|
+            index <= candidate < input.len() ==> core_digit_for_base_spec(input[candidate], base),
+    decreases fuel,
+{
+    if index < input.len() {
+        assert(fuel > 0);
+        reveal(core_digit_run_end_spec);
+        assert(core_digit_for_base_spec(input[index], base));
+        lemma_core_digit_run_to_end_has_only_digits(input, index + 1, base, (fuel - 1) as nat);
+        assert forall|candidate: int|
+            index <= candidate < input.len() implies core_digit_for_base_spec(
+            input[candidate],
+            base,
+        ) by {
+            if candidate > index {
+                assert(index + 1 <= candidate);
+            }
+        }
+    }
+}
+
 fn core_digit_run_end(input: &[u32], start: usize, base: CoreIntegerBase) -> (end: usize)
     requires
         start <= input@.len(),
@@ -639,6 +671,69 @@ pub open spec fn classify_core_plain_scalar_spec(
         )
     } else {
         Ok(classify_core_plain_scalar_unbounded_spec(input))
+    }
+}
+
+pub proof fn lemma_classified_core_integer_has_exact_digits(
+    input: Seq<u32>,
+    limits: CoreScalarLimitsView,
+    negative: bool,
+    base: CoreIntegerBase,
+    digits: CoreScalarRange,
+)
+    requires
+        classify_core_plain_scalar_spec(input, limits) == Ok(
+            CorePlainScalarClass::Integer { negative, base, digits },
+        ),
+    ensures
+        digits.start < digits.end <= input.len(),
+        forall|index: int|
+            digits.start <= index < digits.end ==> core_digit_for_base_spec(input[index], base),
+{
+    reveal(classify_core_plain_scalar_spec);
+    reveal(classify_core_plain_scalar_unbounded_spec);
+    assert(!core_null_spec(input));
+    assert(!core_true_spec(input));
+    assert(!core_false_spec(input));
+    assert(core_decimal_integer_spec(input) || core_prefixed_integer_spec(
+        input,
+        CoreIntegerBase::Octal,
+    ) || core_prefixed_integer_spec(input, CoreIntegerBase::Hexadecimal));
+    if core_decimal_integer_spec(input) {
+        let start = core_sign_body_start_spec(input);
+        assert(base == CoreIntegerBase::Decimal);
+        assert(digits.start == start as u64);
+        assert(digits.end == input.len() as u64);
+        reveal(core_decimal_integer_spec);
+        lemma_core_digit_run_to_end_has_only_digits(
+            input,
+            start,
+            CoreIntegerBase::Decimal,
+            (input.len() - start) as nat,
+        );
+    } else if core_prefixed_integer_spec(input, CoreIntegerBase::Octal) {
+        assert(base == CoreIntegerBase::Octal);
+        assert(digits.start == 2);
+        assert(digits.end == input.len() as u64);
+        reveal(core_prefixed_integer_spec);
+        lemma_core_digit_run_to_end_has_only_digits(
+            input,
+            2,
+            CoreIntegerBase::Octal,
+            (input.len() - 2) as nat,
+        );
+    } else {
+        assert(core_prefixed_integer_spec(input, CoreIntegerBase::Hexadecimal));
+        assert(base == CoreIntegerBase::Hexadecimal);
+        assert(digits.start == 2);
+        assert(digits.end == input.len() as u64);
+        reveal(core_prefixed_integer_spec);
+        lemma_core_digit_run_to_end_has_only_digits(
+            input,
+            2,
+            CoreIntegerBase::Hexadecimal,
+            (input.len() - 2) as nat,
+        );
     }
 }
 

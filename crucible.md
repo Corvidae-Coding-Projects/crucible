@@ -1779,10 +1779,12 @@ Unknown well-formed global and local tags are retained losslessly on compatible 
 application-specific validation; they are not silently rewritten to Core tags.
 
 Integer resolution is independent of host width. A resolved integer is a sign plus a normalized
-arbitrary-length magnitude, and Core decimal, `0o` octal, and `0x` hexadecimal spellings convert by
-a bespoke verified multiply-add machine. Leading magnitude zeroes are removed and every zero has
-one positive canonical form. Finite floats are represented exactly as a sign, an arbitrary-length
-base-10 coefficient, and a normalized arbitrary-length signed decimal exponent; equivalent
+arbitrary-length magnitude stored as little-endian base-1,000,000,000 limbs, and Core decimal,
+`0o` octal, and `0x` hexadecimal spellings convert by a bespoke verified multiply-add machine.
+Leading magnitude zeroes are removed, every zero has one positive canonical form, and a lowered
+limb cap fails at the exact first source digit whose canonical per-digit result needs the excluded
+limb. Finite floats are represented exactly as a sign, an arbitrary-length base-10 coefficient,
+and a normalized arbitrary-length signed decimal exponent; equivalent
 spellings such as `1.0`, `1e0`, and `10e-1` normalize to one value without an intermediate
 IEEE-754 rounding step. Positive
 and negative infinity are distinct values, every accepted NaN spelling has one canonical semantic
@@ -1837,9 +1839,9 @@ after that same exact equality check and never hides a duplicate among the recei
 explicit entries.
 
 The absolute semantic-node, sequence-edge, mapping-entry, anchor, alias, tag-byte, per-scalar decoded
-code-point, aggregate decoded code-point, expanded-reference, canonical-key-byte, and work-stack
-caps are each 1,048,576; the absolute semantic depth is 4,096. Callers MAY lower every cap but
-cannot raise it. Expanded-reference cost counts each node occurrence that a fully materialized tree
+code-point, aggregate decoded code-point, integer-magnitude-limb, expanded-reference,
+canonical-key-byte, and work-stack caps are each 1,048,576; the absolute semantic depth is 4,096.
+Callers MAY lower every cap but cannot raise it. Expanded-reference cost counts each node occurrence that a fully materialized tree
 would visit, including repeated visits through aliases and merges, even though the public graph
 retains sharing; checked addition rejects exponential alias or merge amplification before
 allocation. Intrinsic invalid spelling, tag compatibility, missing alias, cycle, invalid merge
