@@ -117,3 +117,24 @@ fn code_ci_preserves_the_cold_verification_evidence_until_upload() {
     assert!(!validate.contains("cargo xtask verify"));
     assert!(upload.contains("path: target/crucible/evidence/"));
 }
+
+#[test]
+fn canonical_verification_is_single_threaded_and_reports_the_cap() {
+    let xtask = fs::read_to_string(workspace_root().join("crates/crucible-xtask/src/main.rs"))
+        .expect("xtask source");
+    let verify = xtask
+        .split_once("Action::VerifyAll => {")
+        .expect("verification action")
+        .1;
+    let separator = verify
+        .find("command_argument(b\"--\")")
+        .expect("cargo/verus separator");
+    let thread_flag = verify
+        .find("command_argument(b\"--num-threads\")")
+        .expect("single-thread verifier flag");
+    let thread_count = verify
+        .find("command_argument(b\"1\")")
+        .expect("single verifier thread");
+    assert!(separator < thread_flag && thread_flag < thread_count);
+    assert!(verify.contains("--num-threads 1"));
+}

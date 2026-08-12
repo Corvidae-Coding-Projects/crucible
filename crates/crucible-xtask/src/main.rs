@@ -437,6 +437,9 @@ fn main() {
                 command_argument(b"--workspace"),
                 command_argument(b"--locked"),
                 command_argument(b"--all-targets"),
+                command_argument(b"--"),
+                command_argument(b"--num-threads"),
+                command_argument(b"1"),
             ];
             let result = host_run_command(&cargo_verus, &arguments);
             if !result.success {
@@ -452,7 +455,7 @@ fn main() {
                 return;
             }
             let report =
-                b"{\"schema\":1,\"status\":\"success\",\"claim\":\"the pinned cargo-verus command exited successfully with --check-toolchain --workspace --locked --all-targets\",\"proof_output\":\"verification.stdout.log\",\"proof_errors\":\"verification.stderr.log\",\"tool_lock\":\"tools/verus-toolchain.lock\"}\n";
+                b"{\"schema\":1,\"status\":\"success\",\"claim\":\"the pinned cargo-verus command exited successfully with --check-toolchain --workspace --locked --all-targets -- --num-threads 1\",\"proof_output\":\"verification.stdout.log\",\"proof_errors\":\"verification.stderr.log\",\"tool_lock\":\"tools/verus-toolchain.lock\"}\n";
             if !host_write_report(ReportKind::VerificationStdout, &result.stdout)
                 || !host_write_report(ReportKind::VerificationStderr, &result.stderr)
                 || !host_write_report(ReportKind::Verification, report) {
