@@ -15,6 +15,128 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_flow_sequence_completion_is_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let token0 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowSequenceStart,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 0,
+            byte_end: 1,
+            scalar_index: None,
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let token1 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowEntry,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 1,
+            end_atom_index: 2,
+            byte_start: 1,
+            byte_end: 2,
+            ..token0
+        };
+        let token2 = CompletedTokenView {
+            kind: CompletedTokenKind::FlowSequenceEnd,
+            start_line_number: 0,
+            end_line_number: 0,
+            start_atom_index: 2,
+            end_atom_index: 3,
+            byte_start: 2,
+            byte_end: 3,
+            ..token0
+        };
+        let tokens = Seq::empty().push(token0).push(token1).push(token2);
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(3, limits, 3);
+        let base = crucible_yaml::cst::cst_node_task_spec(0, 3, false, 1);
+        let task = crucible_yaml::cst::ParseTaskView {
+            kind: crucible_yaml::cst::ParseTaskKind::FlowSequence,
+            cursor: 3,
+            opener: 0,
+            flow_entry_tokens: Seq::empty().push(1),
+            ..base
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_finish_iterative_sequence_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_push_sequence_entries_from_spec, 2);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_flow_entries_from_spec, 3);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let result = crucible_yaml::cst::cst_finish_iterative_sequence_spec(
+            tokens,
+            task,
+            Some(2),
+            initial,
+        );
+        assert(result.is_ok());
+        let (built, parsed) = match result {
+            Ok(value) => value,
+            Err(_) => (
+                initial,
+                crucible_yaml::cst::ParsedNodeView { node_index: 99, next_token: 99 },
+            ),
+        };
+        assert(parsed.node_index == 0 && parsed.next_token == 3);
+        assert(built.nodes.len() == 1);
+        let node = built.nodes[0];
+        assert(node.kind == CstNodeKind::Sequence && node.style == CstNodeStyle::Flow);
+        assert(node.token_start == 0 && node.token_end == 3);
+        assert(node.byte_start == 0 && node.byte_end == 3);
+        assert(node.collection_start_token == Some(0));
+        assert(node.collection_end_token == Some(2));
+        assert(built.syntax_owner_slots[0] == Some(
+            CstSyntaxOwnerView {
+                token_index: 0,
+                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                record_index: 0,
+            },
+        ));
+        assert(built.syntax_owner_slots[1] == Some(
+            CstSyntaxOwnerView {
+                token_index: 1,
+                kind: CstSyntaxOwnerKind::FlowEntryIndicator,
+                record_index: 0,
+            },
+        ));
+        assert(built.syntax_owner_slots[2] == Some(
+            CstSyntaxOwnerView {
+                token_index: 2,
+                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                record_index: 0,
+            },
+        ));
+        assert(crucible_yaml::cst::cst_finish_iterative_sequence_spec(
+            tokens,
+            task,
+            Some(3),
+            initial,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_empty_node_construction_is_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {

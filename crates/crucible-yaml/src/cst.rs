@@ -6704,6 +6704,348 @@ fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u6
     task
 }
 
+pub open spec fn cst_push_sequence_entries_from_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    entries: Seq<CstSequenceEntryView>,
+    index: int,
+    fuel: nat,
+) -> Result<CstBuilderView, CstErrorView>
+    decreases fuel,
+{
+    if index < 0 || index > entries.len() || fuel == 0 || index >= entries.len() {
+        Ok(builder)
+    } else {
+        let entry = entries[index];
+        let offset = cst_byte_at_spec(
+            tokens,
+            (entry.token_start as usize) as u64,
+            builder.source_len_bytes,
+        );
+        match cst_push_sequence_entry_spec(builder, entry, offset) {
+            Ok(next) => cst_push_sequence_entries_from_spec(
+                next,
+                tokens,
+                entries,
+                index + 1,
+                (fuel - 1) as nat,
+            ),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub open spec fn cst_claim_flow_entries_from_spec(
+    builder: CstBuilderView,
+    flow_entry_tokens: Seq<u64>,
+    node_index: u64,
+    index: int,
+    fuel: nat,
+) -> Result<CstBuilderView, CstErrorView>
+    decreases fuel,
+{
+    if index < 0 || index > flow_entry_tokens.len() || fuel == 0 || index
+        >= flow_entry_tokens.len() {
+        Ok(builder)
+    } else {
+        match cst_claim_syntax_token_spec(
+            builder,
+            flow_entry_tokens[index],
+            CstSyntaxOwnerKind::FlowEntryIndicator,
+            node_index,
+        ) {
+            Ok(next) => cst_claim_flow_entries_from_spec(
+                next,
+                flow_entry_tokens,
+                node_index,
+                index + 1,
+                (fuel - 1) as nat,
+            ),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub open spec fn cst_finish_iterative_sequence_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    closer: Option<u64>,
+    builder: CstBuilderView,
+) -> Result<(CstBuilderView, ParsedNodeView), CstErrorView> {
+    let entry_start = builder.sequence_entries.len() as u64;
+    match cst_push_sequence_entries_from_spec(
+        builder,
+        tokens,
+        task.pending_sequence,
+        0,
+        (task.pending_sequence.len() + 1) as nat,
+    ) {
+        Err(error) => Err(error),
+        Ok(after_entries) => {
+            let bounds = match closer {
+                Some(index) => {
+                    if task.token_start >= tokens.len() || index >= tokens.len() {
+                        None
+                    } else {
+                        Some(
+                            (
+                                (index + 1) as u64,
+                                tokens[index as int].byte_end,
+                                (index + 1) as u64,
+                                tokens[index as int].byte_start,
+                            ),
+                        )
+                    }
+                },
+                None => {
+                    if task.token_start >= tokens.len() || task.opener >= tokens.len() {
+                        None
+                    } else {
+                        let token_end = task.node_token_end;
+                        let byte_end = if token_end > task.token_start && token_end
+                            <= tokens.len() {
+                            tokens[(token_end - 1) as int].byte_end
+                        } else {
+                            tokens[task.opener as int].byte_end
+                        };
+                        Some(
+                            (
+                                token_end,
+                                byte_end,
+                                task.cursor,
+                                tokens[task.opener as int].byte_start,
+                            ),
+                        )
+                    }
+                },
+            };
+            match bounds {
+                None => Err(
+                    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 },
+                ),
+                Some((token_end, byte_end, next_token, offset)) => {
+                    let node = CstNodeView {
+                        kind: CstNodeKind::Sequence,
+                        style: if closer.is_some() {
+                            CstNodeStyle::Flow
+                        } else {
+                            CstNodeStyle::Block
+                        },
+                        token_start: task.token_start,
+                        token_end,
+                        byte_start: tokens[task.token_start as int].byte_start,
+                        byte_end,
+                        anchor_property_token: task.anchor_property_token,
+                        tag_property_token: task.tag_property_token,
+                        scalar_or_alias_token: None,
+                        collection_start_token: if closer.is_some() {
+                            Some(task.opener)
+                        } else {
+                            None
+                        },
+                        collection_end_token: closer,
+                        entry_start,
+                        entry_end: after_entries.sequence_entries.len() as u64,
+                        empty_anchor_token: None,
+                        empty_anchor_byte: None,
+                    };
+                    match cst_push_node_spec(after_entries, node, offset) {
+                        Err(error) => Err(error),
+                        Ok((after_node, node_index)) => {
+                            match cst_claim_flow_entries_from_spec(
+                                after_node,
+                                task.flow_entry_tokens,
+                                node_index,
+                                0,
+                                (task.flow_entry_tokens.len() + 1) as nat,
+                            ) {
+                                Err(error) => Err(error),
+                                Ok(done) => Ok((done, ParsedNodeView { node_index, next_token })),
+                            }
+                        },
+                    }
+                },
+            }
+        },
+    }
+}
+
+fn push_iterative_sequence_entries(
+    tokens: &[CompletedToken],
+    entries: &[CstSequenceEntry],
+    builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_push_sequence_entries_from_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            cst_sequence_entry_views_spec(entries@),
+            0,
+            (entries.len() + 1) as nat,
+        ) == match result {
+            Ok(()) => Ok(final(builder)@),
+            Err(error) => Err(error@),
+        },
+{
+    let ghost expected = cst_push_sequence_entries_from_spec(
+        builder@,
+        crate::token::completed_token_views_spec(tokens@),
+        cst_sequence_entry_views_spec(entries@),
+        0,
+        (entries.len() + 1) as nat,
+    );
+    let mut pending_index = 0usize;
+    let ghost mut fuel: nat = (entries.len() + 1) as nat;
+    while pending_index < entries.len()
+        invariant
+            pending_index <= entries.len(),
+            fuel == (entries.len() - pending_index + 1) as nat,
+            builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+            expected == cst_push_sequence_entries_from_spec(
+                old(builder)@,
+                crate::token::completed_token_views_spec(tokens@),
+                cst_sequence_entry_views_spec(entries@),
+                0,
+                (entries.len() + 1) as nat,
+            ),
+            expected == cst_push_sequence_entries_from_spec(
+                builder@,
+                crate::token::completed_token_views_spec(tokens@),
+                cst_sequence_entry_views_spec(entries@),
+                pending_index as int,
+                fuel,
+            ),
+        decreases entries.len() - pending_index,
+    {
+        let current = entries[pending_index];
+        let ghost current_builder = builder@;
+        proof {
+            lemma_cst_sequence_entry_view_at(entries@, pending_index as int);
+            assert(cst_sequence_entry_views_spec(entries@)[pending_index as int] == current@);
+        }
+        let offset = byte_at(tokens, current.token_start as usize, builder.source_len_bytes);
+        proof {
+            assert(offset == cst_byte_at_spec(
+                crate::token::completed_token_views_spec(tokens@),
+                (current.token_start as usize) as u64,
+                current_builder.source_len_bytes,
+            ));
+        }
+        match builder.push_sequence_entry(current, offset) {
+            Ok(()) => {
+                proof {
+                    assert(cst_push_sequence_entry_spec(current_builder, current@, offset) == Ok(
+                        builder@,
+                    ));
+                    reveal(cst_push_sequence_entries_from_spec);
+                    fuel = (fuel - 1) as nat;
+                }
+            },
+            Err(error) => {
+                proof {
+                    assert(cst_push_sequence_entry_spec(current_builder, current@, offset) == Err(
+                        error@,
+                    ));
+                    reveal(cst_push_sequence_entries_from_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        }
+        pending_index += 1;
+    }
+    proof {
+        reveal(cst_push_sequence_entries_from_spec);
+    }
+    Ok(())
+}
+
+fn claim_flow_entry_tokens(
+    flow_entry_tokens: &[u64],
+    node_index: u64,
+    builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    ensures
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_claim_flow_entries_from_spec(
+            old(builder)@,
+            flow_entry_tokens@,
+            node_index,
+            0,
+            (flow_entry_tokens.len() + 1) as nat,
+        ) == match result {
+            Ok(()) => Ok(final(builder)@),
+            Err(error) => Err(error@),
+        },
+{
+    let ghost expected = cst_claim_flow_entries_from_spec(
+        builder@,
+        flow_entry_tokens@,
+        node_index,
+        0,
+        (flow_entry_tokens.len() + 1) as nat,
+    );
+    let mut flow_entry_index = 0usize;
+    let ghost mut fuel: nat = (flow_entry_tokens.len() + 1) as nat;
+    while flow_entry_index < flow_entry_tokens.len()
+        invariant
+            flow_entry_index <= flow_entry_tokens.len(),
+            fuel == (flow_entry_tokens.len() - flow_entry_index + 1) as nat,
+            builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+            expected == cst_claim_flow_entries_from_spec(
+                old(builder)@,
+                flow_entry_tokens@,
+                node_index,
+                0,
+                (flow_entry_tokens.len() + 1) as nat,
+            ),
+            expected == cst_claim_flow_entries_from_spec(
+                builder@,
+                flow_entry_tokens@,
+                node_index,
+                flow_entry_index as int,
+                fuel,
+            ),
+        decreases flow_entry_tokens.len() - flow_entry_index,
+    {
+        let token = flow_entry_tokens[flow_entry_index];
+        let ghost current_builder = builder@;
+        if let Err(error) = builder.claim_syntax_token(
+            token,
+            CstSyntaxOwnerKind::FlowEntryIndicator,
+            node_index,
+        ) {
+            proof {
+                assert(cst_claim_syntax_token_spec(
+                    current_builder,
+                    token,
+                    CstSyntaxOwnerKind::FlowEntryIndicator,
+                    node_index,
+                ) == Err(error@));
+                reveal(cst_claim_flow_entries_from_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        }
+        proof {
+            assert(cst_claim_syntax_token_spec(
+                current_builder,
+                token,
+                CstSyntaxOwnerKind::FlowEntryIndicator,
+                node_index,
+            ) == Ok(builder@));
+            reveal(cst_claim_flow_entries_from_spec);
+            fuel = (fuel - 1) as nat;
+        }
+        flow_entry_index += 1;
+    }
+    proof {
+        reveal(cst_claim_flow_entries_from_spec);
+    }
+    Ok(())
+}
+
 #[allow(clippy::manual_map)]
 fn finish_iterative_sequence(
     tokens: &[CompletedToken],
@@ -6713,46 +7055,120 @@ fn finish_iterative_sequence(
 ) -> (result: Result<ParsedNode, CstError>)
     ensures
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_finish_iterative_sequence_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            match closer {
+                Some(index) => Some(index as u64),
+                None => None,
+            },
+            old(builder)@,
+        ) == match result {
+            Ok(parsed) => Ok((final(builder)@, parsed@)),
+            Err(error) => Err(error@),
+        },
 {
-    let entry_start = builder.sequence_entries.len() as u64;
-    let mut pending_index = 0usize;
-    while pending_index < task.pending_sequence.len()
-        invariant
-            pending_index <= task.pending_sequence.len(),
-            builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
-        decreases task.pending_sequence.len() - pending_index,
-    {
-        let offset = byte_at(
-            tokens,
-            task.pending_sequence[pending_index].token_start as usize,
-            builder.source_len_bytes,
-        );
-        match builder.push_sequence_entry(task.pending_sequence[pending_index], offset) {
-            Ok(()) => {},
-            Err(error) => return Err(error),
-        }
-        pending_index += 1;
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost closer_view = match closer {
+        Some(index) => Some(index as u64),
+        None => None,
+    };
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_finish_iterative_sequence_spec(
+        token_views,
+        task_view,
+        closer_view,
+        initial_builder,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        assert(token_views.len() == tokens.len());
+        assert(task_view.pending_sequence == cst_sequence_entry_views_spec(task.pending_sequence@));
+        assert(task_view.pending_sequence.len() == task.pending_sequence.len());
     }
+    let entry_start = builder.sequence_entries.len() as u64;
+    match push_iterative_sequence_entries(tokens, &task.pending_sequence, builder) {
+        Ok(()) => {
+            proof {
+                assert(cst_push_sequence_entries_from_spec(
+                    initial_builder,
+                    token_views,
+                    task_view.pending_sequence,
+                    0,
+                    (task_view.pending_sequence.len() + 1) as nat,
+                ) == Ok(builder@));
+            }
+        },
+        Err(error) => {
+            proof {
+                assert(cst_push_sequence_entries_from_spec(
+                    initial_builder,
+                    token_views,
+                    task_view.pending_sequence,
+                    0,
+                    (task_view.pending_sequence.len() + 1) as nat,
+                ) == Err(error@));
+                reveal(cst_finish_iterative_sequence_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        },
+    }
+    let ghost after_entries = builder@;
     let (token_end, byte_end, next_token, offset) = match closer {
         Some(index) => {
             if task.token_start >= tokens.len() || index >= tokens.len() {
+                proof {
+                    reveal(cst_finish_iterative_sequence_spec);
+                    assert(expected == Err(
+                        CstErrorView {
+                            kind: CstErrorKind::InternalInvariantViolation,
+                            byte_offset: 0,
+                        },
+                    ));
+                }
                 return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+            }
+            proof {
+                crate::token::lemma_completed_token_view_at(tokens@, index as int);
             }
             (index + 1, tokens[index].byte_end(), index + 1, tokens[index].byte_start())
         },
         None => {
             if task.token_start >= tokens.len() || task.opener >= tokens.len() {
+                proof {
+                    reveal(cst_finish_iterative_sequence_spec);
+                    assert(expected == Err(
+                        CstErrorView {
+                            kind: CstErrorKind::InternalInvariantViolation,
+                            byte_offset: 0,
+                        },
+                    ));
+                }
                 return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
             }
             let token_end = task.node_token_end;
             let byte_end = if token_end > task.token_start && token_end <= tokens.len() {
+                proof {
+                    crate::token::lemma_completed_token_view_at(tokens@, (token_end - 1) as int);
+                }
                 tokens[token_end - 1].byte_end()
             } else {
+                proof {
+                    crate::token::lemma_completed_token_view_at(tokens@, task.opener as int);
+                }
                 tokens[task.opener].byte_end()
             };
+            proof {
+                crate::token::lemma_completed_token_view_at(tokens@, task.opener as int);
+            }
             (token_end, byte_end, task.cursor, tokens[task.opener].byte_start())
         },
     };
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, task.token_start as int);
+    }
     let node = CstNode {
         kind: CstNodeKind::Sequence,
         style: if closer.is_some() {
@@ -6781,27 +7197,56 @@ fn finish_iterative_sequence(
         empty_anchor_token: None,
         empty_anchor_byte: None,
     };
+    let ghost node_view = node@;
     let node_index = match builder.push_node(node, offset) {
-        Ok(node_index) => node_index,
-        Err(error) => return Err(error),
-    };
-    let mut flow_entry_index = 0usize;
-    while flow_entry_index < task.flow_entry_tokens.len()
-        invariant
-            flow_entry_index <= task.flow_entry_tokens.len(),
-            builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
-        decreases task.flow_entry_tokens.len() - flow_entry_index,
-    {
-        if let Err(error) = builder.claim_syntax_token(
-            task.flow_entry_tokens[flow_entry_index],
-            CstSyntaxOwnerKind::FlowEntryIndicator,
-            node_index,
-        ) {
+        Ok(node_index) => {
+            proof {
+                assert(cst_push_node_spec(after_entries, node_view, offset) == Ok(
+                    (builder@, node_index),
+                ));
+            }
+            node_index
+        },
+        Err(error) => {
+            proof {
+                assert(cst_push_node_spec(after_entries, node_view, offset) == Err(error@));
+                reveal(cst_finish_iterative_sequence_spec);
+                assert(expected == Err(error@));
+            }
             return Err(error);
+        },
+    };
+    let ghost after_node = builder@;
+    if let Err(error) = claim_flow_entry_tokens(&task.flow_entry_tokens, node_index, builder) {
+        proof {
+            assert(task_view.flow_entry_tokens == task.flow_entry_tokens@);
+            assert(cst_claim_flow_entries_from_spec(
+                after_node,
+                task_view.flow_entry_tokens,
+                node_index,
+                0,
+                (task_view.flow_entry_tokens.len() + 1) as nat,
+            ) == Err(error@));
+            reveal(cst_finish_iterative_sequence_spec);
+            assert(expected == Err(error@));
         }
-        flow_entry_index += 1;
+        return Err(error);
     }
-    Ok(ParsedNode { node_index, next_token })
+    let parsed = ParsedNode { node_index, next_token };
+    proof {
+        assert(task_view.flow_entry_tokens == task.flow_entry_tokens@);
+        assert(cst_claim_flow_entries_from_spec(
+            after_node,
+            task_view.flow_entry_tokens,
+            node_index,
+            0,
+            (task_view.flow_entry_tokens.len() + 1) as nat,
+        ) == Ok(builder@));
+        reveal(cst_finish_iterative_sequence_spec);
+        assert(parsed@ == ParsedNodeView { node_index, next_token: next_token as u64 });
+        assert(expected == Ok((builder@, parsed@)));
+    }
+    Ok(parsed)
 }
 
 #[allow(clippy::manual_map)]
