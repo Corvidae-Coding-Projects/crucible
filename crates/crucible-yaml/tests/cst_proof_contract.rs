@@ -15,6 +15,30 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_parser_frame_initialization_and_bounded_push_are_exact() {
+    proof {
+        let task = crucible_yaml::cst::cst_node_task_spec(2, 7, true, 4);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_push_parse_task_spec);
+        assert(task.kind == crucible_yaml::cst::ParseTaskKind::Node);
+        assert(task.token_start == 2 && task.cursor == 2 && task.end == 7 && task.opener == 2);
+        assert(task.depth_left == 4 && task.allow_block_mapping);
+        assert(task.pending_sequence.len() == 0);
+        assert(task.pending_mapping.len() == 0);
+        assert(task.flow_entry_tokens.len() == 0);
+        let pushed = crucible_yaml::cst::cst_push_parse_task_spec(Seq::empty(), task, 0, 9);
+        assert(pushed == Ok(Seq::empty().push(task)));
+        let full = Seq::empty().push(task).push(task);
+        assert(crucible_yaml::cst::cst_push_parse_task_spec(full, task, 0, 11) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::DepthLimitExceeded,
+                byte_offset: 11,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_builder_directive_and_depth_metadata_are_exact() {
     proof {
         let limits = crucible_yaml::CstLimitsView {

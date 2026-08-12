@@ -4604,6 +4604,20 @@ struct ParsedNode {
     next_token: usize,
 }
 
+#[verifier::ext_equal]
+pub struct ParsedNodeView {
+    pub node_index: u64,
+    pub next_token: u64,
+}
+
+impl View for ParsedNode {
+    type V = ParsedNodeView;
+
+    closed spec fn view(&self) -> ParsedNodeView {
+        ParsedNodeView { node_index: self.node_index, next_token: self.next_token as u64 }
+    }
+}
+
 pub open spec fn cst_token_is_trivia_spec(kind: CompletedTokenKind) -> bool {
     kind == CompletedTokenKind::Indentation || kind == CompletedTokenKind::Separation || kind
         == CompletedTokenKind::Comment || kind == CompletedTokenKind::LineFeed || kind
@@ -6485,8 +6499,8 @@ fn block_value_allows_collection(
     syntax < end && tokens[syntax].start_line_number() > colon_line
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ParseTaskKind {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Structural)]
+pub enum ParseTaskKind {
     Node,
     FlowSequence,
     FlowMapping,
@@ -6494,7 +6508,7 @@ enum ParseTaskKind {
     BlockMapping,
 }
 
-struct ParseTask {
+pub struct ParseTask {
     kind: ParseTaskKind,
     state: u8,
     token_start: usize,
@@ -6517,8 +6531,109 @@ struct ParseTask {
     explicit_key: bool,
 }
 
-fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u64) -> ParseTask {
-    ParseTask {
+#[verifier::ext_equal]
+pub struct ParseTaskView {
+    pub kind: ParseTaskKind,
+    pub state: u8,
+    pub token_start: u64,
+    pub cursor: u64,
+    pub end: u64,
+    pub opener: u64,
+    pub indentation: u64,
+    pub depth_left: u64,
+    pub allow_block_mapping: bool,
+    pub anchor_property_token: Option<u64>,
+    pub tag_property_token: Option<u64>,
+    pub pending_sequence: Seq<CstSequenceEntryView>,
+    pub pending_mapping: Seq<CstMappingEntryView>,
+    pub flow_entry_tokens: Seq<u64>,
+    pub entry_token_start: u64,
+    pub entry_token_end: u64,
+    pub key_node_index: u64,
+    pub colon_token: u64,
+    pub node_token_end: u64,
+    pub explicit_key: bool,
+}
+
+impl View for ParseTask {
+    type V = ParseTaskView;
+
+    closed spec fn view(&self) -> ParseTaskView {
+        ParseTaskView {
+            kind: self.kind,
+            state: self.state,
+            token_start: self.token_start as u64,
+            cursor: self.cursor as u64,
+            end: self.end as u64,
+            opener: self.opener as u64,
+            indentation: self.indentation,
+            depth_left: self.depth_left,
+            allow_block_mapping: self.allow_block_mapping,
+            anchor_property_token: self.anchor_property_token,
+            tag_property_token: self.tag_property_token,
+            pending_sequence: cst_sequence_entry_views_spec(self.pending_sequence@),
+            pending_mapping: cst_mapping_entry_views_spec(self.pending_mapping@),
+            flow_entry_tokens: self.flow_entry_tokens@,
+            entry_token_start: self.entry_token_start as u64,
+            entry_token_end: self.entry_token_end as u64,
+            key_node_index: self.key_node_index,
+            colon_token: self.colon_token as u64,
+            node_token_end: self.node_token_end as u64,
+            explicit_key: self.explicit_key,
+        }
+    }
+}
+
+pub open spec fn cst_parse_task_views_spec(tasks: Seq<ParseTask>) -> Seq<ParseTaskView> {
+    tasks.map_values(|task: ParseTask| task@)
+}
+
+proof fn lemma_cst_parse_task_views_push(tasks: Seq<ParseTask>, task: ParseTask)
+    ensures
+        cst_parse_task_views_spec(tasks.push(task)) == cst_parse_task_views_spec(tasks).push(task@),
+{
+    reveal(cst_parse_task_views_spec);
+    assert(tasks.push(task).map_values(|value: ParseTask| value@) =~= tasks.map_values(
+        |value: ParseTask| value@,
+    ).push(task@));
+}
+
+pub open spec fn cst_node_task_spec(
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_left: u64,
+) -> ParseTaskView {
+    ParseTaskView {
+        kind: ParseTaskKind::Node,
+        state: 0,
+        token_start: start,
+        cursor: start,
+        end,
+        opener: start,
+        indentation: 0,
+        depth_left,
+        allow_block_mapping,
+        anchor_property_token: None,
+        tag_property_token: None,
+        pending_sequence: Seq::empty(),
+        pending_mapping: Seq::empty(),
+        flow_entry_tokens: Seq::empty(),
+        entry_token_start: start,
+        entry_token_end: start,
+        key_node_index: 0,
+        colon_token: start,
+        node_token_end: start,
+        explicit_key: false,
+    }
+}
+
+fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u64) -> (task:
+    ParseTask)
+    ensures
+        task@ == cst_node_task_spec(start as u64, end as u64, allow_block_mapping, depth_left),
+{
+    let task = ParseTask {
         kind: ParseTaskKind::Node,
         state: 0,
         token_start: start,
@@ -6539,7 +6654,13 @@ fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u6
         colon_token: start,
         node_token_end: start,
         explicit_key: false,
+    };
+    proof {
+        reveal(cst_node_task_spec);
+        reveal(cst_sequence_entry_views_spec);
+        reveal(cst_mapping_entry_views_spec);
     }
+    task
 }
 
 #[allow(clippy::manual_map)]
@@ -6742,6 +6863,19 @@ fn finish_iterative_mapping(
     Ok(ParsedNode { node_index, next_token })
 }
 
+pub open spec fn cst_push_parse_task_spec(
+    tasks: Seq<ParseTaskView>,
+    task: ParseTaskView,
+    depth_limit: u64,
+    offset: u64,
+) -> Result<Seq<ParseTaskView>, CstErrorView> {
+    if tasks.len() > depth_limit + 1 {
+        Err(CstErrorView { kind: CstErrorKind::DepthLimitExceeded, byte_offset: offset })
+    } else {
+        Ok(tasks.push(task))
+    }
+}
+
 fn push_iterative_task(
     tasks: &mut Vec<ParseTask>,
     task: ParseTask,
@@ -6753,11 +6887,25 @@ fn push_iterative_task(
     ensures
         result.is_ok() ==> final(tasks).len() == old(tasks).len() + 1,
         result.is_ok() ==> final(tasks).len() <= depth_limit + 2,
+        cst_push_parse_task_spec(cst_parse_task_views_spec(old(tasks)@), task@, depth_limit, offset)
+            == match result {
+            Ok(()) => Ok(cst_parse_task_views_spec(final(tasks)@)),
+            Err(error) => Err(error@),
+        },
 {
     if tasks.len() > depth_limit as usize + 1 {
+        proof {
+            reveal(cst_parse_task_views_spec);
+            reveal(cst_push_parse_task_spec);
+        }
         return Err(CstError::at(CstErrorKind::DepthLimitExceeded, offset));
     }
+    let ghost old_tasks = tasks@;
     tasks.push(task);
+    proof {
+        lemma_cst_parse_task_views_push(old_tasks, task);
+        reveal(cst_push_parse_task_spec);
+    }
     Ok(())
 }
 
