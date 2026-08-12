@@ -9590,6 +9590,65 @@ pub open spec fn cst_step_flow_sequence_state_one_spec(
     }
 }
 
+pub open spec fn cst_step_flow_sequence_state_four_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::FlowSequence || task.state != 4 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else if task.cursor >= task.end {
+        Err(
+            CstErrorView {
+                kind: CstErrorKind::UnexpectedEndOfInput,
+                byte_offset: builder.source_len_bytes,
+            },
+        )
+    } else {
+        let token = tokens[task.cursor as int];
+        if token.kind == CompletedTokenKind::FlowSequenceEnd {
+            cst_step_node_store_parsed_spec(
+                machine,
+                cst_finish_iterative_sequence_spec(
+                    tokens,
+                    task,
+                    Some(task.cursor),
+                    builder,
+                ),
+            )
+        } else if token.kind != CompletedTokenKind::FlowEntry {
+            Err(
+                CstErrorView {
+                    kind: CstErrorKind::MissingFlowEntry,
+                    byte_offset: token.byte_start,
+                },
+            )
+        } else {
+            let appended = cst_task_push_flow_entry_spec(task, task.cursor);
+            let cursor = cst_skip_trivia_spec(
+                tokens,
+                task.cursor as int + 1,
+                task.end as int,
+                (task.end as int - task.cursor as int) as nat,
+            );
+            let positioned = cst_task_set_cursor_spec(appended, cursor as u64);
+            if cursor < task.end && tokens[cursor].kind == CompletedTokenKind::FlowEntry {
+                Err(
+                    CstErrorView {
+                        kind: CstErrorKind::UnexpectedFlowEntry,
+                        byte_offset: tokens[cursor].byte_start,
+                    },
+                )
+            } else {
+                let waiting = cst_task_set_state_spec(positioned, 0);
+                Ok((cst_machine_resume_task_spec(machine, waiting), builder))
+            }
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -10555,6 +10614,147 @@ fn step_flow_sequence_state_one(
 }
 
 #[verifier::rlimit(500)]
+fn step_flow_sequence_state_four(
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::FlowSequence,
+        task@.state == 4,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+    ensures
+        cst_step_flow_sequence_state_four_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() <= old(machine).tasks.len() + 1,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_flow_sequence_state_four_spec(
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_flow_sequence_state_four_spec);
+    }
+    if task.cursor >= task.end {
+        let error = CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes);
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+        assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+    }
+    let kind = tokens[task.cursor].kind();
+    if kind == CompletedTokenKind::FlowSequenceEnd {
+        let closer = task.cursor;
+        let ghost prior_builder = builder@;
+        let parsed = match finish_iterative_sequence(tokens, task, Some(closer), builder) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_iterative_sequence_spec(
+                        token_views,
+                        task_view,
+                        Some(closer as u64),
+                        prior_builder,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_iterative_sequence_spec(
+                token_views,
+                task_view,
+                Some(closer as u64),
+                prior_builder,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    if kind != CompletedTokenKind::FlowEntry {
+        let error = CstError::at(CstErrorKind::MissingFlowEntry, tokens[task.cursor].byte_start());
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    let entry_token = task.cursor as u64;
+    task_push_flow_entry(&mut task, entry_token);
+    let ghost appended = task@;
+    let cursor = skip_trivia(tokens, task.cursor + 1, task.end);
+    task_set_cursor(cursor, &mut task);
+    let ghost positioned = task@;
+    proof {
+        assert(positioned == cst_task_set_cursor_spec(
+            appended,
+            cst_skip_trivia_spec(
+                token_views,
+                task_view.cursor as int + 1,
+                task_view.end as int,
+                (task_view.end as int - task_view.cursor as int) as nat,
+            ) as u64,
+        ));
+    }
+    if task.cursor < task.end && tokens[task.cursor].kind() == CompletedTokenKind::FlowEntry {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, task.cursor as int);
+            assert(tokens@[task.cursor as int]@ == token_views[task.cursor as int]);
+        }
+        let error = CstError::at(
+            CstErrorKind::UnexpectedFlowEntry,
+            tokens[task.cursor].byte_start(),
+        );
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    proof {
+        if positioned.cursor < task_view.end {
+            crate::token::lemma_completed_token_view_at(tokens@, positioned.cursor as int);
+            assert(tokens@[positioned.cursor as int]@ == token_views[positioned.cursor as int]);
+            assert(token_views[positioned.cursor as int].kind != CompletedTokenKind::FlowEntry);
+        }
+    }
+    task_set_state(&mut task, 0);
+    machine_resume_task(task, machine);
+    proof {
+        assert(expected == Ok((machine@, builder@)));
+    }
+    Ok(())
+}
+
+#[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -10773,40 +10973,13 @@ fn parse_node_iterative(
                 machine_resume_task(task, &mut machine);
                 continue;
             }
-            if task.cursor >= task.end {
-                return Err(
-                    CstError::at(CstErrorKind::UnexpectedEndOfInput, builder.source_len_bytes),
-                );
+            proof {
+                assert(task.state == 4);
             }
-            if tokens[task.cursor].kind() == CompletedTokenKind::FlowSequenceEnd {
-                let closer = task.cursor;
-                let parsed = match finish_iterative_sequence(tokens, task, Some(closer), builder) {
-                    Ok(parsed) => parsed,
-                    Err(error) => return Err(error),
-                };
-                machine_store_completed(parsed, &mut machine);
-                continue;
+            match step_flow_sequence_state_four(tokens, task, &mut machine, builder) {
+                Ok(()) => continue,
+                Err(error) => return Err(error),
             }
-            if tokens[task.cursor].kind() != CompletedTokenKind::FlowEntry {
-                return Err(
-                    CstError::at(CstErrorKind::MissingFlowEntry, tokens[task.cursor].byte_start()),
-                );
-            }
-            let entry_token = task.cursor as u64;
-            task_push_flow_entry(&mut task, entry_token);
-            task_set_cursor(skip_trivia(tokens, task.cursor + 1, task.end), &mut task);
-            if task.cursor < task.end && tokens[task.cursor].kind()
-                == CompletedTokenKind::FlowEntry {
-                return Err(
-                    CstError::at(
-                        CstErrorKind::UnexpectedFlowEntry,
-                        tokens[task.cursor].byte_start(),
-                    ),
-                );
-            }
-            task_set_state(&mut task, 0);
-            machine_resume_task(task, &mut machine);
-            continue;
         }
         if task.kind == ParseTaskKind::FlowMapping {
             if task.state == 0 {
