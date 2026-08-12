@@ -10324,6 +10324,48 @@ pub open spec fn cst_step_block_sequence_state_one_spec(
     }
 }
 
+pub open spec fn cst_step_block_sequence_state_two_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::BlockSequence || task.state != 2 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        let next = cst_skip_trivia_spec(
+            tokens,
+            task.cursor as int,
+            task.end as int,
+            (task.end - task.cursor) as nat + 1,
+        );
+        let positioned = cst_task_set_cursor_spec(task, next as u64);
+        if next >= task.end {
+            let waiting = cst_task_set_state_spec(positioned, 0);
+            Ok((cst_machine_resume_task_spec(machine, waiting), builder))
+        } else {
+            let column = cst_token_column_spec(atoms, tokens[next]);
+            if tokens[next].kind == CompletedTokenKind::BlockSequenceEntry && column
+                == task.indentation {
+                let waiting = cst_task_set_state_spec(positioned, 0);
+                Ok((cst_machine_resume_task_spec(machine, waiting), builder))
+            } else if column > task.indentation {
+                Err(
+                    CstErrorView {
+                        kind: CstErrorKind::InvalidIndentation,
+                        byte_offset: tokens[next].byte_start,
+                    },
+                )
+            } else {
+                let waiting = cst_task_set_state_spec(positioned, 0);
+                Ok((cst_machine_resume_task_spec(machine, waiting), builder))
+            }
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -12994,6 +13036,96 @@ fn step_block_sequence_state_one(
 }
 
 #[verifier::rlimit(500)]
+fn step_block_sequence_state_two(
+    atoms: &[LexicalAtom],
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    _builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::BlockSequence,
+        task@.state == 2,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+    ensures
+        cst_step_block_sequence_state_two_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(_builder)@,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(_builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(_builder)@ == old(_builder)@,
+        final(_builder).syntax_owner_slots.len() == old(_builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = _builder@;
+    let ghost expected = cst_step_block_sequence_state_two_spec(
+        atom_views,
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_block_sequence_state_two_spec);
+    }
+    let next = skip_trivia(tokens, task.cursor, task.end);
+    task_set_cursor(next, &mut task);
+    let ghost positioned = task@;
+    if next >= task.end {
+        task_set_state(&mut task, 0);
+        machine_resume_task(task, machine);
+        proof {
+            assert(expected == Ok((machine@, _builder@)));
+        }
+        return Ok(());
+    }
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, next as int);
+        assert(tokens@[next as int]@ == token_views[next as int]);
+    }
+    let next_column = token_column(atoms, &tokens[next]);
+    if tokens[next].kind() == CompletedTokenKind::BlockSequenceEntry && next_column
+        == task.indentation {
+        task_set_state(&mut task, 0);
+        machine_resume_task(task, machine);
+        proof {
+            assert(expected == Ok((machine@, _builder@)));
+        }
+        return Ok(());
+    }
+    if next_column > task.indentation {
+        let error = CstError::at(CstErrorKind::InvalidIndentation, tokens[next].byte_start());
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    task_set_state(&mut task, 0);
+    machine_resume_task(task, machine);
+    proof {
+        assert(positioned.cursor == next as u64);
+        assert(expected == Ok((machine@, _builder@)));
+    }
+    Ok(())
+}
+
+#[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -13148,30 +13280,13 @@ fn parse_node_iterative(
                     Err(error) => return Err(error),
                 }
             }
-            let next = skip_trivia(tokens, task.cursor, task.end);
-            if next >= task.end {
-                task_set_cursor(next, &mut task);
-                task_set_state(&mut task, 0);
-                machine_resume_task(task, &mut machine);
-                continue;
+            proof {
+                assert(task.state == 2);
             }
-            let next_column = token_column(atoms, &tokens[next]);
-            if tokens[next].kind() == CompletedTokenKind::BlockSequenceEntry && next_column
-                == task.indentation {
-                task_set_cursor(next, &mut task);
-                task_set_state(&mut task, 0);
-                machine_resume_task(task, &mut machine);
-                continue;
+            match step_block_sequence_state_two(atoms, tokens, task, &mut machine, builder) {
+                Ok(()) => continue,
+                Err(error) => return Err(error),
             }
-            if next_column > task.indentation {
-                return Err(
-                    CstError::at(CstErrorKind::InvalidIndentation, tokens[next].byte_start()),
-                );
-            }
-            task_set_cursor(next, &mut task);
-            task_set_state(&mut task, 0);
-            machine_resume_task(task, &mut machine);
-            continue;
         }
         if task.kind == ParseTaskKind::BlockMapping {
             if task.state == 0 {
