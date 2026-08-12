@@ -1758,10 +1758,110 @@ caller-lowered limit. Proof tests include nonempty multidocument block/flow mixt
 that attempt cycles, forward child references, duplicated token ownership, property substitution,
 cross-document directive leakage, invalid empty-node anchors, or incomplete frame laundering.
 
-The parser must never construct an unbounded alias expansion, recurse without a verified bound,
-silently accept duplicate effective keys, or permit a scalar coercion to change across versions
-without a language-profile change. Parse rejection is a typed configuration result, not a
-harness panic.
+Profile 1's semantic-resolution transformation is version 1. It authenticates the completed-token
+source and CST before composing one semantic graph per document. The graph is a nonrecursive table
+of scalar, sequence, and mapping nodes plus explicit edges; aliases resolve to existing node
+identities rather than copying host objects. CST indices, source tokens, and original byte offsets
+remain attached to every semantic node and mapping entry so later lowering and diagnostics never
+need to reconstruct presentation provenance. Anchor names and alias spellings remain diagnostic
+evidence even though anchor names are not part of semantic node equality.
+
+The default implicit scalar policy is YAML 1.2.2 Core Schema, not YAML 1.1 compatibility
+coercion. An untagged plain scalar resolves only as Core null, boolean, integer, finite decimal,
+infinity, not-a-number, or string; `yes`, `no`, `on`, `off`, sexagesimal numbers, and legacy
+leading-zero octal remain strings. Non-plain scalars without a specific tag resolve as strings.
+Empty scalar nodes resolve as null only when they have the `?` non-specific tag; an explicitly
+quoted empty scalar is a string. Explicit standard tags `!!null`, `!!bool`, `!!int`, `!!float`,
+`!!str`, `!!seq`, and `!!map` require a compatible node kind and a spelling valid for that tag.
+Unknown well-formed global and local tags are retained losslessly on compatible semantic nodes for
+application-specific validation; they are not silently rewritten to Core tags.
+
+Integer resolution is independent of host width. A resolved integer is a sign plus a normalized
+arbitrary-length magnitude, and Core decimal, `0o` octal, and `0x` hexadecimal spellings convert by
+a bespoke verified multiply-add machine. Leading magnitude zeroes are removed and every zero has
+one positive canonical form. Finite floats are represented exactly as a sign, an arbitrary-length
+base-10 coefficient, and a normalized arbitrary-length signed decimal exponent; equivalent
+spellings such as `1.0`, `1e0`, and `10e-1` normalize to one value without an intermediate
+IEEE-754 rounding step. Positive
+and negative infinity are distinct values, every accepted NaN spelling has one canonical semantic
+value, and negative zero remains distinguishable until schema lowering explicitly chooses
+otherwise. Later lowering performs checked conversion to any required fixed-width integer or
+floating format and reports range or precision policy errors instead of inheriting host casts.
+
+Single-quoted, double-quoted, plain, literal, and folded scalar presentation is decoded by verified
+style-specific machines. Single-quote doubling, every accepted double-quote escape, escaped line
+breaks, and YAML flow-line folding produce exact Unicode scalar content with per-output provenance.
+Plain-scalar line folding uses the authenticated presentation range and indentation context rather
+than trimming arbitrary host strings. Block scalars reuse the already authenticated normalized
+content and provenance. Scalar decoding does not apply Unicode normalization; code-point identity
+is preserved unless an explicit future language-profile version says otherwise.
+
+Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
+defaults and may be overridden by that document's `%TAG` directives; named handles must have an
+exact declaration in the same document. Verbatim tags bypass handle expansion. Tag suffix and
+prefix percent escapes are decoded exactly once as bytes, malformed escapes retain their lexer
+diagnostic, decoded byte sequences must be shortest-form UTF-8, and URI spelling is validated
+before a global tag identity is admitted. A local tag remains a distinct local identity rather
+than being confused with a global URI. Directive state, local tag identity, and anchor lookup reset
+at every document boundary.
+
+An alias names the most recent preceding anchor property with the same exact Unicode name in its
+document. Duplicate anchor names are therefore permitted and replace only subsequent lookup;
+forward and cross-document aliases are typed errors at the alias token. An anchor on a collection
+is visible to its descendants as soon as its property occurs, so a later descendant alias can form
+a graph cycle even though CST parents complete after their children. Profile 1 rejects every direct
+or indirect alias cycle at the alias edge that first closes the active resolution path. Shared
+acyclic subgraphs remain shared semantic identities. Resolution and all later traversals use
+explicit stacks and color/state tables rather than host recursion.
+
+Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
+merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
+does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with
+the explicit `tag:yaml.org,2002:merge` tag, is a merge key; quoted `"<<"` remains an ordinary
+string key. A merge value must resolve to one mapping or to a sequence containing only mappings.
+For a sequence, earlier mappings override later mappings. Explicit entries in the receiving mapping
+override every inherited entry regardless of source order. The resolved diagnostic order is all
+explicit non-merge entries in source order followed by still-unshadowed inherited entries in merge
+precedence and source order. Merge keys themselves do not appear in the semantic mapping.
+
+Duplicate-key checking occurs after tag and scalar resolution and before merge application.
+Two scalar keys are equal only when their resolved tag and canonical semantic value are equal;
+sequence and mapping keys use structural equality over the acyclic resolved graph, with mapping
+entry order ignored and anchors, aliases, styles, and comments ignored. Canonical key comparison is
+implemented with a bounded, length-delimited representation rather than host hashing alone, so a
+hash collision cannot make distinct keys equal. Two explicit entries in one mapping with equal
+canonical keys are rejected at the later key. Merge precedence suppresses an inherited key only
+after that same exact equality check and never hides a duplicate among the receiving mapping's
+explicit entries.
+
+The absolute semantic-node, sequence-edge, mapping-entry, anchor, alias, tag-byte, per-scalar decoded
+code-point, aggregate decoded code-point, expanded-reference, canonical-key-byte, and work-stack
+caps are each 1,048,576; the absolute semantic depth is 4,096. Callers MAY lower every cap but
+cannot raise it. Expanded-reference cost counts each node occurrence that a fully materialized tree
+would visit, including repeated visits through aliases and merges, even though the public graph
+retains sharing; checked addition rejects exponential alias or merge amplification before
+allocation. Intrinsic invalid spelling, tag compatibility, missing alias, cycle, invalid merge
+shape, and duplicate explicit key errors take precedence over the caller cap that would otherwise
+exclude the same record. Limit errors identify the first source token whose admission or expansion
+would exceed the effective bound, and all arithmetic is checked against both the profile cap and
+`u64` representation.
+
+The executable scalar decoders, handle/anchor tables, graph composer, cycle detector, merge
+expander, and canonical-key machine are iterative Verus Rust. The pure transformation is total
+under explicit token, node, edge, scalar, and traversal fuel and fixes the complete semantic graph
+or first typed diagnostic. Public contracts prove authenticated input identity, exact scalar and
+tag decoding, most-recent-preceding anchor selection, absence of unresolved aliases and cycles,
+merge precedence, duplicate-key rejection, graph reachability from each document root, deterministic
+output, source-order diagnostic retention, canonical key equality, strict progress, and every
+absolute and caller-lowered limit. Proof tests include nonempty multidocument graphs and forged
+views attempting cross-document handles or aliases, forward aliases, ancestor cycles, anchor
+shadowing errors, tag-kind substitution, scalar-provenance laundering, merge amplification,
+collision-based key equality, and duplicate-key laundering.
+
+The YAML pipeline must never construct an unbounded alias or merge expansion, recurse without a
+verified bound, silently accept duplicate effective keys, or permit a scalar coercion to change
+across versions without a language-profile change. Resolution rejection is a typed configuration
+result, not a harness panic, and exposes no partial public semantic graph.
 
 ### 12.2 Required YAML proofs and tests
 
