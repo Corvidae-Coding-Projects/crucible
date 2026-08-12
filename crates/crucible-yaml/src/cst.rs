@@ -4250,7 +4250,60 @@ pub open spec fn cst_push_document_spec(
     }
 }
 
+pub open spec fn cst_record_directive_spec(builder: CstBuilderView, offset: u64) -> Result<
+    CstBuilderView,
+    CstErrorView,
+> {
+    if builder.directive_count >= builder.directive_limit {
+        Err(CstErrorView { kind: CstErrorKind::DirectiveLimitExceeded, byte_offset: offset })
+    } else {
+        Ok(CstBuilderView { directive_count: (builder.directive_count + 1) as u64, ..builder })
+    }
+}
+
+pub open spec fn cst_observe_depth_spec(builder: CstBuilderView, depth: u64) -> CstBuilderView {
+    if depth > builder.maximum_depth {
+        CstBuilderView { maximum_depth: depth, ..builder }
+    } else {
+        builder
+    }
+}
+
 impl CstBuilder {
+    fn record_directive(&mut self, offset: u64) -> (result: Result<(), CstError>)
+        ensures
+            final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_record_directive_spec(old(self)@, offset) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
+    {
+        if self.directive_count >= self.directive_limit {
+            proof {
+                reveal(cst_record_directive_spec);
+            }
+            return Err(CstError::at(CstErrorKind::DirectiveLimitExceeded, offset));
+        }
+        self.directive_count += 1;
+        proof {
+            reveal(cst_record_directive_spec);
+        }
+        Ok(())
+    }
+
+    fn observe_depth(&mut self, depth: u64)
+        ensures
+            final(self)@ == cst_observe_depth_spec(old(self)@, depth),
+            final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+    {
+        if depth > self.maximum_depth {
+            self.maximum_depth = depth;
+        }
+        proof {
+            reveal(cst_observe_depth_spec);
+        }
+    }
+
     fn claim_syntax_token(
         &mut self,
         token_index: u64,
@@ -6896,9 +6949,7 @@ fn parse_node_iterative(
                         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                     }
                     let opened_depth = depth_limit - task.depth_left + 1;
-                    if opened_depth > builder.maximum_depth {
-                        builder.maximum_depth = opened_depth;
-                    }
+                    builder.observe_depth(opened_depth);
                     task.kind = ParseTaskKind::BlockMapping;
                     task.state = 0;
                     task.token_start = token_start;
@@ -6957,9 +7008,7 @@ fn parse_node_iterative(
                 return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
             }
             let opened_depth = depth_limit - task.depth_left + 1;
-            if opened_depth > builder.maximum_depth {
-                builder.maximum_depth = opened_depth;
-            }
+            builder.observe_depth(opened_depth);
             task.kind = specialized;
             task.state = 0;
             task.token_start = token_start;
@@ -8084,12 +8133,9 @@ pub fn parse_profile1_cst(
             }
             directive_fuel -= 1;
             assert(syntax < tokens.len());
-            if builder.directive_count >= builder.directive_limit {
-                return Err(
-                    CstError::at(CstErrorKind::DirectiveLimitExceeded, tokens[syntax].byte_start()),
-                );
+            if let Err(error) = builder.record_directive(tokens[syntax].byte_start()) {
+                return Err(error);
             }
-            builder.directive_count += 1;
             if let Err(error) = builder.claim_syntax_token(
                 syntax as u64,
                 CstSyntaxOwnerKind::Directive,

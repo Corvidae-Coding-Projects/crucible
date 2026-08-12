@@ -15,6 +15,42 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_builder_directive_and_depth_metadata_are_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 4,
+        };
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(0, limits, 9);
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_record_directive_spec);
+        reveal(crucible_yaml::cst::cst_observe_depth_spec);
+        let recorded = crucible_yaml::cst::cst_record_directive_spec(initial, 3);
+        assert(recorded.is_ok());
+        let after_directive = match recorded {
+            Ok(builder) => builder,
+            Err(_) => initial,
+        };
+        assert(after_directive.directive_count == 1);
+        assert(crucible_yaml::cst::cst_record_directive_spec(after_directive, 7) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::DirectiveLimitExceeded,
+                byte_offset: 7,
+            },
+        ));
+        let deeper = crucible_yaml::cst::cst_observe_depth_spec(after_directive, 3);
+        assert(deeper.maximum_depth == 3);
+        let shallower = crucible_yaml::cst::cst_observe_depth_spec(deeper, 2);
+        assert(shallower == deeper);
+    }
+}
+
+#[test]
 fn pure_directive_and_tag_handle_helpers_are_exact() {
     proof {
         let position = SourcePositionView { byte_offset: 0, line: 0, column: 0 };
