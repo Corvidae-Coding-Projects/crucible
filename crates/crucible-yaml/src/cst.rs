@@ -8638,6 +8638,90 @@ fn resume_parse_task(tasks: &mut Vec<ParseTask>, task: ParseTask)
     }
 }
 
+pub open spec fn cst_finish_parse_node_spec(
+    tasks: Seq<ParseTaskView>,
+    completed: Option<ParsedNodeView>,
+    start: u64,
+    end: u64,
+    node_count: u64,
+) -> Result<ParsedNodeView, CstErrorView> {
+    let internal = CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 };
+    if tasks.len() != 0 || start > end {
+        Err(internal)
+    } else {
+        match completed {
+            Some(parsed) => {
+                if parsed.next_token < start || parsed.next_token > end || parsed.node_index
+                    >= node_count {
+                    Err(internal)
+                } else {
+                    Ok(parsed)
+                }
+            },
+            None => Err(internal),
+        }
+    }
+}
+
+fn finish_parse_node(
+    tasks: &[ParseTask],
+    completed: Option<ParsedNode>,
+    start: usize,
+    end: usize,
+    node_count: u64,
+) -> (result: Result<ParsedNode, CstError>)
+    ensures
+        result.is_ok() ==> result.unwrap().node_index < node_count,
+        result.is_ok() ==> start <= result.unwrap().next_token <= end,
+        cst_finish_parse_node_spec(
+            cst_parse_task_views_spec(tasks@),
+            cst_completed_node_view_spec(completed),
+            start as u64,
+            end as u64,
+            node_count,
+        ) == match result {
+            Ok(parsed) => Ok(parsed@),
+            Err(error) => Err(error@),
+        },
+{
+    if tasks.len() != 0 || start > end {
+        proof {
+            reveal(cst_parse_task_views_spec);
+            reveal(cst_completed_node_view_spec);
+            reveal(cst_finish_parse_node_spec);
+        }
+        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+    }
+    match completed {
+        Some(parsed) => {
+            if parsed.next_token < start || parsed.next_token > end || parsed.node_index
+                >= node_count {
+                proof {
+                    reveal(cst_parse_task_views_spec);
+                    reveal(cst_completed_node_view_spec);
+                    reveal(cst_finish_parse_node_spec);
+                }
+                Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0))
+            } else {
+                proof {
+                    reveal(cst_parse_task_views_spec);
+                    reveal(cst_completed_node_view_spec);
+                    reveal(cst_finish_parse_node_spec);
+                }
+                Ok(parsed)
+            }
+        },
+        None => {
+            proof {
+                reveal(cst_parse_task_views_spec);
+                reveal(cst_completed_node_view_spec);
+                reveal(cst_finish_parse_node_spec);
+            }
+            Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0))
+        },
+    }
+}
+
 pub open spec fn cst_push_parse_task_spec(
     tasks: Seq<ParseTaskView>,
     task: ParseTaskView,
@@ -8715,17 +8799,7 @@ fn parse_node_iterative(
         decreases fuel,
     {
         if tasks.len() == 0 {
-            return match completed {
-                Some(parsed) => {
-                    if parsed.next_token < start || parsed.next_token > end || parsed.node_index
-                        >= builder.nodes.len() as u64 {
-                        Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0))
-                    } else {
-                        Ok(parsed)
-                    }
-                },
-                None => Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0)),
-            };
+            return finish_parse_node(&tasks, completed, start, end, builder.nodes.len() as u64);
         }
         if fuel == 0 {
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));

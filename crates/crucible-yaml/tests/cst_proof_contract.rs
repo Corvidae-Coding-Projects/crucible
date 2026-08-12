@@ -61,6 +61,45 @@ fn pure_parser_completed_child_channel_is_exact_and_consuming() {
 }
 
 #[test]
+fn pure_parser_terminal_state_is_exact_and_total() {
+    proof {
+        let parsed = crucible_yaml::cst::ParsedNodeView { node_index: 2, next_token: 7 };
+        let internal = Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        );
+        reveal(crucible_yaml::cst::cst_finish_parse_node_spec);
+        assert(crucible_yaml::cst::cst_finish_parse_node_spec(Seq::empty(), Some(parsed), 1, 8, 3)
+            == Ok(parsed));
+        assert(crucible_yaml::cst::cst_finish_parse_node_spec(
+            seq![crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4)],
+            Some(parsed),
+            1,
+            8,
+            3,
+        ) == internal);
+        assert(crucible_yaml::cst::cst_finish_parse_node_spec(Seq::empty(), None, 1, 8, 3)
+            == internal);
+        assert(crucible_yaml::cst::cst_finish_parse_node_spec(
+            Seq::empty(),
+            Some(crucible_yaml::cst::ParsedNodeView { next_token: 9, ..parsed }),
+            1,
+            8,
+            3,
+        ) == internal);
+        assert(crucible_yaml::cst::cst_finish_parse_node_spec(
+            Seq::empty(),
+            Some(crucible_yaml::cst::ParsedNodeView { node_index: 3, ..parsed }),
+            1,
+            8,
+            3,
+        ) == internal);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
