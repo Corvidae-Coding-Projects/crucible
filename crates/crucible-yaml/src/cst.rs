@@ -4056,6 +4056,24 @@ pub open spec fn cst_scalar_style_spec(kind: CompletedTokenKind) -> CstNodeStyle
     }
 }
 
+pub open spec fn cst_token_column_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    token: crate::token::CompletedTokenView,
+) -> u64 {
+    if token.start_atom_index < atoms.len() {
+        atoms[token.start_atom_index as int].span.start.column
+    } else {
+        0
+    }
+}
+
+pub open spec fn cst_same_line_spec(
+    left: crate::token::CompletedTokenView,
+    right: crate::token::CompletedTokenView,
+) -> bool {
+    left.start_line_number == right.start_line_number
+}
+
 fn is_trivia(kind: CompletedTokenKind) -> (result: bool)
     ensures
         result == cst_token_is_trivia_spec(kind),
@@ -4129,24 +4147,50 @@ fn skip_trivia(tokens: &[CompletedToken], index: usize, end: usize) -> (result: 
     cursor
 }
 
-fn byte_at(tokens: &[CompletedToken], index: usize, source_len_bytes: u64) -> u64 {
+fn byte_at(tokens: &[CompletedToken], index: usize, source_len_bytes: u64) -> (result: u64)
+    ensures
+        result == cst_byte_at_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            index as u64,
+            source_len_bytes,
+        ),
+{
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+    }
     if index < tokens.len() {
+        proof {
+            crate::token::lemma_completed_token_view_at(tokens@, index as int);
+        }
         tokens[index].byte_start()
     } else {
         source_len_bytes
     }
 }
 
-fn token_column(atoms: &[LexicalAtom], token: &CompletedToken) -> u64 {
-    let index = token.start_atom_index() as usize;
-    if index < atoms.len() {
+fn token_column(atoms: &[LexicalAtom], token: &CompletedToken) -> (result: u64)
+    ensures
+        result == cst_token_column_spec(crate::atom::lexical_atom_views_spec(atoms@), token@),
+{
+    let atom_index = token.start_atom_index();
+    if atom_index < atoms.len() as u64 {
+        let index = atom_index as usize;
+        proof {
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
         atoms[index].span().start().column()
     } else {
+        proof {
+            reveal(crate::atom::lexical_atom_views_spec);
+        }
         0
     }
 }
 
-fn same_line(left: &CompletedToken, right: &CompletedToken) -> bool {
+fn same_line(left: &CompletedToken, right: &CompletedToken) -> (result: bool)
+    ensures
+        result == cst_same_line_spec(left@, right@),
+{
     left.start_line_number() == right.start_line_number()
 }
 

@@ -1,6 +1,8 @@
 #![allow(unused_imports)]
 
+use crucible_yaml::atom::LexicalAtomView;
 use crucible_yaml::token::{CompletedTokenSourceView, CompletedTokenView};
+use crucible_yaml::utf8::{SourcePositionView, SourceSpanView};
 use crucible_yaml::{
     CompletedTokenKind, CstDocumentView, CstMappingEntryView, CstNodeKind, CstNodeStyle,
     CstNodeView, CstSequenceEntryView, CstSourceView, CstSyntaxOwnerKind, CstSyntaxOwnerView,
@@ -9,6 +11,42 @@ use crucible_yaml::{
 use vstd::prelude::*;
 
 verus! {
+
+#[test]
+fn pure_position_helpers_fix_exact_byte_line_and_column_results() {
+    proof {
+        let position = SourcePositionView { byte_offset: 4, line: 2, column: 3 };
+        let atom = LexicalAtomView {
+            kind: crucible_yaml::LexicalAtomKind::Content,
+            code_point: 0x61,
+            span: SourceSpanView { start: position, end: position },
+        };
+        let token = CompletedTokenView {
+            kind: CompletedTokenKind::PlainScalar,
+            start_line_number: 2,
+            end_line_number: 2,
+            start_atom_index: 0,
+            end_atom_index: 1,
+            byte_start: 4,
+            byte_end: 5,
+            scalar_index: Some(0),
+            yaml_major: None,
+            yaml_minor: None,
+            parts: Seq::empty(),
+        };
+        let other_line = CompletedTokenView { start_line_number: 3, ..token };
+        let tokens = Seq::empty().push(token);
+        let atoms = Seq::empty().push(atom);
+        reveal(crucible_yaml::cst::cst_same_line_spec);
+        reveal(crucible_yaml::cst::cst_token_column_spec);
+        assert(crucible_yaml::cst::cst_same_line_spec(token, token));
+        assert(!crucible_yaml::cst::cst_same_line_spec(token, other_line));
+        assert(crucible_yaml::cst::cst_byte_at_spec(tokens, 0, 9) == 4);
+        assert(crucible_yaml::cst::cst_byte_at_spec(tokens, 1, 9) == 9);
+        assert(crucible_yaml::cst::cst_token_column_spec(atoms, token) == 3);
+        assert(crucible_yaml::cst::cst_token_column_spec(Seq::empty(), token) == 0);
+    }
+}
 
 #[test]
 fn pure_parser_helpers_fix_scalar_classification_and_trivia_progress() {
