@@ -1495,6 +1495,74 @@ and line endpoints and prove ordered pairwise atom/byte non-overlap. This slice 
 remaining block-scalar, completed-token, parser, resolution, lowering, schema, canonicalization, or
 self-fuzzing requirements.
 
+Profile 1's block-scalar transformation is version 1 and completes YAML 1.2.2 productions 162
+through 182 rather than merely identifying a provisional `|` or `>` region. It authenticates the
+canonical atom, layout, structural-candidate, quoted-scalar, and plain-scalar results before
+recognizing a block scalar in block node-start context. An indicator inside a quoted scalar, plain
+scalar, node property, comment, directive, document marker, or flow collection is never promoted to
+a block scalar. Each accepted scalar records literal or folded style, strip/clip/keep chomping,
+optional explicit indentation `1` through `9`, detected effective content indentation, the complete
+header and presentation atom/byte/line ranges, and the exact normalized content code points.
+
+The header admits an indentation indicator and chomping indicator in either order, at most once
+each, followed only by separation, an optional comment, and the mandatory non-content line break.
+An indentation digit of `0`, a duplicate or third modifier, nonseparated `#`, trailing noncomment
+text, or end of input before that line break is rejected at the first atom that makes the header
+invalid. Header comments end at that single line and cannot absorb following comment lines.
+
+The parent indentation is the verified block-collection grammar context, not merely the header
+line's leading-space count. Compact sequence and mapping forms therefore retain their nested
+context: for example, `- key: |2` has parent indentation two, while a direct `- |2` remains in the
+containing sequence's context. Explicit content indentation equals that parent indentation plus the
+indicated value. Without an explicit indicator, the first nonempty content line determines the
+indentation; if every candidate content line is empty, the longest such line determines it. The
+detected level must be strictly greater than the parent indentation. A leading all-space line may
+not be more indented than the first nonempty line. A nonempty line indented more than the parent
+but less than the required content indentation is an error rather than an implicit scalar
+terminator. A line at or below the parent indentation terminates the scalar. Tabs never count
+toward indentation: a tab
+encountered before all required indentation spaces reports `TabInIndentation`, while a tab after
+those spaces is preserved as content. Empty and more-indented lines retain the behavior required by
+the block productions, including content that begins with `#`, YAML indicators, or tabs.
+
+Literal style preserves each normalized content line break. Folded style maps a single break
+between adjacent nonempty, non-more-indented text lines to one space; breaks adjacent to an empty or
+more-indented line remain line feeds. The final content break and trailing empty lines are never
+folded. Strip removes the final break and trailing empty lines, clip retains exactly the final break
+when the scalar has nonempty content, and keep retains the final break and every trailing empty line.
+For an all-empty scalar, strip and clip produce empty content while keep preserves its presented
+line feeds. Less-indented trailing comment lines are outside the scalar presentation range and are
+left for completed comment-token formation.
+
+Every emitted normalized content code point records the source atom and original half-open byte
+range that caused it. Literal characters and preserved line feeds keep their code point; a folded
+space names the normalized source line-feed atom it replaces. Indentation prefixes, the header, and
+chomped presentation do not acquire fabricated content provenance. Public predicates prove that
+these mappings are ordered, remain within the scalar's presentation range, and name either the
+same source code point or the permitted folded line-feed-to-space transformation.
+
+The absolute block-scalar count, per-scalar presentation-atom count, per-scalar normalized-content
+count, and aggregate normalized-content count are each 1,048,576. Callers MAY lower any bound but
+cannot raise it. Scalar exhaustion reports the first excluded `|` or `>`. Presentation exhaustion
+reports the first atom outside the allowed complete scalar presentation. Per-scalar content
+exhaustion reports the source atom for the first excluded normalized content code point; aggregate
+content exhaustion does the same across scalars. Intrinsic header, indentation, and character
+errors take precedence over limits for the same scalar, so a malformed scalar cannot be hidden by a
+zero cap. All errors are typed, retain exact original byte offsets, and expose no partial result.
+
+The executable header, contextual block-grammar indentation, line-classification, folding,
+chomping, provenance, and outer scan machines are iterative. Their pure Verus models are total
+under explicit atom and line fuel, prove strict progress and bounded arithmetic, and fix the exact
+success or error result. Every semantically authenticated executable success, including nonempty
+success, proves the full range/content predicate and ordered atom/byte non-overlap. That predicate
+equates each scalar's content to the exact verified renderer, while the per-content provenance
+predicate excludes header and body-indentation atoms and permits folded line-feed-to-space origins
+only for folded style. Public semantic, range, content, provenance, and ordered-non-overlap
+contracts remain usable downstream; forged upstream or output ghost views cannot be laundered into
+valid block-scalar evidence. This completed transformation remains an input to final token
+formation and scalar/tag resolution and does not defer the parser, lowering, schema,
+canonicalization, or self-fuzzing requirements.
+
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
 without a language-profile change. Parse rejection is a typed configuration result, not a

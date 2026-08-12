@@ -48,5 +48,12 @@ begin.
   semantic/range proofs, and total executable correspondence. Adversarial fixtures cover verbatim
   tag punctuation, coalesced flow colons, tab-only prefixes, block-header comments, and malformed
   `?`, `:`, and `-` scalar starts.
+- Verified profile-1 literal and folded block-scalar formation with complete YAML 1.2 header,
+  contextual compact-collection indentation, folding, and strip/clip/keep chomping behavior;
+  contextual tabs; exact raw ranges; per-code-point direct/folded source provenance; independent
+  scalar, presentation, scalar-content, and total-content caps; distinct typed upstream evidence
+  diagnostics; a total pure model; exact executable correspondence for every success and failure;
+  and a general proof that every authenticated nonempty success has exact rendered content and
+  ordered non-overlapping atom/byte ranges.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

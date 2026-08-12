@@ -2,6 +2,7 @@
 //! Project-owned, Verus-authored Crucible YAML profile implementation.
 
 pub mod atom;
+pub mod block;
 pub mod layout;
 pub mod plain;
 pub mod quoted;
@@ -12,6 +13,15 @@ pub use atom::{
     atomize_profile1, classify_lexical_atom, AtomizeError, AtomizeErrorKind, AtomizeLimits,
     AtomizedSource, LexicalAtom, LexicalAtomKind, YamlIndicator,
     LEXICAL_ATOM_TRANSFORMATION_VERSION, MAX_PROFILE1_LEXICAL_ATOMS,
+};
+
+pub use block::{
+    canonical_block_scalar_limits, scan_profile1_block_scalars, BlockChomping, BlockScalar,
+    BlockScalarContentOrigin, BlockScalarContentScalar, BlockScalarError, BlockScalarErrorKind,
+    BlockScalarScanLimits, BlockScalarSource, BlockScalarStyle,
+    BLOCK_SCALAR_TRANSFORMATION_VERSION, MAX_PROFILE1_BLOCK_SCALARS,
+    MAX_PROFILE1_BLOCK_SCALAR_CONTENT_CODE_POINTS, MAX_PROFILE1_BLOCK_SCALAR_PRESENTATION_ATOMS,
+    MAX_PROFILE1_TOTAL_BLOCK_SCALAR_CONTENT_CODE_POINTS,
 };
 
 pub use layout::{
@@ -28,9 +38,10 @@ pub use quoted::{
 };
 
 pub use plain::{
-    scan_profile1_plain_scalars, PlainScalar, PlainScalarError, PlainScalarErrorKind,
-    PlainScalarScanLimits, PlainScalarSource, PlainScalarSourceView, MAX_PROFILE1_PLAIN_SCALARS,
-    MAX_PROFILE1_PLAIN_SCALAR_ATOMS, PLAIN_SCALAR_TRANSFORMATION_VERSION,
+    canonical_plain_scalar_limits, scan_profile1_plain_scalars, PlainScalar, PlainScalarError,
+    PlainScalarErrorKind, PlainScalarScanLimits, PlainScalarSource, PlainScalarSourceView,
+    MAX_PROFILE1_PLAIN_SCALARS, MAX_PROFILE1_PLAIN_SCALAR_ATOMS,
+    PLAIN_SCALAR_TRANSFORMATION_VERSION,
 };
 
 pub use structural::{

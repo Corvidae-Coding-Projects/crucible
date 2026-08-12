@@ -288,6 +288,55 @@ pub open spec fn layout_line_views_spec(lines: Seq<LayoutLine>) -> Seq<LayoutLin
     Seq::new(lines.len(), |index: int| lines[index]@)
 }
 
+pub open spec fn layout_line_bounds_spec(
+    atoms: Seq<LexicalAtomView>,
+    line: LayoutLineView,
+) -> bool {
+    line.start_atom_index <= line.content_atom_index && line.content_atom_index
+        <= line.end_atom_index && line.end_atom_index <= atoms.len() && line.indentation_columns
+        == line.content_atom_index - line.start_atom_index && if line.terminated {
+        line.end_atom_index < atoms.len()
+    } else {
+        line.end_atom_index == atoms.len()
+    }
+}
+
+pub open spec fn layout_line_sequence_bounds_spec(
+    atoms: Seq<LexicalAtomView>,
+    lines: Seq<LayoutLineView>,
+) -> bool {
+    forall|index: int|
+        #![trigger lines[index]]
+        0 <= index < lines.len() ==> layout_line_bounds_spec(atoms, lines[index])
+}
+
+proof fn lemma_layout_line_sequence_bounds_push(
+    atoms: Seq<LexicalAtomView>,
+    lines: Seq<LayoutLineView>,
+    line: LayoutLineView,
+)
+    requires
+        layout_line_sequence_bounds_spec(atoms, lines),
+        layout_line_bounds_spec(atoms, line),
+    ensures
+        layout_line_sequence_bounds_spec(atoms, lines.push(line)),
+{
+    reveal(layout_line_sequence_bounds_spec);
+    assert forall|index: int|
+        #![auto]
+        0 <= index < lines.push(line).len() implies layout_line_bounds_spec(
+        atoms,
+        lines.push(line)[index],
+    ) by {
+        if index < lines.len() {
+            assert(lines.push(line)[index] == lines[index]);
+        } else {
+            assert(index == lines.len());
+            assert(lines.push(line)[index] == line);
+        }
+    }
+}
+
 impl View for LayoutSource {
     type V = LayoutSourceView;
 
@@ -679,6 +728,24 @@ pub proof fn lemma_layout_success_input_within_atom_cap(
         atomized.atoms.len() <= MAX_PROFILE1_LEXICAL_ATOMS,
 {
     reveal(analyze_profile1_layout_spec);
+}
+
+/// Successful layout of an empty atom stream contains no phantom line.
+pub proof fn lemma_empty_layout_has_no_lines(
+    atomized: AtomizedSourceView,
+    limits: LayoutLimitsView,
+    layout: LayoutSourceView,
+)
+    requires
+        atomized.atoms.len() == 0,
+        analyze_profile1_layout_spec(atomized, limits) == Ok(layout),
+    ensures
+        layout.lines.len() == 0,
+{
+    reveal(analyze_profile1_layout_spec);
+    reveal(layout_scan_tail_spec);
+    reveal(finish_layout_scan_spec);
+    reveal(initial_layout_scan_state_spec);
 }
 
 proof fn lemma_layout_scan_cannot_error_when_limits_cover_remaining_atoms(
@@ -1128,6 +1195,7 @@ fn make_layout_line(
         state.line_start <= state.content_start <= end_atom_index <= atoms.len(),
         state.indentation_columns == (state.content_start - state.line_start) as u64,
         terminated == (end_atom_index < atoms.len()),
+        terminated ==> atoms@[end_atom_index as int]@.kind == LexicalAtomKind::LineFeed,
     ensures
         line@ == layout_line_spec(
             crate::atom::lexical_atom_views_spec(atoms@),
@@ -1143,6 +1211,7 @@ fn make_layout_line(
             end_atom_index as int,
             terminated,
         ),
+        layout_line_bounds_spec(crate::atom::lexical_atom_views_spec(atoms@), line@),
 {
     let byte_start = atoms[state.line_start].span().start().byte_offset();
     let content_byte_start = if state.content_start < end_atom_index {
@@ -1157,7 +1226,7 @@ fn make_layout_line(
     } else {
         source_len_bytes
     };
-    LayoutLine {
+    let line = LayoutLine {
         line_number: state.line_number,
         start_atom_index: state.line_start as u64,
         content_atom_index: state.content_start as u64,
@@ -1167,7 +1236,20 @@ fn make_layout_line(
         byte_start,
         content_byte_start,
         byte_end,
+    };
+    proof {
+        reveal(layout_line_bounds_spec);
+        reveal(layout_line_spec);
+        assert(line@.start_atom_index == state.line_start as u64);
+        assert(line@.content_atom_index == state.content_start as u64);
+        assert(line@.end_atom_index == end_atom_index as u64);
+        if terminated {
+            assert(end_atom_index < atoms@.len());
+        } else {
+            assert(end_atom_index == atoms@.len());
+        }
     }
+    line
 }
 
 #[verifier::rlimit(120)]
@@ -1191,7 +1273,10 @@ pub fn analyze_profile1_layout(atomized: &AtomizedSource, limits: LayoutLimits) 
                     && layout@.input_transformation_version == atomized@.transformation_version
                     && layout@.transformation_version == LINE_LAYOUT_TRANSFORMATION_VERSION
                     && layout@.source_len_bytes == atomized@.source_len_bytes && layout@.bom_bytes
-                    == atomized@.bom_bytes
+                    == atomized@.bom_bytes && layout_line_sequence_bounds_spec(
+                    atomized@.atoms,
+                    layout@.lines,
+                )
             },
             Err(_) => true,
         },
@@ -1255,6 +1340,8 @@ pub fn analyze_profile1_layout(atomized: &AtomizedSource, limits: LayoutLimits) 
         reveal(initial_layout_scan_state_spec);
         reveal(layout_line_views_spec);
         assert(layout_line_views_spec(lines@) =~= Seq::<LayoutLineView>::empty());
+        reveal(layout_line_sequence_bounds_spec);
+        assert(layout_line_sequence_bounds_spec(atomized@.atoms, layout_line_views_spec(lines@)));
         assert(LayoutScanStateView {
             lines: layout_line_views_spec(lines@),
             line_start: line_start as int,
@@ -1292,6 +1379,7 @@ pub fn analyze_profile1_layout(atomized: &AtomizedSource, limits: LayoutLimits) 
                 line_limit,
                 indentation_limit,
             ),
+            layout_line_sequence_bounds_spec(atomized@.atoms, layout_line_views_spec(lines@)),
             expected_scan_result == layout_scan_tail_spec(
                 atomized@.atoms,
                 atomized@.source_len_bytes,
@@ -1420,6 +1508,11 @@ pub fn analyze_profile1_layout(atomized: &AtomizedSource, limits: LayoutLimits) 
                         reveal(layout_line_spec);
                     }
                     lemma_layout_line_views_push(lines@, line);
+                    lemma_layout_line_sequence_bounds_push(
+                        atomized@.atoms,
+                        layout_line_views_spec(lines@),
+                        line@,
+                    );
                 }
                 lines.push(line);
                 line_number += 1;
@@ -1574,6 +1667,11 @@ pub fn analyze_profile1_layout(atomized: &AtomizedSource, limits: LayoutLimits) 
                 reveal(layout_line_spec);
             }
             lemma_layout_line_views_push(lines@, line);
+            lemma_layout_line_sequence_bounds_push(
+                atomized@.atoms,
+                layout_line_views_spec(lines@),
+                line@,
+            );
         }
         lines.push(line);
         line_number += 1;

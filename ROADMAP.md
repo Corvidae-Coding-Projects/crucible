@@ -39,8 +39,15 @@ Current work establishes and extends:
 - verified context-sensitive plain-scalar boundaries with authenticated quoted-scalar exclusion,
   exact retained presentation ranges, node-property and block-region exclusion, flow-sensitive
   indicators and mapping colons, contextual leading-tab diagnostics, caller-lowered absolute caps,
-  public semantic/range proofs, and total executable-to-pure correspondence; completed block-scalar
-  and final-token interpretation continue in the same mandatory lexer work;
+  public semantic/range proofs, and total executable-to-pure correspondence;
+- verified literal and folded block-scalar formation with authenticated exclusion from quoted,
+  plain, property, and flow regions; both header-modifier orders; automatic, explicit, and
+  all-empty indentation derived from compact block-collection grammar context; contextual tab
+  diagnostics; strip/clip/keep chomping; exact folding and more-indented-line behavior; four
+  independent resource caps; distinct upstream evidence diagnostics; raw ranges; normalized
+  content provenance; total executable-to-pure success/error correspondence; and general nonempty
+  exact-render/non-overlap proofs; final-token interpretation continues in the same mandatory lexer
+  work;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

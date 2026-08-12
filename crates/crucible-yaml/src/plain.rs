@@ -195,6 +195,16 @@ impl DeepView for PlainScalar {
 }
 
 impl PlainScalar {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.start_line_number == other.start_line_number && self.end_line_number
+            == other.end_line_number && self.start_atom_index == other.start_atom_index
+            && self.end_atom_index == other.end_atom_index && self.byte_start == other.byte_start
+            && self.byte_end == other.byte_end
+    }
+
     pub fn start_line_number(&self) -> (line: u64)
         ensures
             line == self@.start_line_number,
@@ -311,6 +321,59 @@ impl View for PlainScalarSource {
 }
 
 impl PlainScalarSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.layout_transformation_version
+            != other.layout_transformation_version || self.structural_transformation_version
+            != other.structural_transformation_version || self.quoted_transformation_version
+            != other.quoted_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes || self.input_atom_count != other.input_atom_count
+            || self.input_line_count != other.input_line_count || self.input_structural_lexeme_count
+            != other.input_structural_lexeme_count || self.input_quoted_scalar_count
+            != other.input_quoted_scalar_count {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.scalars.len() != other.scalars.len() {
+            proof {
+                reveal(plain_scalar_views_spec);
+                assert(self@.scalars.len() != other@.scalars.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index: usize = 0;
+        while index < self.scalars.len()
+            invariant
+                self.scalars.len() == other.scalars.len(),
+                index <= self.scalars.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.scalars[prior]@ == other.scalars[prior]@,
+            decreases self.scalars.len() - index,
+        {
+            if !self.scalars[index].same_as(&other.scalars[index]) {
+                proof {
+                    reveal(plain_scalar_views_spec);
+                    assert(self.scalars[index as int]@ != other.scalars[index as int]@);
+                    assert(self@.scalars[index as int] != other@.scalars[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(plain_scalar_views_spec);
+            assert(self@.scalars =~= other@.scalars);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,
@@ -2102,37 +2165,21 @@ closed spec fn prepare_block_context_spec(
     if context.block_mode == 2 && !context.block_line_active && !candidate_is_indentation_spec(
         candidate,
     ) && !candidate_is_line_feed_spec(candidate) {
-        if context.line_indentation > context.block_parent_indentation {
-            if context.block_content_indentation == 0 || context.line_indentation
-                >= context.block_content_indentation {
-                Ok(
-                    PlainContextView {
-                        block_content_indentation: if context.block_content_indentation == 0 {
-                            context.line_indentation
-                        } else {
-                            context.block_content_indentation
-                        },
-                        block_line_active: true,
-                        at_line_start: false,
-                        ..context
+        if context.line_indentation > context.block_parent_indentation
+            || atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Tab {
+            Ok(
+                PlainContextView {
+                    block_content_indentation: if context.block_content_indentation == 0
+                        && context.line_indentation > context.block_parent_indentation {
+                        context.line_indentation
+                    } else {
+                        context.block_content_indentation
                     },
-                )
-            } else if atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Tab {
-                Err(
-                    PlainScalarErrorView {
-                        kind: PlainScalarErrorKind::TabInIndentation,
-                        byte_offset:
-                            atoms[candidate.start_atom_index as int].span.start.byte_offset,
-                    },
-                )
-            } else {
-                Err(
-                    PlainScalarErrorView {
-                        kind: PlainScalarErrorKind::InvalidBlockIndentation,
-                        byte_offset: candidate.byte_start,
-                    },
-                )
-            }
+                    block_line_active: true,
+                    at_line_start: false,
+                    ..context
+                },
+            )
         } else {
             Ok(
                 PlainContextView {
@@ -2169,31 +2216,16 @@ fn prepare_block_context(
     if context.block_mode == 2 && !context.block_line_active && candidate.candidate_role()
         != StructuralCandidateRole::Indentation && candidate.candidate_role()
         != StructuralCandidateRole::LineFeed {
-        if context.line_indentation > context.block_parent_indentation {
-            if context.block_content_indentation == 0 || context.line_indentation
-                >= context.block_content_indentation {
-                let mut prepared = context;
-                if prepared.block_content_indentation == 0 {
-                    prepared.block_content_indentation = prepared.line_indentation;
-                }
-                prepared.block_line_active = true;
-                prepared.at_line_start = false;
-                Ok(prepared)
-            } else if atoms[candidate.start_atom_index() as usize].kind() == LexicalAtomKind::Tab {
-                Err(
-                    PlainScalarError::at(
-                        PlainScalarErrorKind::TabInIndentation,
-                        atoms[candidate.start_atom_index() as usize].span().start().byte_offset(),
-                    ),
-                )
-            } else {
-                Err(
-                    PlainScalarError::at(
-                        PlainScalarErrorKind::InvalidBlockIndentation,
-                        candidate.byte_start(),
-                    ),
-                )
+        if context.line_indentation > context.block_parent_indentation
+            || atoms[candidate.start_atom_index() as usize].kind() == LexicalAtomKind::Tab {
+            let mut prepared = context;
+            if prepared.block_content_indentation == 0 && prepared.line_indentation
+                > prepared.block_parent_indentation {
+                prepared.block_content_indentation = prepared.line_indentation;
             }
+            prepared.block_line_active = true;
+            prepared.at_line_start = false;
+            Ok(prepared)
         } else {
             let mut prepared = context;
             prepared.block_mode = 0;
@@ -2777,6 +2809,20 @@ pub open spec fn canonical_plain_quoted_limits_spec() -> crate::quoted::QuotedSc
     crate::quoted::canonical_quoted_scalar_limits_spec()
 }
 
+pub open spec fn canonical_plain_scalar_limits_spec() -> PlainScalarScanLimitsView {
+    PlainScalarScanLimitsView {
+        max_scalars: MAX_PROFILE1_PLAIN_SCALARS,
+        max_scalar_atoms: MAX_PROFILE1_PLAIN_SCALAR_ATOMS,
+    }
+}
+
+pub fn canonical_plain_scalar_limits() -> (limits: PlainScalarScanLimits)
+    ensures
+        limits@ == canonical_plain_scalar_limits_spec(),
+{
+    PlainScalarScanLimits::new(MAX_PROFILE1_PLAIN_SCALARS, MAX_PROFILE1_PLAIN_SCALAR_ATOMS)
+}
+
 pub closed spec fn scan_profile1_plain_scalars_spec(
     atomized: AtomizedSourceView,
     layout: LayoutSourceView,
@@ -2988,6 +3034,24 @@ pub proof fn lemma_empty_input_fits_plain_scalar_scan_limits(
     assert(scan_profile1_plain_scalars_spec(atomized, layout, structural, quoted, limits) == Ok(
         source,
     ));
+}
+
+pub proof fn lemma_empty_plain_scan_has_no_scalars(
+    atomized: AtomizedSourceView,
+    layout: LayoutSourceView,
+    structural: StructuralLexemeSourceView,
+    quoted: QuotedScalarSourceView,
+    limits: PlainScalarScanLimitsView,
+    plain: PlainScalarSourceView,
+)
+    requires
+        atomized.atoms.len() == 0,
+        scan_profile1_plain_scalars_spec(atomized, layout, structural, quoted, limits) == Ok(plain),
+    ensures
+        plain.scalars.len() == 0,
+{
+    reveal(scan_profile1_plain_scalars_spec);
+    reveal(scan_plain_tail_spec);
 }
 
 #[verifier::rlimit(50)]

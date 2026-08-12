@@ -1073,6 +1073,12 @@ pub open spec fn structural_candidate_range_spec(
     candidate.start_atom_index < candidate.end_atom_index && candidate.end_atom_index <= atoms.len()
         && candidate.byte_start == atoms[candidate.start_atom_index as int].span.start.byte_offset
         && candidate.byte_end == atoms[(candidate.end_atom_index - 1) as int].span.end.byte_offset
+        && match candidate.kind {
+        StructuralCandidateRole::Indicator(indicator) => {
+            atoms[candidate.start_atom_index as int].kind == LexicalAtomKind::Indicator(indicator)
+        },
+        _ => true,
+    }
 }
 
 /// A candidate prefix exactly and monotonically partitions atoms through `consumed_atoms`.
@@ -1740,6 +1746,23 @@ proof fn lemma_empty_structural_candidate_prefix(atoms: Seq<LexicalAtomView>)
         structural_candidate_prefix_partition_spec(atoms, Seq::empty(), 0),
 {
     reveal(structural_candidate_prefix_partition_spec);
+}
+
+/// Successful structural scanning of an empty atom stream contains no candidate ranges.
+pub proof fn lemma_empty_structural_scan_has_no_lexemes(
+    atomized: AtomizedSourceView,
+    layout: LayoutSourceView,
+    limits: StructuralScanLimitsView,
+    structural: StructuralLexemeSourceView,
+)
+    requires
+        atomized.atoms.len() == 0,
+        scan_profile1_structural_lexemes_spec(atomized, layout, limits) == Ok(structural),
+    ensures
+        structural.lexemes.len() == 0,
+{
+    reveal(scan_profile1_structural_lexemes_spec);
+    reveal(structural_scan_tail_spec);
 }
 
 #[verifier::spinoff_prover]
