@@ -10438,6 +10438,43 @@ pub open spec fn cst_step_block_mapping_state_four_spec(
     }
 }
 
+pub open spec fn cst_step_block_mapping_state_five_spec(
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::BlockMapping || task.state != 5 || task.end > tokens.len()
+        || task.cursor > task.end || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else if task.entry_token_start >= task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        match cst_empty_node_spec(builder, tokens, task.cursor) {
+            Err(error) => Err(error),
+            Ok((next_builder, value)) => {
+                let entry_token_end = if task.cursor > task.entry_token_start + 1 {
+                    task.cursor
+                } else {
+                    (task.entry_token_start + 1) as u64
+                };
+                let ended = cst_task_set_entry_end_spec(task, entry_token_end);
+                let entry = CstMappingEntryView {
+                    key_node_index: task.key_node_index,
+                    value_node_index: value,
+                    token_start: task.entry_token_start,
+                    token_end: entry_token_end,
+                    explicit_key_token: Some(task.entry_token_start),
+                    mapping_value_token: None,
+                };
+                let appended = cst_task_push_mapping_entry_spec(ended, entry);
+                let waiting = cst_task_set_state_spec(appended, 6);
+                Ok((cst_machine_resume_task_spec(machine, waiting), next_builder))
+            },
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -13374,6 +13411,101 @@ fn step_block_mapping_state_four(
 }
 
 #[verifier::rlimit(500)]
+fn step_block_mapping_state_five(
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::BlockMapping,
+        task@.state == 5,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+    ensures
+        cst_step_block_mapping_state_five_spec(
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() == old(machine).tasks.len() + 1,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_block_mapping_state_five_spec(
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_block_mapping_state_five_spec);
+    }
+    if task.entry_token_start >= task.end {
+        proof {
+            reveal(cst_step_node_internal_error_spec);
+            assert(expected == Err(
+                CstErrorView {
+                    kind: CstErrorKind::InternalInvariantViolation,
+                    byte_offset: 0,
+                },
+            ));
+        }
+        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+    }
+    let ghost prior_builder = builder@;
+    let value = match empty_node(builder, tokens, task.cursor) {
+        Ok(node) => node,
+        Err(error) => {
+            proof {
+                assert(cst_empty_node_spec(prior_builder, token_views, task_view.cursor) == Err(
+                    error@,
+                ));
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        },
+    };
+    let entry_token_end = if task.cursor > task.entry_token_start + 1 {
+        task.cursor
+    } else {
+        task.entry_token_start + 1
+    };
+    task_set_entry_end(entry_token_end, &mut task);
+    let entry = CstMappingEntry {
+        key_node_index: task.key_node_index,
+        value_node_index: value,
+        token_start: task.entry_token_start as u64,
+        token_end: task.entry_token_end as u64,
+        explicit_key_token: Some(task.entry_token_start as u64),
+        mapping_value_token: None,
+    };
+    task_push_mapping_entry(entry, &mut task);
+    task_set_state(&mut task, 6);
+    machine_resume_task(task, machine);
+    proof {
+        assert(cst_empty_node_spec(prior_builder, token_views, task_view.cursor) == Ok(
+            (builder@, value),
+        ));
+        assert(expected == Ok((machine@, builder@)));
+    }
+    Ok(())
+}
+
+#[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -13781,33 +13913,10 @@ fn parse_node_iterative(
                 }
             }
             if task.state == 5 {
-                if task.entry_token_start >= task.end {
-                    return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
-                }
-                let value = match empty_node(builder, tokens, task.cursor) {
-                    Ok(node) => node,
+                match step_block_mapping_state_five(tokens, task, &mut machine, builder) {
+                    Ok(()) => continue,
                     Err(error) => return Err(error),
-                };
-                let entry_token_end = if task.cursor > task.entry_token_start + 1 {
-                    task.cursor
-                } else {
-                    task.entry_token_start + 1
-                };
-                task_set_entry_end(entry_token_end, &mut task);
-                task_push_mapping_entry(
-                    CstMappingEntry {
-                        key_node_index: task.key_node_index,
-                        value_node_index: value,
-                        token_start: task.entry_token_start as u64,
-                        token_end: task.entry_token_end as u64,
-                        explicit_key_token: Some(task.entry_token_start as u64),
-                        mapping_value_token: None,
-                    },
-                    &mut task,
-                );
-                task_set_state(&mut task, 6);
-                machine_resume_task(task, &mut machine);
-                continue;
+                }
             }
             task_extend_node_end(task.entry_token_end, &mut task);
             let next = skip_trivia(tokens, task.cursor, task.end);
