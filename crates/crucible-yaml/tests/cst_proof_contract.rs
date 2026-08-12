@@ -15,6 +15,59 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_collection_frame_specialization_is_exact() {
+    proof {
+        let base = crucible_yaml::cst::cst_node_task_spec(2, 9, true, 4);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_specialize_parse_task_spec);
+        let result = crucible_yaml::cst::cst_specialize_parse_task_spec(
+            base,
+            crucible_yaml::cst::ParseTaskKind::FlowMapping,
+            2,
+            4,
+            3,
+            7,
+            Some(2),
+            Some(3),
+            5,
+            11,
+        );
+        assert(result.is_ok());
+        let specialized = match result {
+            Ok(task) => task,
+            Err(_) => base,
+        };
+        assert(specialized.kind == crucible_yaml::cst::ParseTaskKind::FlowMapping);
+        assert(specialized.state == 0);
+        assert(specialized.token_start == 2 && specialized.cursor == 4);
+        assert(specialized.opener == 3 && specialized.indentation == 7);
+        assert(specialized.depth_left == 3);
+        assert(specialized.anchor_property_token == Some(2));
+        assert(specialized.tag_property_token == Some(3));
+        assert(specialized.node_token_end == 5);
+        assert(specialized.end == 9 && specialized.allow_block_mapping);
+        let exhausted = crucible_yaml::cst::ParseTaskView { depth_left: 0, ..base };
+        assert(crucible_yaml::cst::cst_specialize_parse_task_spec(
+            exhausted,
+            crucible_yaml::cst::ParseTaskKind::BlockSequence,
+            2,
+            3,
+            3,
+            2,
+            None,
+            None,
+            4,
+            17,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::DepthLimitExceeded,
+                byte_offset: 17,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_node_property_scan_is_exact() {
     proof {
         let anchor = CompletedTokenView {

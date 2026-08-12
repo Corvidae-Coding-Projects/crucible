@@ -7365,6 +7365,91 @@ fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u6
     task
 }
 
+pub open spec fn cst_specialize_parse_task_spec(
+    task: ParseTaskView,
+    kind: ParseTaskKind,
+    token_start: u64,
+    cursor: u64,
+    opener: u64,
+    indentation: u64,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+    node_token_end: u64,
+    offset: u64,
+) -> Result<ParseTaskView, CstErrorView> {
+    if task.depth_left == 0 {
+        Err(CstErrorView { kind: CstErrorKind::DepthLimitExceeded, byte_offset: offset })
+    } else {
+        Ok(
+            ParseTaskView {
+                kind,
+                state: 0,
+                token_start,
+                cursor,
+                opener,
+                indentation,
+                depth_left: (task.depth_left - 1) as u64,
+                anchor_property_token,
+                tag_property_token,
+                node_token_end,
+                ..task
+            },
+        )
+    }
+}
+
+fn specialize_parse_task(
+    task: ParseTask,
+    kind: ParseTaskKind,
+    token_start: usize,
+    cursor: usize,
+    opener: usize,
+    indentation: u64,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+    node_token_end: usize,
+    offset: u64,
+) -> (result: Result<ParseTask, CstError>)
+    ensures
+        cst_specialize_parse_task_spec(
+            task@,
+            kind,
+            token_start as u64,
+            cursor as u64,
+            opener as u64,
+            indentation,
+            anchor_property_token,
+            tag_property_token,
+            node_token_end as u64,
+            offset,
+        ) == match result {
+            Ok(specialized) => Ok(specialized@),
+            Err(error) => Err(error@),
+        },
+{
+    if task.depth_left == 0 {
+        proof {
+            reveal(cst_specialize_parse_task_spec);
+        }
+        return Err(CstError::at(CstErrorKind::DepthLimitExceeded, offset));
+    }
+    let mut specialized = task;
+    specialized.kind = kind;
+    specialized.state = 0;
+    specialized.token_start = token_start;
+    specialized.cursor = cursor;
+    specialized.opener = opener;
+    specialized.indentation = indentation;
+    specialized.depth_left -= 1;
+    specialized.anchor_property_token = anchor_property_token;
+    specialized.tag_property_token = tag_property_token;
+    specialized.node_token_end = node_token_end;
+    proof {
+        reveal(cst_specialize_parse_task_spec);
+    }
+    Ok(specialized)
+}
+
 pub open spec fn cst_push_sequence_entries_from_spec(
     builder: CstBuilderView,
     tokens: Seq<crate::token::CompletedTokenView>,
@@ -8497,29 +8582,29 @@ fn parse_node_iterative(
                     &tokens[index],
                     &tokens[after],
                 ) {
-                    if task.depth_left == 0 {
-                        return Err(
-                            CstError::at(
-                                CstErrorKind::DepthLimitExceeded,
-                                tokens[after].byte_start(),
-                            ),
-                        );
-                    }
                     if task.depth_left > depth_limit {
                         return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
                     }
-                    let opened_depth = depth_limit - task.depth_left + 1;
+                    let prior_depth_left = task.depth_left;
+                    let indentation = token_column(atoms, &tokens[index]);
+                    task =
+                    match specialize_parse_task(
+                        task,
+                        ParseTaskKind::BlockMapping,
+                        token_start,
+                        index,
+                        index,
+                        indentation,
+                        anchor_property_token,
+                        tag_property_token,
+                        index,
+                        tokens[after].byte_start(),
+                    ) {
+                        Ok(specialized) => specialized,
+                        Err(error) => return Err(error),
+                    };
+                    let opened_depth = depth_limit - prior_depth_left + 1;
                     builder.observe_depth(opened_depth);
-                    task.kind = ParseTaskKind::BlockMapping;
-                    task.state = 0;
-                    task.token_start = token_start;
-                    task.cursor = index;
-                    task.opener = index;
-                    task.indentation = token_column(atoms, &tokens[index]);
-                    task.depth_left -= 1;
-                    task.anchor_property_token = anchor_property_token;
-                    task.tag_property_token = tag_property_token;
-                    task.node_token_end = index;
                     tasks.push(task);
                     continue;
                 }
@@ -8549,31 +8634,35 @@ fn parse_node_iterative(
             } else {
                 return Err(CstError::at(CstErrorKind::UnexpectedToken, tokens[index].byte_start()));
             };
-            if task.depth_left == 0 {
-                return Err(
-                    CstError::at(CstErrorKind::DepthLimitExceeded, tokens[index].byte_start()),
-                );
-            }
             if task.depth_left > depth_limit {
                 return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
             }
-            let opened_depth = depth_limit - task.depth_left + 1;
-            builder.observe_depth(opened_depth);
-            task.kind = specialized;
-            task.state = 0;
-            task.token_start = token_start;
-            task.cursor = if specialized == ParseTaskKind::FlowSequence || specialized
+            let prior_depth_left = task.depth_left;
+            let specialized_cursor = if specialized == ParseTaskKind::FlowSequence || specialized
                 == ParseTaskKind::FlowMapping {
                 skip_trivia(tokens, index + 1, task.end)
             } else {
                 index
             };
-            task.opener = index;
-            task.indentation = token_column(atoms, &tokens[index]);
-            task.depth_left -= 1;
-            task.anchor_property_token = anchor_property_token;
-            task.tag_property_token = tag_property_token;
-            task.node_token_end = index + 1;
+            let indentation = token_column(atoms, &tokens[index]);
+            task =
+            match specialize_parse_task(
+                task,
+                specialized,
+                token_start,
+                specialized_cursor,
+                index,
+                indentation,
+                anchor_property_token,
+                tag_property_token,
+                index + 1,
+                tokens[index].byte_start(),
+            ) {
+                Ok(specialized) => specialized,
+                Err(error) => return Err(error),
+            };
+            let opened_depth = depth_limit - prior_depth_left + 1;
+            builder.observe_depth(opened_depth);
             tasks.push(task);
             continue;
         }
