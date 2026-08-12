@@ -201,6 +201,34 @@ fn pure_parser_entry_scratch_updates_are_exact() {
 }
 
 #[test]
+fn pure_parser_stack_rejects_invalid_frames_and_preserves_valid_ones() {
+    proof {
+        let base = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4);
+        let invalid_state = crucible_yaml::cst::ParseTaskView { state: 1, ..base };
+        let invalid_cursor = crucible_yaml::cst::ParseTaskView { cursor: 9, ..base };
+        reveal(crucible_yaml::cst::cst_parse_task_is_valid_spec);
+        reveal(crucible_yaml::cst::cst_parse_task_stack_is_valid_spec);
+        assert(crucible_yaml::cst::cst_parse_task_is_valid_spec(base));
+        assert(!crucible_yaml::cst::cst_parse_task_is_valid_spec(invalid_state));
+        assert(!crucible_yaml::cst::cst_parse_task_is_valid_spec(invalid_cursor));
+        let initial = crucible_yaml::cst::cst_initial_parse_tasks_spec(1, 8, true, 4);
+        crucible_yaml::cst::lemma_cst_initial_parse_tasks_are_valid(1, 8, true, 4);
+        assert(crucible_yaml::cst::cst_parse_task_stack_is_valid_spec(initial));
+        let resumed = crucible_yaml::cst::cst_resume_parse_task_spec(initial, base);
+        crucible_yaml::cst::lemma_cst_resume_preserves_valid_stack(initial, base);
+        assert(crucible_yaml::cst::cst_parse_task_stack_is_valid_spec(resumed));
+        crucible_yaml::cst::lemma_cst_pop_preserves_valid_stack(resumed);
+        let popped = crucible_yaml::cst::cst_pop_parse_task_spec(resumed).unwrap();
+        assert(crucible_yaml::cst::cst_parse_task_stack_is_valid_spec(popped.0));
+        assert(crucible_yaml::cst::cst_parse_task_is_valid_spec(popped.1));
+        let forged = seq![invalid_state];
+        assert(forged[0] == invalid_state);
+        assert(!crucible_yaml::cst::cst_parse_task_is_valid_spec(forged[0]));
+        assert(!crucible_yaml::cst::cst_parse_task_stack_is_valid_spec(forged));
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

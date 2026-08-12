@@ -7353,6 +7353,16 @@ pub open spec fn cst_parse_task_cursor_is_in_bounds_spec(task: ParseTaskView) ->
     task.token_start <= task.end && task.cursor <= task.end
 }
 
+pub open spec fn cst_parse_task_is_valid_spec(task: ParseTaskView) -> bool {
+    cst_parse_task_state_is_valid_spec(task.kind, task.state)
+        && cst_parse_task_cursor_is_in_bounds_spec(task)
+}
+
+pub open spec fn cst_parse_task_stack_is_valid_spec(tasks: Seq<ParseTaskView>) -> bool {
+    forall|index: int|
+        0 <= index < tasks.len() ==> cst_parse_task_is_valid_spec(#[trigger] tasks[index])
+}
+
 pub open spec fn cst_task_set_cursor_spec(task: ParseTaskView, cursor: u64) -> ParseTaskView {
     ParseTaskView { cursor, ..task }
 }
@@ -7407,11 +7417,14 @@ fn task_set_state(task: &mut ParseTask, state: u8)
     ensures
         final(task)@ == cst_task_set_state_spec(old(task)@, state),
         cst_parse_task_state_is_valid_spec(final(task)@.kind, final(task)@.state),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.state = state;
     proof {
         reveal(cst_parse_task_state_is_valid_spec);
         reveal(cst_task_set_state_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -7422,11 +7435,13 @@ fn task_set_cursor(cursor: usize, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_set_cursor_spec(old(task)@, cursor as u64),
         cst_parse_task_cursor_is_in_bounds_spec(final(task)@),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.cursor = cursor;
     proof {
         reveal(cst_parse_task_cursor_is_in_bounds_spec);
         reveal(cst_task_set_cursor_spec);
+        reveal(cst_parse_task_is_valid_spec);
     }
 }
 
@@ -7437,11 +7452,15 @@ fn task_begin_keyed_entry(entry_token_start: usize, explicit_key: bool, task: &m
             entry_token_start as u64,
             explicit_key,
         ),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.entry_token_start = entry_token_start;
     task.explicit_key = explicit_key;
     proof {
         reveal(cst_task_begin_keyed_entry_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -7453,53 +7472,73 @@ fn task_begin_sequence_entry(entry_token_start: usize, task: &mut ParseTask)
             old(task)@,
             entry_token_start as u64,
         ),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.entry_token_start = entry_token_start;
     task.entry_token_end = entry_token_start + 1;
     proof {
         reveal(cst_task_begin_sequence_entry_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
 fn task_set_key_node(key_node_index: u64, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_set_key_node_spec(old(task)@, key_node_index),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.key_node_index = key_node_index;
     proof {
         reveal(cst_task_set_key_node_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
 fn task_set_colon(colon_token: usize, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_set_colon_spec(old(task)@, colon_token as u64),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.colon_token = colon_token;
     proof {
         reveal(cst_task_set_colon_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
 fn task_set_entry_end(entry_token_end: usize, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_set_entry_end_spec(old(task)@, entry_token_end as u64),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.entry_token_end = entry_token_end;
     proof {
         reveal(cst_task_set_entry_end_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
 fn task_extend_node_end(entry_token_end: usize, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_extend_node_end_spec(old(task)@, entry_token_end as u64),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     if entry_token_end > task.node_token_end {
         task.node_token_end = entry_token_end;
     }
     proof {
         reveal(cst_task_extend_node_end_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -7551,6 +7590,7 @@ fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u6
     ParseTask)
     ensures
         task@ == cst_node_task_spec(start as u64, end as u64, allow_block_mapping, depth_left),
+        start <= end ==> cst_parse_task_is_valid_spec(task@),
 {
     let task = ParseTask {
         kind: ParseTaskKind::Node,
@@ -7578,6 +7618,9 @@ fn node_task(start: usize, end: usize, allow_block_mapping: bool, depth_left: u6
         reveal(cst_node_task_spec);
         reveal(cst_sequence_entry_views_spec);
         reveal(cst_mapping_entry_views_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
     task
 }
@@ -7627,6 +7670,9 @@ fn specialize_parse_task(
     node_token_end: usize,
     offset: u64,
 ) -> (result: Result<ParseTask, CstError>)
+    requires
+        token_start <= task.end,
+        cursor <= task.end,
     ensures
         cst_specialize_parse_task_spec(
             task@,
@@ -7643,6 +7689,7 @@ fn specialize_parse_task(
             Ok(specialized) => Ok(specialized@),
             Err(error) => Err(error@),
         },
+        result.is_ok() ==> cst_parse_task_is_valid_spec(result.unwrap()@),
 {
     if task.depth_left == 0 {
         proof {
@@ -7663,6 +7710,9 @@ fn specialize_parse_task(
     specialized.node_token_end = node_token_end;
     proof {
         reveal(cst_specialize_parse_task_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
     Ok(specialized)
 }
@@ -7677,12 +7727,16 @@ pub open spec fn cst_task_push_sequence_entry_spec(
 fn task_push_sequence_entry(entry: CstSequenceEntry, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_push_sequence_entry_spec(old(task)@, entry@),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     let ghost old_entries = task.pending_sequence@;
     task.pending_sequence.push(entry);
     proof {
         lemma_cst_sequence_entry_views_push(old_entries, entry);
         reveal(cst_task_push_sequence_entry_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -7696,12 +7750,16 @@ pub open spec fn cst_task_push_mapping_entry_spec(
 fn task_push_mapping_entry(entry: CstMappingEntry, task: &mut ParseTask)
     ensures
         final(task)@ == cst_task_push_mapping_entry_spec(old(task)@, entry@),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     let ghost old_entries = task.pending_mapping@;
     task.pending_mapping.push(entry);
     proof {
         lemma_cst_mapping_entry_views_push(old_entries, entry);
         reveal(cst_task_push_mapping_entry_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -7712,10 +7770,14 @@ pub open spec fn cst_task_push_flow_entry_spec(task: ParseTaskView, token: u64) 
 fn task_push_flow_entry(task: &mut ParseTask, token: u64)
     ensures
         final(task)@ == cst_task_push_flow_entry_spec(old(task)@, token),
+        cst_parse_task_is_valid_spec(old(task)@) ==> cst_parse_task_is_valid_spec(final(task)@),
 {
     task.flow_entry_tokens.push(token);
     proof {
         reveal(cst_task_push_flow_entry_spec);
+        reveal(cst_parse_task_is_valid_spec);
+        reveal(cst_parse_task_state_is_valid_spec);
+        reveal(cst_parse_task_cursor_is_in_bounds_spec);
     }
 }
 
@@ -8702,12 +8764,38 @@ pub open spec fn cst_initial_parse_tasks_spec(
     Seq::empty().push(cst_node_task_spec(start, end, allow_block_mapping, depth_left))
 }
 
+pub proof fn lemma_cst_initial_parse_tasks_are_valid(
+    start: u64,
+    end: u64,
+    allow_block_mapping: bool,
+    depth_left: u64,
+)
+    requires
+        start <= end,
+    ensures
+        cst_parse_task_stack_is_valid_spec(cst_initial_parse_tasks_spec(
+            start,
+            end,
+            allow_block_mapping,
+            depth_left,
+        )),
+{
+    reveal(cst_initial_parse_tasks_spec);
+    reveal(cst_node_task_spec);
+    reveal(cst_parse_task_stack_is_valid_spec);
+    reveal(cst_parse_task_is_valid_spec);
+    reveal(cst_parse_task_state_is_valid_spec);
+    reveal(cst_parse_task_cursor_is_in_bounds_spec);
+}
+
 fn initial_parse_tasks(
     start: usize,
     end: usize,
     allow_block_mapping: bool,
     depth_left: u64,
 ) -> (tasks: Vec<ParseTask>)
+    requires
+        start <= end,
     ensures
         tasks.len() == 1,
         cst_parse_task_views_spec(tasks@) == cst_initial_parse_tasks_spec(
@@ -8716,6 +8804,7 @@ fn initial_parse_tasks(
             allow_block_mapping,
             depth_left,
         ),
+        cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(tasks@)),
 {
     let task = node_task(start, end, allow_block_mapping, depth_left);
     let mut tasks = Vec::new();
@@ -8725,6 +8814,12 @@ fn initial_parse_tasks(
         lemma_cst_parse_task_views_push(old_tasks, task);
         reveal(cst_parse_task_views_spec);
         reveal(cst_initial_parse_tasks_spec);
+        lemma_cst_initial_parse_tasks_are_valid(
+            start as u64,
+            end as u64,
+            allow_block_mapping,
+            depth_left,
+        );
     }
     tasks
 }
@@ -8736,6 +8831,23 @@ pub open spec fn cst_pop_parse_task_spec(tasks: Seq<ParseTaskView>) -> Option<
         None
     } else {
         Some((tasks.drop_last(), tasks.last()))
+    }
+}
+
+pub proof fn lemma_cst_pop_preserves_valid_stack(tasks: Seq<ParseTaskView>)
+    requires
+        tasks.len() > 0,
+        cst_parse_task_stack_is_valid_spec(tasks),
+    ensures
+        cst_parse_task_stack_is_valid_spec(tasks.drop_last()),
+        cst_parse_task_is_valid_spec(tasks.last()),
+{
+    reveal(cst_parse_task_stack_is_valid_spec);
+    assert forall|index: int|
+        0 <= index < tasks.drop_last().len() implies cst_parse_task_is_valid_spec(
+        #[trigger] tasks.drop_last()[index],
+    ) by {
+        assert(tasks.drop_last()[index] == tasks[index]);
     }
 }
 
@@ -8763,12 +8875,19 @@ fn pop_parse_task(tasks: &mut Vec<ParseTask>) -> (result: Option<ParseTask>)
             Some(task) => Some((cst_parse_task_views_spec(final(tasks)@), task@)),
             None => None,
         },
+        cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old(tasks)@))
+            ==> cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(final(tasks)@)),
+        cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old(tasks)@))
+            && result.is_some() ==> cst_parse_task_is_valid_spec(result.unwrap()@),
 {
     let ghost old_tasks = tasks@;
     match tasks.pop() {
         Some(task) => {
             proof {
                 lemma_cst_parse_task_views_subrange(old_tasks, 0, old_tasks.len() - 1);
+                if cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old_tasks)) {
+                    lemma_cst_pop_preserves_valid_stack(cst_parse_task_views_spec(old_tasks));
+                }
                 reveal(cst_parse_task_views_spec);
                 reveal(cst_pop_parse_task_spec);
             }
@@ -8790,6 +8909,31 @@ pub open spec fn cst_resume_parse_task_spec(tasks: Seq<ParseTaskView>, task: Par
     tasks.push(task)
 }
 
+pub proof fn lemma_cst_resume_preserves_valid_stack(
+    tasks: Seq<ParseTaskView>,
+    task: ParseTaskView,
+)
+    requires
+        cst_parse_task_stack_is_valid_spec(tasks),
+        cst_parse_task_is_valid_spec(task),
+    ensures
+        cst_parse_task_stack_is_valid_spec(cst_resume_parse_task_spec(tasks, task)),
+{
+    reveal(cst_resume_parse_task_spec);
+    reveal(cst_parse_task_stack_is_valid_spec);
+    assert forall|index: int|
+        0 <= index < tasks.push(task).len() implies cst_parse_task_is_valid_spec(
+        #[trigger] tasks.push(task)[index],
+    ) by {
+        if index < tasks.len() {
+            assert(tasks.push(task)[index] == tasks[index]);
+        } else {
+            assert(index == tasks.len());
+            assert(tasks.push(task)[index] == task);
+        }
+    }
+}
+
 fn resume_parse_task(tasks: &mut Vec<ParseTask>, task: ParseTask)
     ensures
         final(tasks).len() == old(tasks).len() + 1,
@@ -8797,11 +8941,18 @@ fn resume_parse_task(tasks: &mut Vec<ParseTask>, task: ParseTask)
             cst_parse_task_views_spec(old(tasks)@),
             task@,
         ),
+        cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old(tasks)@))
+            && cst_parse_task_is_valid_spec(task@)
+            ==> cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(final(tasks)@)),
 {
     let ghost old_tasks = tasks@;
     tasks.push(task);
     proof {
         lemma_cst_parse_task_views_push(old_tasks, task);
+        if cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old_tasks))
+            && cst_parse_task_is_valid_spec(task@) {
+            lemma_cst_resume_preserves_valid_stack(cst_parse_task_views_spec(old_tasks), task@);
+        }
         reveal(cst_resume_parse_task_spec);
     }
 }
@@ -8973,6 +9124,9 @@ fn push_iterative_task(
             Ok(()) => Ok(cst_parse_task_views_spec(final(tasks)@)),
             Err(error) => Err(error@),
         },
+        cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old(tasks)@))
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(final(tasks)@)),
 {
     if tasks.len() > depth_limit as usize + 1 {
         proof {
@@ -8985,6 +9139,10 @@ fn push_iterative_task(
     tasks.push(task);
     proof {
         lemma_cst_parse_task_views_push(old_tasks, task);
+        if cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(old_tasks))
+            && cst_parse_task_is_valid_spec(task@) {
+            lemma_cst_resume_preserves_valid_stack(cst_parse_task_views_spec(old_tasks), task@);
+        }
         reveal(cst_push_parse_task_spec);
     }
     Ok(())
@@ -9016,6 +9174,7 @@ fn parse_node_iterative(
         invariant
             depth_limit <= MAX_PROFILE1_CST_DEPTH,
             tasks.len() <= depth_limit + 2,
+            cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(tasks@)),
             builder.syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
             fuel <= (MAX_PROFILE1_COMPLETED_TOKENS + 1) * (MAX_PROFILE1_CST_DEPTH + 1) * 32,
         decreases fuel,
