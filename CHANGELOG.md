@@ -55,5 +55,11 @@ begin.
   diagnostics; a total pure model; exact executable correspondence for every success and failure;
   and a general proof that every authenticated nonempty success has exact rendered content and
   ordered non-overlapping atom/byte ranges.
+- Verified profile-1 completed-token formation with canonical authentication of every preceding
+  lexer witness; a lossless adjacent atom/byte partition; retained trivia and exact directive,
+  property, alias, tag, and scalar identities; typed contextual indicators and bounded flow-stack
+  validation; exact tag-character and BOM-context diagnostics; caller-lowered absolute limits; a
+  total pure result model; exact executable correspondence; and public partition, formation,
+  balance, anti-laundering, scalar-identity, parts, trivia-maximality, and limit proof surfaces.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

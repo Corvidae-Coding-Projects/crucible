@@ -278,6 +278,15 @@ impl DeepView for BlockScalarContentScalar {
 }
 
 impl BlockScalarContentScalar {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.code_point == other.code_point && self.source_atom_index == other.source_atom_index
+            && self.byte_start == other.byte_start && self.byte_end == other.byte_end && self.origin
+            == other.origin
+    }
+
     fn new(
         code_point: u32,
         source_atom_index: u64,
@@ -436,6 +445,57 @@ impl View for BlockScalar {
 }
 
 impl BlockScalar {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.style != other.style || self.chomping != other.chomping || self.explicit_indentation
+            != other.explicit_indentation || self.parent_indentation != other.parent_indentation
+            || self.content_indentation != other.content_indentation || self.start_line_number
+            != other.start_line_number || self.end_line_number != other.end_line_number
+            || self.start_atom_index != other.start_atom_index || self.header_end_atom_index
+            != other.header_end_atom_index || self.content_start_atom_index
+            != other.content_start_atom_index || self.end_atom_index != other.end_atom_index
+            || self.byte_start != other.byte_start || self.byte_end != other.byte_end {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.content.len() != other.content.len() {
+            proof {
+                reveal(block_content_views_spec);
+                assert(self@.content.len() != other@.content.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index = 0usize;
+        while index < self.content.len()
+            invariant
+                self.content.len() == other.content.len(),
+                index <= self.content.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.content[prior]@ == other.content[prior]@,
+            decreases self.content.len() - index,
+        {
+            if !self.content[index].same_as(&other.content[index]) {
+                proof {
+                    reveal(block_content_views_spec);
+                    assert(self.content[index as int]@ != other.content[index as int]@);
+                    assert(self@.content[index as int] != other@.content[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(block_content_views_spec);
+            assert(self@.content =~= other@.content);
+        }
+        true
+    }
+
     pub fn style(&self) -> (style: BlockScalarStyle)
         ensures
             style == self@.style,
@@ -617,6 +677,62 @@ impl View for BlockScalarSource {
 }
 
 impl BlockScalarSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.layout_transformation_version
+            != other.layout_transformation_version || self.structural_transformation_version
+            != other.structural_transformation_version || self.quoted_transformation_version
+            != other.quoted_transformation_version || self.plain_transformation_version
+            != other.plain_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes || self.input_atom_count != other.input_atom_count
+            || self.input_line_count != other.input_line_count || self.input_structural_lexeme_count
+            != other.input_structural_lexeme_count || self.input_quoted_scalar_count
+            != other.input_quoted_scalar_count || self.input_plain_scalar_count
+            != other.input_plain_scalar_count || self.total_content_code_points
+            != other.total_content_code_points {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.scalars.len() != other.scalars.len() {
+            proof {
+                reveal(block_scalar_views_spec);
+                assert(self@.scalars.len() != other@.scalars.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index = 0usize;
+        while index < self.scalars.len()
+            invariant
+                self.scalars.len() == other.scalars.len(),
+                index <= self.scalars.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.scalars[prior]@ == other.scalars[prior]@,
+            decreases self.scalars.len() - index,
+        {
+            if !self.scalars[index].same_as(&other.scalars[index]) {
+                proof {
+                    reveal(block_scalar_views_spec);
+                    assert(self.scalars[index as int]@ != other.scalars[index as int]@);
+                    assert(self@.scalars[index as int] != other@.scalars[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(block_scalar_views_spec);
+            assert(self@.scalars =~= other@.scalars);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,
@@ -1346,7 +1462,8 @@ closed spec fn direct_content_spec(
 {
     if index >= end || index >= atoms.len() || index < 0 || fuel == 0 {
         Ok(Seq::empty())
-    } else if !crate::quoted::yaml_printable_character_spec(atoms[index].code_point) {
+    } else if !crate::quoted::yaml_printable_character_spec(atoms[index].code_point)
+        || atoms[index].code_point == 0xfeff {
         Err(
             block_error_spec(
                 BlockScalarErrorKind::InvalidBlockCharacter,
@@ -3785,7 +3902,7 @@ fn append_direct_content(
         decreases end - index,
     {
         let code_point = atoms[index].code_point();
-        if !yaml_printable_block_character(code_point) {
+        if !yaml_printable_block_character(code_point) || code_point == 0xfeff {
             let error = BlockScalarError::at(
                 BlockScalarErrorKind::InvalidBlockCharacter,
                 atoms[index].span().start().byte_offset(),

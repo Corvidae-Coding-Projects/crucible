@@ -354,6 +354,11 @@ fn reserved_starts_and_raw_forbidden_characters_have_typed_exact_offsets() {
             PlainScalarErrorKind::InvalidPlainCharacter,
             8,
         ),
+        (
+            &b"key: raw\xef\xbb\xbfvalue\n"[..],
+            PlainScalarErrorKind::InvalidPlainCharacter,
+            8,
+        ),
     ] {
         let atoms = atomize(bytes);
         let lines = layout(&atoms);

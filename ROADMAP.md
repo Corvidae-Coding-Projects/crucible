@@ -46,8 +46,14 @@ Current work establishes and extends:
   diagnostics; strip/clip/keep chomping; exact folding and more-indented-line behavior; four
   independent resource caps; distinct upstream evidence diagnostics; raw ranges; normalized
   content provenance; total executable-to-pure success/error correspondence; and general nonempty
-  exact-render/non-overlap proofs; final-token interpretation continues in the same mandatory lexer
-  work;
+  exact-render/non-overlap proofs;
+- verified completed YAML token formation with canonical authentication of every preceding lexer
+  witness; retained indentation, separation, comments, line feeds, and document-prefix BOMs; exact
+  directive/property/alias payload ranges; scalar shielding; context-sensitive document and
+  collection indicators; bounded typed flow-stack validation; a complete lossless atom/byte
+  partition; distinct exact-offset diagnostics; and total executable-to-pure result correspondence
+  with public semantic, partition, and flow-balance proofs; parser/CST formation is the next YAML
+  slice;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

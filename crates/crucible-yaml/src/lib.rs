@@ -7,6 +7,7 @@ pub mod layout;
 pub mod plain;
 pub mod quoted;
 pub mod structural;
+pub mod token;
 pub mod utf8;
 
 pub use atom::{
@@ -49,6 +50,13 @@ pub use structural::{
     scan_profile1_structural_lexemes, StructuralCandidateRole, StructuralLexeme,
     StructuralLexemeSource, StructuralScanError, StructuralScanErrorKind, StructuralScanLimits,
     MAX_PROFILE1_STRUCTURAL_LEXEMES, STRUCTURAL_LEXEME_TRANSFORMATION_VERSION,
+};
+
+pub use token::{
+    canonical_completed_token_limits, scan_profile1_completed_tokens, CompletedToken,
+    CompletedTokenError, CompletedTokenErrorKind, CompletedTokenKind, CompletedTokenLimits,
+    CompletedTokenPart, CompletedTokenPartKind, CompletedTokenSource,
+    COMPLETED_TOKEN_TRANSFORMATION_VERSION, MAX_PROFILE1_COMPLETED_TOKENS, MAX_PROFILE1_FLOW_DEPTH,
 };
 
 pub use utf8::{

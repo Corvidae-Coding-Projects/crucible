@@ -791,7 +791,8 @@ closed spec fn first_invalid_plain_atom_spec(
         None
     } else if fuel == 0 {
         Some(index as u64)
-    } else if !yaml_printable_plain_character_spec(atoms[index].code_point) {
+    } else if !yaml_printable_plain_character_spec(atoms[index].code_point)
+        || atoms[index].code_point == 0xfeff {
         Some(index as u64)
     } else {
         first_invalid_plain_atom_spec(atoms, index + 1, end, (fuel - 1) as nat)
@@ -844,7 +845,8 @@ fn first_invalid_plain_atom(atoms: &[LexicalAtom], start: usize, end: usize) -> 
         assert(views[index as int] == atoms[index as int]@) by {
             reveal(crate::atom::lexical_atom_views_spec);
         }
-        if !yaml_printable_plain_character(atoms[index].code_point()) {
+        if !yaml_printable_plain_character(atoms[index].code_point()) || atoms[index].code_point()
+            == 0xfeff {
             proof {
                 reveal(first_invalid_plain_atom_spec);
                 assert(expected == Some(index as u64));
@@ -2087,9 +2089,10 @@ closed spec fn property_payload_continues_spec(
     context: PlainContextView,
 ) -> bool {
     context.property_payload_mode > 0 && !candidate_is_line_feed_spec(candidate) && (
-    context.property_payload_mode == 4 || (!candidate_is_separation_spec(candidate)
-        && !candidate_is_flow_start_spec(candidate) && !candidate_is_flow_end_spec(candidate)
-        && candidate.kind != StructuralCandidateRole::FlowEntry && candidate.kind
+    context.property_payload_mode == 4 || context.property_payload_mode == 5 || (
+    !candidate_is_separation_spec(candidate) && !candidate_is_flow_start_spec(candidate)
+        && !candidate_is_flow_end_spec(candidate) && candidate.kind
+        != StructuralCandidateRole::FlowEntry && candidate.kind
         != StructuralCandidateRole::Indicator(YamlIndicator::MappingValue)))
 }
 
@@ -2100,9 +2103,9 @@ fn property_payload_continues(candidate: &StructuralLexeme, context: PlainContex
 {
     let role = candidate.candidate_role();
     context.property_payload_mode > 0 && role != StructuralCandidateRole::LineFeed && (
-    context.property_payload_mode == 4 || (role != StructuralCandidateRole::Separation && role
-        != StructuralCandidateRole::FlowSequenceStart && role
-        != StructuralCandidateRole::FlowMappingStart && role
+    context.property_payload_mode == 4 || context.property_payload_mode == 5 || (role
+        != StructuralCandidateRole::Separation && role != StructuralCandidateRole::FlowSequenceStart
+        && role != StructuralCandidateRole::FlowMappingStart && role
         != StructuralCandidateRole::FlowSequenceEnd && role
         != StructuralCandidateRole::FlowMappingEnd && role != StructuralCandidateRole::FlowEntry
         && role != StructuralCandidateRole::Indicator(YamlIndicator::MappingValue)))
@@ -2517,12 +2520,32 @@ closed spec fn scan_plain_tail_spec(
                         } else {
                             candidate.start_atom_index as int
                         };
-                        let first = first_plain_content_start_spec(
+                        let raw_first = first_plain_content_start_spec(
                             atoms,
                             content_base,
                             candidate.end_atom_index as int,
                             (candidate.end_atom_index as int - content_base) as nat,
                         );
+                        let document_bom = match raw_first {
+                            Some(start) => prepared.at_line_start && start < atoms.len()
+                                && atoms[start as int].code_point == 0xfeff,
+                            None => false,
+                        };
+                        let first = match raw_first {
+                            Some(start) if document_bom && prepared.line_indentation == 0 => {
+                                let after = first_plain_content_start_spec(
+                                    atoms,
+                                    start as int + 1,
+                                    candidate.end_atom_index as int,
+                                    (candidate.end_atom_index - start - 1) as nat,
+                                );
+                                match after {
+                                    Some(next) if atoms[next as int].code_point == 0x25 => None,
+                                    _ => after,
+                                }
+                            },
+                            _ => raw_first,
+                        };
                         match first {
                             None => scan_plain_tail_spec(
                                 atoms,
@@ -2530,7 +2553,16 @@ closed spec fn scan_plain_tail_spec(
                                 quotes,
                                 candidate_index + 1,
                                 quote_index,
-                                PlainContextView { at_line_start: false, ..prepared },
+                                PlainContextView {
+                                    at_line_start: document_bom,
+                                    property_payload_mode: if document_bom
+                                        && prepared.line_indentation == 0 {
+                                        5
+                                    } else {
+                                        prepared.property_payload_mode
+                                    },
+                                    ..prepared
+                                },
                                 built,
                                 scalar_limit,
                                 scalar_atom_limit,
@@ -2558,10 +2590,9 @@ closed spec fn scan_plain_tail_spec(
                                 } else {
                                     match first_invalid_plain_atom_spec(
                                         atoms,
-                                        candidate.start_atom_index as int,
+                                        start as int,
                                         candidate.end_atom_index as int,
-                                        (candidate.end_atom_index
-                                            - candidate.start_atom_index) as nat,
+                                        (candidate.end_atom_index - start) as nat,
                                     ) {
                                         Some(invalid) => Err(
                                             PlainScalarErrorView {
@@ -3706,11 +3737,29 @@ pub fn scan_profile1_plain_scalars(
             } else {
                 candidate_start
             };
-            let first = first_plain_content_start(atoms, content_base, candidate_end);
+            let raw_first = first_plain_content_start(atoms, content_base, candidate_end);
+            let document_bom = match raw_first {
+                Some(start) => context.at_line_start && atoms[start as usize].code_point()
+                    == 0xfeff,
+                None => false,
+            };
+            let first = match raw_first {
+                Some(start) if document_bom && context.line_indentation == 0 => {
+                    let after = first_plain_content_start(atoms, start as usize + 1, candidate_end);
+                    match after {
+                        Some(next) if atoms[next as usize].code_point() == 0x25 => None,
+                        _ => after,
+                    }
+                },
+                _ => raw_first,
+            };
             let start_u64 = match first {
                 Some(start) => start,
                 None => {
-                    context.at_line_start = false;
+                    context.at_line_start = document_bom;
+                    if document_bom && context.line_indentation == 0 {
+                        context.property_payload_mode = 5;
+                    }
                     proof {
                         reveal(scan_plain_tail_spec);
                         fuel = (fuel - 1) as nat;
@@ -3733,7 +3782,7 @@ pub fn scan_profile1_plain_scalars(
             }
             if let Some(invalid_u64) = first_invalid_plain_atom(
                 atoms,
-                candidate_start,
+                start_u64 as usize,
                 candidate_end,
             ) {
                 let invalid = invalid_u64 as usize;

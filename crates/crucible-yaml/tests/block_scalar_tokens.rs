@@ -282,6 +282,19 @@ fn block_content_keeps_comment_and_indicator_spellings_raw() {
 }
 
 #[test]
+fn block_content_rejects_a_document_bom_at_the_exact_byte() {
+    let bytes = b"value: |\n  before\xef\xbb\xbfafter\n";
+    let offset = bytes
+        .windows(3)
+        .position(|window| window == b"\xef\xbb\xbf")
+        .expect("fixture BOM");
+    assert_eq!(
+        error(bytes),
+        (BlockScalarErrorKind::InvalidBlockCharacter, offset as u64)
+    );
+}
+
+#[test]
 fn headers_reject_zero_duplicates_text_nonseparated_comments_and_eof() {
     let fixtures: &[(&[u8], BlockScalarErrorKind, usize)] = &[
         (

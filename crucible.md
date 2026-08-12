@@ -1563,6 +1563,103 @@ valid block-scalar evidence. This completed transformation remains an input to f
 formation and scalar/tag resolution and does not defer the parser, lowering, schema,
 canonicalization, or self-fuzzing requirements.
 
+Profile 1's completed-token transformation is version 1 and closes the context-sensitive lexer;
+the earlier structural and scalar transformations are authenticated evidence inputs rather than
+alternative token streams. The transformation recomputes and authenticates the canonical atom,
+layout, structural-candidate, quoted-scalar, plain-scalar, and block-scalar results before emitting
+anything. A failure in one input witness has a distinct typed diagnostic naming that transformation,
+so an unrelated or forged view cannot be accepted or mislabeled as a later lexical error.
+
+The successful token sequence is lossless over the post-BOM atom stream. Every token has a nonempty
+half-open atom range, exact original half-open byte range, and starting and ending source line;
+tokens are strictly ordered and adjacent in both atom and byte space, the first begins at atom zero
+and byte `bom_bytes`, and the last ends at the atom count and original source length. Empty and
+stripped-BOM-only input emits no tokens. This partition includes presentation detail instead of
+discarding it: leading-space indentation, in-line separation, normalized line feeds, comments,
+and a document-prefix `U+FEFF` each have explicit token kinds. A later concrete syntax tree can
+therefore reproduce all non-BOM source evidence and attach comments and formatting without guessing.
+The optional stripped leading BOM remains represented by source metadata rather than a fabricated
+zero-width token.
+
+The non-trivia token kinds are YAML and TAG directives, reserved directives, directives-end (`---`)
+and document-end (`...`) markers, flow-sequence and flow-mapping delimiters, flow entry, block
+sequence entry, explicit mapping key, mapping value, anchor property, tag property, alias, and the
+five scalar styles: plain, single quoted, double quoted, literal block, and folded block. Scalar
+tokens name the exact authenticated scalar record and cover its complete presentation range; their
+punctuation, comments, internal separation, and line feeds are not emitted again as nested tokens.
+Empty scalars consume no input and are consequently parser/CST nodes anchored between real tokens,
+not zero-width lexer tokens that would violate the partition invariant.
+
+Comments begin only where separation context admits `#` and extend through the final non-break atom;
+their terminating line feed remains a separate token. Spaces and tabs outside a scalar are grouped
+only across a single maximal separation or indentation run. Only spaces form structural indentation.
+A tab before the required structural indentation, including a tab-only prefix before a flow
+collection, property, alias, or quoted scalar, reports `TabInIndentation` at that tab; tabs admitted
+by flow-line prefixes, separation, or authenticated scalar presentation remain lossless input.
+Reserved `@` and grave-accent indicators that survive outside scalar content are rejected at their
+own offsets rather than emitted as generic content.
+
+Directive tokens implement YAML 1.2.2 productions 82 through 95. A directive is recognized only as
+a non-indented line in document-prefix directive mode. Its token ends at the last nonspace parameter,
+leaving trailing separation, comment, and line feed as trivia tokens. `%YAML` requires exactly one
+decimal `major.minor` parameter and records both checked base-10 components without host-width
+dependence. `%TAG` requires exactly one valid primary, secondary, or named handle and one nonempty
+local or global tag prefix. A reserved directive retains its nonempty name and every nonempty
+parameter range losslessly; the parser later emits the required unknown-directive warning instead
+of erasing it. Duplicate YAML directives, duplicate TAG handles, unsupported YAML major versions,
+and directive/document ordering depend on document grammar and are mandatory parser diagnostics,
+not reasons to weaken lexical spelling checks.
+
+Document markers implement productions 203 and 204: they begin at column zero, contain exactly
+three marker atoms, and are followed only by white space, a line break, a comment, or end of input.
+The lexer tracks whether the stream is in document-prefix directive mode. A directives-end marker
+leaves that mode and a document-end marker re-enters it. A non-leading `U+FEFF` is a
+`DocumentByteOrderMark` token only at the true non-indented start of a document prefix. It is also
+permitted as content inside an authenticated single- or double-quoted scalar, as required by YAML
+1.2.2; every occurrence in plain or block content, directives, properties, aliases, anchors,
+comments, or after same-line indentation is rejected at its original byte offset. Marker-looking
+text inside any authenticated scalar or comment is never promoted to stream structure.
+
+Node properties and aliases implement productions 97 through 104. Anchor and alias names are
+nonempty and exclude white space and flow indicators. A tag token records whether it is
+non-specific, verbatim, primary shorthand, secondary shorthand, or named-handle shorthand, plus
+exact handle and suffix ranges when present. Verbatim tags require a nonempty `ns-uri-char` payload
+and closing `>`; shorthand suffixes are nonempty except for the standalone non-specific `!`, exclude
+raw `!` and flow indicators, and validate each percent escape as exactly two hexadecimal digits.
+The comma and brackets permitted in a verbatim URI remain inside that tag token. URI well-formedness,
+TAG-handle declaration lookup, tag expansion, alias-to-prior-anchor resolution, duplicate node
+properties, and the prohibition on alias content are mandatory parser/resolution checks over these
+lossless tokens.
+
+Indicator classification follows the context productions rather than character identity alone.
+`-`, `?`, and `:` become block collection indicators only with the required separation or line/end
+lookahead, while flow mapping value indicators retain YAML's JSON-compatible no-space form. The
+lexer maintains a bounded typed stack for `[` and `{`; a closing delimiter must match its opener,
+flow entries and flow-only indicator roles require nonzero flow depth, and end of input with a
+nonempty stack reports an unclosed-flow diagnostic. Delimiters inside authenticated scalar,
+property, directive, or comment ranges never affect the stack. Collection-entry grammar,
+key/value placement, indentation nesting, and complete document structure remain parser work, but
+the parser never receives an internally impossible or unbalanced final token stream.
+
+The absolute completed-token count is 1,048,576 and the absolute flow-delimiter depth is 4,096.
+Callers MAY lower either cap but cannot raise it. Intrinsic spelling, contextual-tab, reserved
+indicator, and mismatched-closing-delimiter errors take precedence over admitting the malformed
+token under a caller cap. A token-count error identifies the first atom of the first otherwise valid
+excluded token. A flow-depth error identifies the first opener beyond the effective depth. An
+unclosed flow reports the original end-of-input byte offset; malformed directive, property, alias,
+tag, and percent-escape errors identify the first atom that makes the spelling invalid, or end of
+input when required spelling is absent. Every error is all-or-nothing and exposes no partial public
+token source.
+
+The executable completed-token scanner, directive/property submachines, scalar-evidence merge, and
+flow stack are iterative Verus Rust. Their pure models are total under explicit atom and token fuel,
+prove strict progress and bounded stack arithmetic, and determine the exact successful sequence or
+typed error. Public semantic contracts prove upstream authentication, the complete adjacent
+atom/byte partition, exact token-kind spelling, scalar-record identity, trivia maximality, balanced
+and properly nested flow delimiters, deterministic result, and the count/depth limits. Proof tests
+must include nonempty mixed streams and forged token views that attempt gaps, overlap, incorrect byte
+endpoints, scalar-range substitution, header/property leakage, or flow-stack laundering.
+
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
 without a language-profile change. Parse rejection is a typed configuration result, not a
