@@ -650,52 +650,79 @@ fn nonempty_two_document_block_and_flow_fixture_satisfies_public_semantics() {
             explicit_start_token: Some(5),
             explicit_end_token: None,
         };
-        let syntax_owners = Seq::empty()
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 0,
-                kind: CstSyntaxOwnerKind::DocumentStartMarker,
-                record_index: 0,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 1,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 0,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 2,
-                kind: CstSyntaxOwnerKind::MappingEntryIndicator,
-                record_index: 0,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 3,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 1,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 4,
-                kind: CstSyntaxOwnerKind::DocumentEndMarker,
-                record_index: 0,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 5,
-                kind: CstSyntaxOwnerKind::DocumentStartMarker,
-                record_index: 1,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 6,
-                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
-                record_index: 4,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 7,
-                kind: CstSyntaxOwnerKind::NodeContent,
-                record_index: 3,
-            }))
-            .push(Some(CstSyntaxOwnerView {
-                token_index: 8,
-                kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
-                record_index: 4,
-            }));
+        let syntax_owners = Seq::empty().push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 0,
+                    kind: CstSyntaxOwnerKind::DocumentStartMarker,
+                    record_index: 0,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 1,
+                    kind: CstSyntaxOwnerKind::NodeContent,
+                    record_index: 0,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 2,
+                    kind: CstSyntaxOwnerKind::MappingEntryIndicator,
+                    record_index: 0,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 3,
+                    kind: CstSyntaxOwnerKind::NodeContent,
+                    record_index: 1,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 4,
+                    kind: CstSyntaxOwnerKind::DocumentEndMarker,
+                    record_index: 0,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 5,
+                    kind: CstSyntaxOwnerKind::DocumentStartMarker,
+                    record_index: 1,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 6,
+                    kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                    record_index: 4,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 7,
+                    kind: CstSyntaxOwnerKind::NodeContent,
+                    record_index: 3,
+                },
+            ),
+        ).push(
+            Some(
+                CstSyntaxOwnerView {
+                    token_index: 8,
+                    kind: CstSyntaxOwnerKind::NodeCollectionIndicator,
+                    record_index: 4,
+                },
+            ),
+        );
         let source = CstSourceView {
             profile_version: 1,
             input_token_transformation_version: 1,
