@@ -448,6 +448,25 @@ pub proof fn lemma_decoded_source_well_formed_scalar_is_normalized(
     reveal(decoded_prefix_view_well_formed_spec);
 }
 
+/// A valid decoded source's scalar spans exactly partition the post-BOM source interval.
+pub proof fn lemma_decoded_source_well_formed_spans_partition(source: DecodedSourceView)
+    requires
+        decoded_source_well_formed_spec(source),
+    ensures
+        if source.scalars.len() == 0 {
+            source.source_len_bytes == source.bom_bytes
+        } else {
+            source.scalars[0].span.start.byte_offset == source.bom_bytes
+                && source.scalars[source.scalars.len() - 1].span.end.byte_offset
+                == source.source_len_bytes && forall|index: int|
+                0 < index < source.scalars.len() ==> source.scalars[index - 1].span.end
+                    == source.scalars[index].span.start
+        },
+{
+    reveal(decoded_source_well_formed_spec);
+    reveal(decoded_prefix_view_well_formed_spec);
+}
+
 proof fn lemma_empty_prefix(bom_bytes: u64)
     ensures
         decoded_prefix_well_formed_spec(Seq::empty(), bom_bytes, bom_bytes),

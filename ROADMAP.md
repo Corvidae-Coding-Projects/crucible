@@ -29,6 +29,9 @@ Current work establishes and extends:
 - verified line and indentation layout with exact atom ranges, original byte offsets, lossless
   leading-tab preservation, and caller-lowered absolute resource caps for the context-sensitive
   lexer that decides tab legality from scalar and separation context;
+- verified lossless structural-candidate partitioning with canonical-layout authentication, exact
+  atom/byte spans, bounded all-or-error output, and candidate roles retained for final
+  context-sensitive scalar and flow interpretation;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

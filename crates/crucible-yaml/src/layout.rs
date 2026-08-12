@@ -188,6 +188,18 @@ impl DeepView for LayoutLine {
 }
 
 impl LayoutLine {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        self.line_number == other.line_number && self.start_atom_index == other.start_atom_index
+            && self.content_atom_index == other.content_atom_index && self.end_atom_index
+            == other.end_atom_index && self.terminated == other.terminated
+            && self.indentation_columns == other.indentation_columns && self.byte_start
+            == other.byte_start && self.content_byte_start == other.content_byte_start
+            && self.byte_end == other.byte_end
+    }
+
     pub fn line_number(&self) -> (number: u64)
         ensures
             number == self@.line_number,
@@ -292,6 +304,54 @@ impl View for LayoutSource {
 }
 
 impl LayoutSource {
+    pub(crate) fn same_as(&self, other: &Self) -> (equal: bool)
+        ensures
+            equal == (self@ == other@),
+    {
+        if self.profile_version != other.profile_version || self.input_transformation_version
+            != other.input_transformation_version || self.transformation_version
+            != other.transformation_version || self.source_len_bytes != other.source_len_bytes
+            || self.bom_bytes != other.bom_bytes {
+            assert(self@ != other@);
+            return false;
+        }
+        if self.lines.len() != other.lines.len() {
+            proof {
+                reveal(layout_line_views_spec);
+                assert(self@.lines.len() != other@.lines.len());
+                assert(self@ != other@);
+            }
+            return false;
+        }
+        let mut index: usize = 0;
+        while index < self.lines.len()
+            invariant
+                self.lines.len() == other.lines.len(),
+                index <= self.lines.len(),
+                forall|prior: int|
+                    #![auto]
+                    0 <= prior < index ==> self.lines[prior]@ == other.lines[prior]@,
+            decreases self.lines.len() - index,
+        {
+            let same = self.lines[index].same_as(&other.lines[index]);
+            if !same {
+                proof {
+                    reveal(layout_line_views_spec);
+                    assert(self.lines[index as int]@ != other.lines[index as int]@);
+                    assert(self@.lines[index as int] != other@.lines[index as int]);
+                    assert(self@ != other@);
+                }
+                return false;
+            }
+            index += 1;
+        }
+        proof {
+            reveal(layout_line_views_spec);
+            assert(self@.lines =~= other@.lines);
+        }
+        true
+    }
+
     pub fn profile_version(&self) -> (version: u16)
         ensures
             version == self@.profile_version,
@@ -603,6 +663,20 @@ pub proof fn lemma_layout_input_atom_limit_error(
                     atomized.atoms[MAX_PROFILE1_LEXICAL_ATOMS as int].span.start.byte_offset,
             },
         ),
+{
+    reveal(analyze_profile1_layout_spec);
+}
+
+/// Every successful layout result proves that the defensive input atom cap was satisfied.
+pub proof fn lemma_layout_success_input_within_atom_cap(
+    atomized: AtomizedSourceView,
+    limits: LayoutLimitsView,
+    layout: LayoutSourceView,
+)
+    requires
+        analyze_profile1_layout_spec(atomized, limits) == Ok(layout),
+    ensures
+        atomized.atoms.len() <= MAX_PROFILE1_LEXICAL_ATOMS,
 {
     reveal(analyze_profile1_layout_spec);
 }

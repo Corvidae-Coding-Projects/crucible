@@ -18,7 +18,7 @@ pub const LEXICAL_ATOM_TRANSFORMATION_VERSION: u16 = 1;
 
 pub const MAX_PROFILE1_LEXICAL_ATOMS: u64 = MAX_PROFILE1_DECODED_SCALARS;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Structural)]
 pub enum YamlIndicator {
     BlockSequenceEntry,
     ExplicitMappingKey,
@@ -41,7 +41,7 @@ pub enum YamlIndicator {
     ReservedGraveAccent,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Structural)]
 pub enum LexicalAtomKind {
     LineFeed,
     Space,
@@ -178,6 +178,22 @@ impl DeepView for LexicalAtom {
 }
 
 impl LexicalAtom {
+    pub(crate) fn is_indicator(&self, indicator: YamlIndicator) -> (matches: bool)
+        ensures
+            matches == (self@.kind == LexicalAtomKind::Indicator(indicator)),
+    {
+        let kind = self.kind();
+        kind == LexicalAtomKind::Indicator(indicator)
+    }
+
+    pub(crate) fn is_white(&self) -> (white: bool)
+        ensures
+            white == (self@.kind == LexicalAtomKind::Space || self@.kind == LexicalAtomKind::Tab),
+    {
+        let kind = self.kind();
+        kind == LexicalAtomKind::Space || kind == LexicalAtomKind::Tab
+    }
+
     fn new(kind: LexicalAtomKind, code_point: u32, span: SourceSpan) -> (atom: Self)
         ensures
             atom@ == (LexicalAtomView { kind, code_point, span: span@ }),
@@ -445,6 +461,43 @@ pub proof fn lemma_intrinsic_atomized_scalar_is_normalized(atomized: AtomizedSou
     lemma_atomized_well_formed_scalar_is_normalized(decoded, atomized, index);
     reveal(lexical_atoms_for_scalars_spec);
     reveal(lexical_atom_for_scalar_spec);
+}
+
+/// An intrinsically valid atom stream exactly partitions the decoded source byte interval.
+#[verifier::spinoff_prover]
+pub proof fn lemma_intrinsic_atomized_spans_partition_source(atomized: AtomizedSourceView)
+    requires
+        atomized_source_intrinsically_well_formed_spec(atomized),
+    ensures
+        if atomized.atoms.len() == 0 {
+            atomized.source_len_bytes == atomized.bom_bytes
+        } else {
+            atomized.atoms[0].span.start.byte_offset == atomized.bom_bytes
+                && atomized.atoms[atomized.atoms.len() - 1].span.end.byte_offset
+                == atomized.source_len_bytes && forall|index: int|
+                0 < index < atomized.atoms.len() ==> atomized.atoms[index - 1].span.end
+                    == atomized.atoms[index].span.start
+        },
+{
+    reveal(atomized_source_intrinsically_well_formed_spec);
+    let decoded = choose|candidate: DecodedSourceView|
+        atomized_source_well_formed_spec(candidate, atomized);
+    assert(atomized_source_well_formed_spec(decoded, atomized));
+    reveal(atomized_source_well_formed_spec);
+    reveal(atomized_source_corresponds_spec);
+    crate::utf8::lemma_decoded_source_well_formed_spans_partition(decoded);
+    reveal(lexical_atoms_for_scalars_spec);
+    reveal(lexical_atom_for_scalar_spec);
+    if atomized.atoms.len() > 0 {
+        assert(atomized.atoms[0].span == decoded.scalars[0].span);
+        assert(atomized.atoms[atomized.atoms.len() - 1].span
+            == decoded.scalars[decoded.scalars.len() - 1].span);
+        assert forall|index: int| 0 < index < atomized.atoms.len() implies atomized.atoms[index
+            - 1].span.end == atomized.atoms[index].span.start by {
+            assert(atomized.atoms[index - 1].span == decoded.scalars[index - 1].span);
+            assert(atomized.atoms[index].span == decoded.scalars[index].span);
+        }
+    }
 }
 
 pub closed spec fn atomize_profile1_spec(

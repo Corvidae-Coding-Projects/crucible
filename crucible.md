@@ -1379,6 +1379,26 @@ its pure Verus model, constructs no partial public result on error, and preserve
 witness from the atomized input. It is a proof-carrying substage of the full lexer, not a substitute
 for comments, directives, flow state, or scalar token formation.
 
+Profile 1's structural-candidate transformation is version 1 and is a second proof-carrying lexer
+substage. It authenticates its input by recomputing the canonical line layout, then partitions every
+atom exactly once into nonempty, monotonic ranges for indentation, separation, line feeds,
+directives, document markers, comments, flow punctuation, contextually plausible indicators, and
+still-ambiguous content. Each range retains its line number, half-open atom indices, and original
+half-open byte span. These roles are lossless candidates rather than completed YAML tokens: quoted,
+plain, and block scalar context may reinterpret punctuation or separation candidates, and the full
+context-sensitive scanner remains responsible for final scalar boundaries, flow state, reserved
+indicators, and contextual tab legality. No atom or byte evidence may be discarded by that later
+reinterpretation.
+
+The absolute structural-candidate cap is 1,048,576, equal to the lexical-atom cap; callers MAY lower it
+but cannot raise it. An exhausted cap reports the first byte of the first excluded lexeme and exposes
+no partial public result. An empty or stripped-BOM-only atom stream requires zero lexeme capacity.
+A layout that is not the canonical result for the supplied atom stream is rejected before scanning.
+The executable scan is iterative, its pure Verus model is total under explicit fuel equal to the
+input atom count, and exact correspondence covers success, layout mismatch, and limit failure. Its
+semantic validity predicate retains both intrinsic atom validity and the authenticated layout
+witness, so forged ghost views cannot be laundered into a valid structural source.
+
 The parser must never construct an unbounded alias expansion, recurse without a verified bound,
 silently accept duplicate effective keys, or permit a scalar coercion to change across versions
 without a language-profile change. Parse rejection is a typed configuration result, not a

@@ -3,6 +3,7 @@
 
 pub mod atom;
 pub mod layout;
+pub mod structural;
 pub mod utf8;
 
 pub use atom::{
@@ -15,6 +16,13 @@ pub use layout::{
     analyze_profile1_layout, LayoutError, LayoutErrorKind, LayoutLimits, LayoutLine, LayoutSource,
     LINE_LAYOUT_TRANSFORMATION_VERSION, MAX_PROFILE1_INDENTATION_COLUMNS,
     MAX_PROFILE1_LAYOUT_LINES,
+};
+
+pub use structural::{
+    canonical_structural_layout_limits, scan_profile1_structural_lexemes, StructuralCandidateRole,
+    StructuralLexeme, StructuralLexemeSource, StructuralScanError, StructuralScanErrorKind,
+    StructuralScanLimits, MAX_PROFILE1_STRUCTURAL_LEXEMES,
+    STRUCTURAL_LEXEME_TRANSFORMATION_VERSION,
 };
 
 pub use utf8::{

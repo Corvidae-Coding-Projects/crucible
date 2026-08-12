@@ -34,5 +34,9 @@ begin.
   measurement, lossless leading-tab preservation for contextual scalar/separation decisions,
   deterministic resource-limit diagnostics, iterative progress, maximum-boundary fixtures, and
   total executable-to-pure correspondence.
+- Verified profile-1 structural-candidate partitioning with canonical-layout authentication, exact
+  lossless atom/byte coverage, directives and document markers, separation/comment/flow candidates,
+  caller-lowered all-or-error bounds, typed mismatch and first-excluded diagnostics, iterative
+  progress, a total pure model, and exact executable correspondence for success and failure.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main
