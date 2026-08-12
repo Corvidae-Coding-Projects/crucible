@@ -330,6 +330,73 @@ fn pure_parser_dispatched_frame_bounds_are_exact() {
 }
 
 #[test]
+fn pure_parser_node_frame_empty_transition_is_exact_and_total() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 4,
+        };
+        let builder = crucible_yaml::cst::cst_empty_builder_spec(0, limits, 0);
+        let task = crucible_yaml::cst::cst_node_task_spec(0, 0, false, 4);
+        let machine = crucible_yaml::cst::ParseMachineView {
+            tasks: Seq::empty(),
+            completed: None,
+            fuel: 1,
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_node_task_spec);
+        reveal(crucible_yaml::cst::cst_step_node_task_spec);
+        reveal(crucible_yaml::cst::cst_step_node_store_empty_spec);
+        reveal(crucible_yaml::cst::cst_step_node_internal_error_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_skip_trivia_spec, 2);
+        reveal(crucible_yaml::cst::cst_empty_node_spec);
+        reveal(crucible_yaml::cst::cst_byte_at_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_machine_store_completed_spec);
+        reveal(crucible_yaml::cst::cst_store_completed_node_spec);
+        let result = crucible_yaml::cst::cst_step_node_task_spec(
+            Seq::empty(),
+            Seq::empty(),
+            task,
+            machine,
+            builder,
+            4,
+        );
+        assert(result.is_ok());
+        let (next_machine, next_builder) = match result {
+            Ok(value) => value,
+            Err(_) => (machine, builder),
+        };
+        assert(next_builder.nodes.len() == 1);
+        assert(next_builder.nodes[0].kind == CstNodeKind::Empty);
+        assert(next_machine.completed == Some(
+            crucible_yaml::cst::ParsedNodeView { node_index: 0, next_token: 0 },
+        ));
+        let invalid = crucible_yaml::cst::ParseTaskView { end: 1, ..task };
+        assert(crucible_yaml::cst::cst_step_node_task_spec(
+            Seq::empty(),
+            Seq::empty(),
+            invalid,
+            machine,
+            builder,
+            4,
+        ) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);

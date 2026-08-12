@@ -9218,6 +9218,248 @@ pub open spec fn cst_validate_dispatched_task_spec(
     }
 }
 
+pub open spec fn cst_step_node_internal_error_spec() -> CstErrorView {
+    CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 }
+}
+
+pub open spec fn cst_step_node_store_parsed_spec(
+    machine: ParseMachineView,
+    result: Result<(CstBuilderView, ParsedNodeView), CstErrorView>,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    match result {
+        Ok((builder, parsed)) => Ok((cst_machine_store_completed_spec(machine, parsed), builder)),
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_step_node_store_empty_spec(
+    machine: ParseMachineView,
+    anchor: u64,
+    result: Result<(CstBuilderView, u64), CstErrorView>,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    match result {
+        Ok((builder, node_index)) => {
+            let parsed = ParsedNodeView { node_index, next_token: anchor };
+            Ok((cst_machine_store_completed_spec(machine, parsed), builder))
+        },
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_step_node_specialize_spec(
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    task: ParseTaskView,
+    kind: ParseTaskKind,
+    token_start: u64,
+    cursor: u64,
+    opener: u64,
+    indentation: u64,
+    anchor_property_token: Option<u64>,
+    tag_property_token: Option<u64>,
+    node_token_end: u64,
+    offset: u64,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.depth_left > depth_limit {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        match cst_specialize_parse_task_spec(
+            task,
+            kind,
+            token_start,
+            cursor,
+            opener,
+            indentation,
+            anchor_property_token,
+            tag_property_token,
+            node_token_end,
+            offset,
+        ) {
+            Ok(specialized) => {
+                let opened_depth = (depth_limit - task.depth_left + 1) as u64;
+                Ok(
+                    (
+                        cst_machine_resume_task_spec(machine, specialized),
+                        cst_observe_depth_spec(builder, opened_depth),
+                    ),
+                )
+            },
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub open spec fn cst_step_node_task_spec(
+    atoms: Seq<crate::atom::LexicalAtomView>,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    task: ParseTaskView,
+    machine: ParseMachineView,
+    builder: CstBuilderView,
+    depth_limit: u64,
+) -> Result<(ParseMachineView, CstBuilderView), CstErrorView> {
+    if task.kind != ParseTaskKind::Node || task.end > tokens.len() || task.cursor > task.end
+        || task.token_start > task.end {
+        Err(cst_step_node_internal_error_spec())
+    } else {
+        let index = cst_skip_trivia_spec(
+            tokens,
+            task.cursor as int,
+            task.end as int,
+            (task.end - task.cursor) as nat + 1,
+        );
+        if index >= task.end {
+            cst_step_node_store_empty_spec(
+                machine,
+                index as u64,
+                cst_empty_node_spec(builder, tokens, index as u64),
+            )
+        } else {
+            let token_start = index as u64;
+            match cst_scan_node_properties_from_spec(
+                tokens,
+                index,
+                task.end as int,
+                None,
+                None,
+                (task.end as int - index) as nat + 1,
+            ) {
+                Err(error) => Err(error),
+                Ok(properties) => {
+                    let syntax = properties.next_token as int;
+                    if syntax >= task.end {
+                        cst_step_node_store_parsed_spec(
+                            machine,
+                            cst_finish_property_empty_node_spec(
+                                builder,
+                                tokens,
+                                token_start,
+                                properties.next_token,
+                                properties.anchor_property_token,
+                                properties.tag_property_token,
+                            ),
+                        )
+                    } else {
+                        let token = tokens[syntax];
+                        if token.kind == CompletedTokenKind::Alias {
+                            if properties.anchor_property_token.is_some()
+                                || properties.tag_property_token.is_some() {
+                                Err(
+                                    CstErrorView {
+                                        kind: CstErrorKind::AliasHasPropertiesOrContent,
+                                        byte_offset: token.byte_start,
+                                    },
+                                )
+                            } else {
+                                cst_step_node_store_parsed_spec(
+                                    machine,
+                                    cst_finish_alias_node_spec(
+                                        builder,
+                                        tokens,
+                                        token_start,
+                                        syntax as u64,
+                                    ),
+                                )
+                            }
+                        } else if cst_token_is_scalar_spec(token.kind) {
+                            let after = cst_skip_trivia_spec(
+                                tokens,
+                                syntax + 1,
+                                task.end as int,
+                                (task.end as int - syntax) as nat,
+                            );
+                            if task.allow_block_mapping && after < task.end && tokens[after].kind
+                                == CompletedTokenKind::MappingValue && cst_same_line_spec(
+                                token,
+                                tokens[after],
+                            ) {
+                                cst_step_node_specialize_spec(
+                                    machine,
+                                    builder,
+                                    task,
+                                    ParseTaskKind::BlockMapping,
+                                    token_start,
+                                    syntax as u64,
+                                    syntax as u64,
+                                    cst_token_column_spec(atoms, token),
+                                    properties.anchor_property_token,
+                                    properties.tag_property_token,
+                                    syntax as u64,
+                                    tokens[after].byte_start,
+                                    depth_limit,
+                                )
+                            } else {
+                                cst_step_node_store_parsed_spec(
+                                    machine,
+                                    cst_finish_scalar_node_spec(
+                                        builder,
+                                        tokens,
+                                        token_start,
+                                        syntax as u64,
+                                        properties.anchor_property_token,
+                                        properties.tag_property_token,
+                                    ),
+                                )
+                            }
+                        } else {
+                            let kind = if token.kind == CompletedTokenKind::FlowSequenceStart {
+                                Some(ParseTaskKind::FlowSequence)
+                            } else if token.kind == CompletedTokenKind::FlowMappingStart {
+                                Some(ParseTaskKind::FlowMapping)
+                            } else if token.kind == CompletedTokenKind::BlockSequenceEntry
+                                && task.allow_block_mapping {
+                                Some(ParseTaskKind::BlockSequence)
+                            } else if (token.kind == CompletedTokenKind::ExplicitMappingKey
+                                || token.kind == CompletedTokenKind::MappingValue)
+                                && task.allow_block_mapping {
+                                Some(ParseTaskKind::BlockMapping)
+                            } else {
+                                None
+                            };
+                            match kind {
+                                None => Err(
+                                    CstErrorView {
+                                        kind: CstErrorKind::UnexpectedToken,
+                                        byte_offset: token.byte_start,
+                                    },
+                                ),
+                                Some(kind) => {
+                                    let cursor = if kind == ParseTaskKind::FlowSequence || kind
+                                        == ParseTaskKind::FlowMapping {
+                                        cst_skip_trivia_spec(
+                                            tokens,
+                                            syntax + 1,
+                                            task.end as int,
+                                            (task.end as int - syntax) as nat,
+                                        ) as u64
+                                    } else {
+                                        syntax as u64
+                                    };
+                                    cst_step_node_specialize_spec(
+                                        machine,
+                                        builder,
+                                        task,
+                                        kind,
+                                        token_start,
+                                        cursor,
+                                        syntax as u64,
+                                        cst_token_column_spec(atoms, token),
+                                        properties.anchor_property_token,
+                                        properties.tag_property_token,
+                                        (syntax + 1) as u64,
+                                        token.byte_start,
+                                        depth_limit,
+                                    )
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        }
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -9495,6 +9737,376 @@ fn validate_dispatched_task(task: &ParseTask, token_count: usize) -> (result: Re
 }
 
 #[verifier::rlimit(500)]
+fn step_node_task(
+    atoms: &[LexicalAtom],
+    tokens: &[CompletedToken],
+    mut task: ParseTask,
+    machine: &mut ParseMachine,
+    builder: &mut CstBuilder,
+    depth_limit: u64,
+) -> (result: Result<(), CstError>)
+    requires
+        task@.kind == ParseTaskKind::Node,
+        task.end <= tokens.len(),
+        task.cursor <= task.end,
+        task.token_start <= task.end,
+        depth_limit <= MAX_PROFILE1_CST_DEPTH,
+    ensures
+        cst_step_node_task_spec(
+            crate::atom::lexical_atom_views_spec(atoms@),
+            crate::token::completed_token_views_spec(tokens@),
+            task@,
+            old(machine)@,
+            old(builder)@,
+            depth_limit,
+        ) == match result {
+            Ok(()) => Ok((final(machine)@, final(builder)@)),
+            Err(error) => Err(error@),
+        },
+        final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        final(machine)@.fuel == old(machine)@.fuel,
+        result.is_ok() ==> final(machine).tasks.len() <= old(machine).tasks.len() + 1,
+        cst_parse_task_stack_is_valid_spec(old(machine)@.tasks)
+            && cst_parse_task_is_valid_spec(task@) && result.is_ok()
+            ==> cst_parse_task_stack_is_valid_spec(final(machine)@.tasks),
+{
+    let ghost atom_views = crate::atom::lexical_atom_views_spec(atoms@);
+    let ghost token_views = crate::token::completed_token_views_spec(tokens@);
+    let ghost task_view = task@;
+    let ghost initial_machine = machine@;
+    let ghost initial_builder = builder@;
+    let ghost expected = cst_step_node_task_spec(
+        atom_views,
+        token_views,
+        task_view,
+        initial_machine,
+        initial_builder,
+        depth_limit,
+    );
+    proof {
+        crate::token::lemma_completed_token_views_len(tokens@);
+        reveal(cst_step_node_task_spec);
+    }
+    let mut index = skip_trivia(tokens, task.cursor, task.end);
+    if index >= task.end {
+        let ghost prior_builder = builder@;
+        let node_index = match empty_node(builder, tokens, index) {
+            Ok(node_index) => node_index,
+            Err(error) => {
+                proof {
+                    assert(cst_empty_node_spec(prior_builder, token_views, index as u64) == Err(
+                        error@,
+                    ));
+                    reveal(cst_step_node_store_empty_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        let parsed = ParsedNode { node_index, next_token: index };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_empty_node_spec(prior_builder, token_views, index as u64) == Ok(
+                (builder@, node_index),
+            ));
+            reveal(cst_step_node_store_empty_spec);
+            assert(parsed@ == ParsedNodeView { node_index, next_token: index as u64 });
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let token_start = index;
+    let properties = match scan_node_properties(tokens, index, task.end, None, None) {
+        Ok(properties) => properties,
+        Err(error) => {
+            proof {
+                assert(cst_scan_node_properties_from_spec(
+                    token_views,
+                    index as int,
+                    task_view.end as int,
+                    None,
+                    None,
+                    (task_view.end as int - index as int) as nat + 1,
+                ) == Err(error@));
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        },
+    };
+    index = properties.next_token;
+    let anchor_property_token = properties.anchor_property_token;
+    let tag_property_token = properties.tag_property_token;
+    if index >= task.end {
+        let ghost prior_builder = builder@;
+        let parsed = match finish_property_empty_node(
+            builder,
+            tokens,
+            token_start,
+            index,
+            anchor_property_token,
+            tag_property_token,
+        ) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_property_empty_node_spec(
+                        prior_builder,
+                        token_views,
+                        token_start as u64,
+                        index as u64,
+                        anchor_property_token,
+                        tag_property_token,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_property_empty_node_spec(
+                prior_builder,
+                token_views,
+                token_start as u64,
+                index as u64,
+                anchor_property_token,
+                tag_property_token,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let kind = tokens[index].kind();
+    proof {
+        crate::token::lemma_completed_token_view_at(tokens@, index as int);
+        assert(kind == token_views[index as int].kind);
+    }
+    if kind == CompletedTokenKind::Alias {
+        if anchor_property_token.is_some() || tag_property_token.is_some() {
+            let error = CstError::at(
+                CstErrorKind::AliasHasPropertiesOrContent,
+                tokens[index].byte_start(),
+            );
+            proof {
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        }
+        let ghost prior_builder = builder@;
+        let parsed = match finish_alias_node(builder, tokens, token_start, index) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_alias_node_spec(
+                        prior_builder,
+                        token_views,
+                        token_start as u64,
+                        index as u64,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_alias_node_spec(
+                prior_builder,
+                token_views,
+                token_start as u64,
+                index as u64,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let is_scalar = token_is_scalar(kind);
+    if is_scalar {
+        proof {
+            assert(cst_token_is_scalar_spec(kind));
+            assert(cst_token_is_scalar_spec(token_views[index as int].kind));
+        }
+        let after = skip_trivia(tokens, index + 1, task.end);
+        proof {
+            assert(after as int == cst_skip_trivia_spec(
+                token_views,
+                index as int + 1,
+                task_view.end as int,
+                (task_view.end as int - index as int) as nat,
+            ));
+        }
+        if task.allow_block_mapping && after < task.end && tokens[after].kind()
+            == CompletedTokenKind::MappingValue && same_line(&tokens[index], &tokens[after]) {
+            proof {
+                crate::token::lemma_completed_token_view_at(tokens@, after as int);
+                assert(tokens@[after as int]@ == token_views[after as int]);
+                assert(token_views[after as int].kind == CompletedTokenKind::MappingValue);
+                assert(cst_same_line_spec(token_views[index as int], token_views[after as int]));
+            }
+            if task.depth_left > depth_limit {
+                let error = CstError::at(CstErrorKind::InternalInvariantViolation, 0);
+                proof {
+                    reveal(cst_step_node_specialize_spec);
+                    reveal(cst_step_node_internal_error_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            }
+            let prior_depth_left = task.depth_left;
+            let indentation = token_column(atoms, &tokens[index]);
+            task = match specialize_parse_task(
+                task,
+                ParseTaskKind::BlockMapping,
+                token_start,
+                index,
+                index,
+                indentation,
+                anchor_property_token,
+                tag_property_token,
+                index,
+                tokens[after].byte_start(),
+            ) {
+                Ok(specialized) => specialized,
+                Err(error) => {
+                    proof {
+                        reveal(cst_step_node_specialize_spec);
+                        assert(expected == Err(error@));
+                    }
+                    return Err(error);
+                },
+            };
+            let opened_depth = depth_limit - prior_depth_left + 1;
+            builder.observe_depth(opened_depth);
+            machine_resume_task(task, machine);
+            proof {
+                reveal(cst_step_node_specialize_spec);
+                assert(expected == Ok((machine@, builder@)));
+            }
+            return Ok(());
+        }
+        proof {
+            if task_view.allow_block_mapping && after < task_view.end
+                && token_views[after as int].kind == CompletedTokenKind::MappingValue {
+                crate::token::lemma_completed_token_view_at(tokens@, after as int);
+                assert(!cst_same_line_spec(
+                    token_views[index as int],
+                    token_views[after as int],
+                ));
+            }
+            assert(!(task_view.allow_block_mapping && after < task_view.end
+                && token_views[after as int].kind == CompletedTokenKind::MappingValue
+                && cst_same_line_spec(token_views[index as int], token_views[after as int])));
+        }
+        let ghost prior_builder = builder@;
+        let parsed = match finish_scalar_node(
+            builder,
+            tokens,
+            token_start,
+            index,
+            anchor_property_token,
+            tag_property_token,
+        ) {
+            Ok(parsed) => parsed,
+            Err(error) => {
+                proof {
+                    assert(cst_finish_scalar_node_spec(
+                        prior_builder,
+                        token_views,
+                        token_start as u64,
+                        index as u64,
+                        anchor_property_token,
+                        tag_property_token,
+                    ) == Err(error@));
+                    reveal(cst_step_node_store_parsed_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
+            },
+        };
+        machine_store_completed(parsed, machine);
+        proof {
+            assert(cst_finish_scalar_node_spec(
+                prior_builder,
+                token_views,
+                token_start as u64,
+                index as u64,
+                anchor_property_token,
+                tag_property_token,
+            ) == Ok((builder@, parsed@)));
+            reveal(cst_step_node_store_parsed_spec);
+            assert(expected == Ok((machine@, builder@)));
+        }
+        return Ok(());
+    }
+    let specialized = if kind == CompletedTokenKind::FlowSequenceStart {
+        ParseTaskKind::FlowSequence
+    } else if kind == CompletedTokenKind::FlowMappingStart {
+        ParseTaskKind::FlowMapping
+    } else if kind == CompletedTokenKind::BlockSequenceEntry && task.allow_block_mapping {
+        ParseTaskKind::BlockSequence
+    } else if (kind == CompletedTokenKind::ExplicitMappingKey || kind
+        == CompletedTokenKind::MappingValue) && task.allow_block_mapping {
+        ParseTaskKind::BlockMapping
+    } else {
+        let error = CstError::at(CstErrorKind::UnexpectedToken, tokens[index].byte_start());
+        proof {
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    };
+    if task.depth_left > depth_limit {
+        let error = CstError::at(CstErrorKind::InternalInvariantViolation, 0);
+        proof {
+            reveal(cst_step_node_specialize_spec);
+            reveal(cst_step_node_internal_error_spec);
+            assert(expected == Err(error@));
+        }
+        return Err(error);
+    }
+    let prior_depth_left = task.depth_left;
+    let specialized_cursor = if specialized == ParseTaskKind::FlowSequence || specialized
+        == ParseTaskKind::FlowMapping {
+        skip_trivia(tokens, index + 1, task.end)
+    } else {
+        index
+    };
+    let indentation = token_column(atoms, &tokens[index]);
+    task = match specialize_parse_task(
+        task,
+        specialized,
+        token_start,
+        specialized_cursor,
+        index,
+        indentation,
+        anchor_property_token,
+        tag_property_token,
+        index + 1,
+        tokens[index].byte_start(),
+    ) {
+        Ok(specialized) => specialized,
+        Err(error) => {
+            proof {
+                reveal(cst_step_node_specialize_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
+        },
+    };
+    let opened_depth = depth_limit - prior_depth_left + 1;
+    builder.observe_depth(opened_depth);
+    machine_resume_task(task, machine);
+    proof {
+        reveal(cst_step_node_specialize_spec);
+        assert(expected == Ok((machine@, builder@)));
+    }
+    Ok(())
+}
+
+#[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -9534,145 +10146,10 @@ fn parse_node_iterative(
             return Err(error);
         }
         if task.kind == ParseTaskKind::Node {
-            let mut index = skip_trivia(tokens, task.cursor, task.end);
-            if index >= task.end {
-                let node_index = match empty_node(builder, tokens, index) {
-                    Ok(node_index) => node_index,
-                    Err(error) => return Err(error),
-                };
-                machine_store_completed(ParsedNode { node_index, next_token: index }, &mut machine);
-                continue;
-            }
-            let token_start = index;
-            let properties = match scan_node_properties(tokens, index, task.end, None, None) {
-                Ok(properties) => properties,
+            match step_node_task(atoms, tokens, task, &mut machine, builder, depth_limit) {
+                Ok(()) => continue,
                 Err(error) => return Err(error),
-            };
-            index = properties.next_token;
-            let anchor_property_token = properties.anchor_property_token;
-            let tag_property_token = properties.tag_property_token;
-            if index >= task.end {
-                let parsed = match finish_property_empty_node(
-                    builder,
-                    tokens,
-                    token_start,
-                    index,
-                    anchor_property_token,
-                    tag_property_token,
-                ) {
-                    Ok(parsed) => parsed,
-                    Err(error) => return Err(error),
-                };
-                machine_store_completed(parsed, &mut machine);
-                continue;
             }
-            let kind = tokens[index].kind();
-            if kind == CompletedTokenKind::Alias {
-                if anchor_property_token.is_some() || tag_property_token.is_some() {
-                    return Err(
-                        CstError::at(
-                            CstErrorKind::AliasHasPropertiesOrContent,
-                            tokens[index].byte_start(),
-                        ),
-                    );
-                }
-                let parsed = match finish_alias_node(builder, tokens, token_start, index) {
-                    Ok(parsed) => parsed,
-                    Err(error) => return Err(error),
-                };
-                machine_store_completed(parsed, &mut machine);
-                continue;
-            }
-            if token_is_scalar(kind) {
-                let after = skip_trivia(tokens, index + 1, task.end);
-                if task.allow_block_mapping && after < task.end && tokens[after].kind()
-                    == CompletedTokenKind::MappingValue && same_line(
-                    &tokens[index],
-                    &tokens[after],
-                ) {
-                    if task.depth_left > depth_limit {
-                        return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
-                    }
-                    let prior_depth_left = task.depth_left;
-                    let indentation = token_column(atoms, &tokens[index]);
-                    task =
-                    match specialize_parse_task(
-                        task,
-                        ParseTaskKind::BlockMapping,
-                        token_start,
-                        index,
-                        index,
-                        indentation,
-                        anchor_property_token,
-                        tag_property_token,
-                        index,
-                        tokens[after].byte_start(),
-                    ) {
-                        Ok(specialized) => specialized,
-                        Err(error) => return Err(error),
-                    };
-                    let opened_depth = depth_limit - prior_depth_left + 1;
-                    builder.observe_depth(opened_depth);
-                    machine_resume_task(task, &mut machine);
-                    continue;
-                }
-                let parsed = match finish_scalar_node(
-                    builder,
-                    tokens,
-                    token_start,
-                    index,
-                    anchor_property_token,
-                    tag_property_token,
-                ) {
-                    Ok(parsed) => parsed,
-                    Err(error) => return Err(error),
-                };
-                machine_store_completed(parsed, &mut machine);
-                continue;
-            }
-            let specialized = if kind == CompletedTokenKind::FlowSequenceStart {
-                ParseTaskKind::FlowSequence
-            } else if kind == CompletedTokenKind::FlowMappingStart {
-                ParseTaskKind::FlowMapping
-            } else if kind == CompletedTokenKind::BlockSequenceEntry && task.allow_block_mapping {
-                ParseTaskKind::BlockSequence
-            } else if (kind == CompletedTokenKind::ExplicitMappingKey || kind
-                == CompletedTokenKind::MappingValue) && task.allow_block_mapping {
-                ParseTaskKind::BlockMapping
-            } else {
-                return Err(CstError::at(CstErrorKind::UnexpectedToken, tokens[index].byte_start()));
-            };
-            if task.depth_left > depth_limit {
-                return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
-            }
-            let prior_depth_left = task.depth_left;
-            let specialized_cursor = if specialized == ParseTaskKind::FlowSequence || specialized
-                == ParseTaskKind::FlowMapping {
-                skip_trivia(tokens, index + 1, task.end)
-            } else {
-                index
-            };
-            let indentation = token_column(atoms, &tokens[index]);
-            task =
-            match specialize_parse_task(
-                task,
-                specialized,
-                token_start,
-                specialized_cursor,
-                index,
-                indentation,
-                anchor_property_token,
-                tag_property_token,
-                index + 1,
-                tokens[index].byte_start(),
-            ) {
-                Ok(specialized) => specialized,
-                Err(error) => return Err(error),
-            };
-            let opened_depth = depth_limit - prior_depth_left + 1;
-            builder.observe_depth(opened_depth);
-            machine_resume_task(task, &mut machine);
-            continue;
         }
         if task.kind == ParseTaskKind::FlowSequence {
             if task.state == 0 {
