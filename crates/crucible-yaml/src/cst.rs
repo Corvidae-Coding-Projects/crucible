@@ -9202,6 +9202,22 @@ pub open spec fn cst_machine_finish_spec(
     cst_finish_parse_node_spec(machine.tasks, machine.completed, start, end, node_count)
 }
 
+pub open spec fn cst_validate_dispatched_task_spec(
+    task: ParseTaskView,
+    token_count: u64,
+) -> Result<(), CstErrorView> {
+    if task.end > token_count || task.cursor > task.end || task.token_start > task.end {
+        Err(
+            CstErrorView {
+                kind: CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        )
+    } else {
+        Ok(())
+    }
+}
+
 pub open spec fn cst_consume_parse_fuel_spec(fuel: u64) -> Result<u64, CstErrorView> {
     if fuel == 0 {
         Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
@@ -9455,6 +9471,29 @@ fn machine_finish(
     result
 }
 
+fn validate_dispatched_task(task: &ParseTask, token_count: usize) -> (result: Result<(), CstError>)
+    ensures
+        cst_validate_dispatched_task_spec(task@, token_count as u64) == match result {
+            Ok(()) => Ok(()),
+            Err(error) => Err(error@),
+        },
+        result.is_ok() ==> task.end <= token_count,
+        result.is_ok() ==> task.cursor <= task.end,
+        result.is_ok() ==> task.token_start <= task.end,
+{
+    if task.end > token_count || task.cursor > task.end || task.token_start > task.end {
+        proof {
+            reveal(cst_validate_dispatched_task_spec);
+        }
+        Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0))
+    } else {
+        proof {
+            reveal(cst_validate_dispatched_task_spec);
+        }
+        Ok(())
+    }
+}
+
 #[verifier::rlimit(500)]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
@@ -9491,8 +9530,8 @@ fn parse_node_iterative(
             Ok(value) => value,
             Err(error) => return Err(error),
         };
-        if task.end > tokens.len() || task.cursor > task.end || task.token_start > task.end {
-            return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
+        if let Err(error) = validate_dispatched_task(&task, tokens.len()) {
+            return Err(error);
         }
         if task.kind == ParseTaskKind::Node {
             let mut index = skip_trivia(tokens, task.cursor, task.end);

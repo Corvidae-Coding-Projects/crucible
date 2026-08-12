@@ -306,6 +306,30 @@ fn pure_parser_machine_dispatch_and_terminal_result_are_total() {
 }
 
 #[test]
+fn pure_parser_dispatched_frame_bounds_are_exact() {
+    proof {
+        let valid = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 4);
+        let end_past_tokens = crucible_yaml::cst::ParseTaskView { end: 9, ..valid };
+        let cursor_past_end = crucible_yaml::cst::ParseTaskView { cursor: 9, ..valid };
+        let start_past_end = crucible_yaml::cst::ParseTaskView { token_start: 9, ..valid };
+        let internal = Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        );
+        reveal(crucible_yaml::cst::cst_validate_dispatched_task_spec);
+        assert(crucible_yaml::cst::cst_validate_dispatched_task_spec(valid, 8) == Ok(()));
+        assert(crucible_yaml::cst::cst_validate_dispatched_task_spec(end_past_tokens, 8)
+            == internal);
+        assert(crucible_yaml::cst::cst_validate_dispatched_task_spec(cursor_past_end, 9)
+            == internal);
+        assert(crucible_yaml::cst::cst_validate_dispatched_task_spec(start_past_end, 9)
+            == internal);
+    }
+}
+
+#[test]
 fn pure_parser_pending_table_appends_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(1, 8, true, 3);
