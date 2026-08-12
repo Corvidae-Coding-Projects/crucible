@@ -835,6 +835,16 @@ proof fn lemma_cst_node_view_at(values: Seq<CstNode>, index: int)
     reveal(cst_node_views_spec);
 }
 
+proof fn lemma_cst_node_views_push(values: Seq<CstNode>, value: CstNode)
+    ensures
+        cst_node_views_spec(values.push(value)) == cst_node_views_spec(values).push(value@),
+{
+    reveal(cst_node_views_spec);
+    assert(values.push(value).map_values(|node: CstNode| node@) =~= values.map_values(
+        |node: CstNode| node@,
+    ).push(value@));
+}
+
 proof fn lemma_cst_sequence_entry_view_at(values: Seq<CstSequenceEntry>, index: int)
     requires
         0 <= index < values.len(),
@@ -4034,6 +4044,76 @@ pub open spec fn cst_claim_syntax_owner_slots_spec(
     }
 }
 
+pub open spec fn cst_claim_optional_syntax_token_spec(
+    builder: CstBuilderView,
+    token_index: Option<u64>,
+    kind: CstSyntaxOwnerKind,
+    record_index: u64,
+) -> Result<CstBuilderView, CstErrorView> {
+    match token_index {
+        Some(token) => cst_claim_syntax_token_spec(builder, token, kind, record_index),
+        None => Ok(builder),
+    }
+}
+
+pub open spec fn cst_claim_node_references_spec(
+    builder: CstBuilderView,
+    node: CstNodeView,
+    record_index: u64,
+    stage: nat,
+) -> Result<CstBuilderView, CstErrorView>
+    decreases stage,
+{
+    if stage == 0 {
+        Ok(builder)
+    } else {
+        let token_and_kind = if stage == 5 {
+            (node.anchor_property_token, CstSyntaxOwnerKind::NodeProperty)
+        } else if stage == 4 {
+            (node.tag_property_token, CstSyntaxOwnerKind::NodeProperty)
+        } else if stage == 3 {
+            (node.scalar_or_alias_token, CstSyntaxOwnerKind::NodeContent)
+        } else if stage == 2 {
+            (node.collection_start_token, CstSyntaxOwnerKind::NodeCollectionIndicator)
+        } else if stage == 1 {
+            (node.collection_end_token, CstSyntaxOwnerKind::NodeCollectionIndicator)
+        } else {
+            (None, CstSyntaxOwnerKind::NodeContent)
+        };
+        match cst_claim_optional_syntax_token_spec(
+            builder,
+            token_and_kind.0,
+            token_and_kind.1,
+            record_index,
+        ) {
+            Ok(next) => cst_claim_node_references_spec(
+                next,
+                node,
+                record_index,
+                (stage - 1) as nat,
+            ),
+            Err(error) => Err(error),
+        }
+    }
+}
+
+pub open spec fn cst_push_node_spec(
+    builder: CstBuilderView,
+    node: CstNodeView,
+    offset: u64,
+) -> Result<(CstBuilderView, u64), CstErrorView> {
+    if builder.nodes.len() >= builder.node_limit {
+        Err(CstErrorView { kind: CstErrorKind::NodeLimitExceeded, byte_offset: offset })
+    } else {
+        let index = builder.nodes.len() as u64;
+        let appended = CstBuilderView { nodes: builder.nodes.push(node), ..builder };
+        match cst_claim_node_references_spec(appended, node, index, 5) {
+            Ok(claimed) => Ok((claimed, index)),
+            Err(error) => Err(error),
+        }
+    }
+}
+
 impl CstBuilder {
     fn claim_syntax_token(
         &mut self,
@@ -4066,12 +4146,23 @@ impl CstBuilder {
             final(self).directive_count == old(self).directive_count,
             final(self).maximum_depth == old(self).maximum_depth,
             final(self).source_len_bytes == old(self).source_len_bytes,
+            match result {
+                Ok(()) => cst_claim_syntax_token_spec(old(self)@, token_index, kind, record_index)
+                    == Ok(final(self)@),
+                Err(error) => cst_claim_syntax_token_spec(
+                    old(self)@,
+                    token_index,
+                    kind,
+                    record_index,
+                ) == Err(error@),
+            },
     {
         let ghost old_slots = self.syntax_owner_slots@;
         if token_index >= self.syntax_owner_slots.len() as u64
             || self.syntax_owner_slots[token_index as usize].is_some() {
             proof {
                 reveal(cst_claim_syntax_owner_slots_spec);
+                reveal(cst_claim_syntax_token_spec);
             }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
         }
@@ -4080,8 +4171,76 @@ impl CstBuilder {
         proof {
             lemma_cst_syntax_owner_views_update(old_slots, token_index as int, owner);
             reveal(cst_claim_syntax_owner_slots_spec);
+            reveal(cst_claim_syntax_token_spec);
             reveal(cst_syntax_owner_views_spec);
         }
+        Ok(())
+    }
+
+    fn claim_optional_syntax_token(
+        &mut self,
+        token_index: Option<u64>,
+        kind: CstSyntaxOwnerKind,
+        record_index: u64,
+    ) -> (result: Result<(), CstError>)
+        ensures
+            final(self).nodes.len() == old(self).nodes.len(),
+            final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_claim_optional_syntax_token_spec(old(self)@, token_index, kind, record_index)
+                == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
+    {
+        proof {
+            reveal(cst_claim_optional_syntax_token_spec);
+        }
+        match token_index {
+            Some(token) => self.claim_syntax_token(token, kind, record_index),
+            None => Ok(()),
+        }
+    }
+
+    fn claim_node_references(&mut self, node: &CstNode, record_index: u64) -> (result: Result<
+        (),
+        CstError,
+    >)
+        ensures
+            final(self).nodes.len() == old(self).nodes.len(),
+            final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_claim_node_references_spec(old(self)@, node@, record_index, 5) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
+    {
+        proof {
+            reveal_with_fuel(cst_claim_node_references_spec, 6);
+        }
+        self.claim_optional_syntax_token(
+            node.anchor_property_token,
+            CstSyntaxOwnerKind::NodeProperty,
+            record_index,
+        )?;
+        self.claim_optional_syntax_token(
+            node.tag_property_token,
+            CstSyntaxOwnerKind::NodeProperty,
+            record_index,
+        )?;
+        self.claim_optional_syntax_token(
+            node.scalar_or_alias_token,
+            CstSyntaxOwnerKind::NodeContent,
+            record_index,
+        )?;
+        self.claim_optional_syntax_token(
+            node.collection_start_token,
+            CstSyntaxOwnerKind::NodeCollectionIndicator,
+            record_index,
+        )?;
+        self.claim_optional_syntax_token(
+            node.collection_end_token,
+            CstSyntaxOwnerKind::NodeCollectionIndicator,
+            record_index,
+        )?;
         Ok(())
     }
 
@@ -4089,26 +4248,27 @@ impl CstBuilder {
         ensures
             result.is_ok() ==> result.unwrap() < final(self).nodes.len(),
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_push_node_spec(old(self)@, node@, offset) == match result {
+                Ok(index) => Ok((final(self)@, index)),
+                Err(error) => Err(error@),
+            },
     {
         if self.nodes.len() as u64 >= self.node_limit {
+            proof {
+                reveal(cst_push_node_spec);
+            }
             return Err(CstError::at(CstErrorKind::NodeLimitExceeded, offset));
         }
         let index = self.nodes.len() as u64;
+        let ghost old_nodes = self.nodes@;
         self.nodes.push(node);
-        if let Some(token) = node.anchor_property_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::NodeProperty, index)?;
+        proof {
+            lemma_cst_node_views_push(old_nodes, node);
+            reveal(cst_push_node_spec);
         }
-        if let Some(token) = node.tag_property_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::NodeProperty, index)?;
-        }
-        if let Some(token) = node.scalar_or_alias_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::NodeContent, index)?;
-        }
-        if let Some(token) = node.collection_start_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::NodeCollectionIndicator, index)?;
-        }
-        if let Some(token) = node.collection_end_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::NodeCollectionIndicator, index)?;
+        self.claim_node_references(&node, index)?;
+        proof {
+            assert(index < self.nodes.len());
         }
         Ok(index)
     }

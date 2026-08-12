@@ -13,6 +13,72 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_builder_node_append_claims_every_reference_and_honors_the_first_limit() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(2, limits, 9);
+        let node = CstNodeView {
+            kind: CstNodeKind::Scalar,
+            style: CstNodeStyle::Plain,
+            token_start: 0,
+            token_end: 2,
+            byte_start: 0,
+            byte_end: 9,
+            anchor_property_token: Some(0),
+            tag_property_token: None,
+            scalar_or_alias_token: Some(1),
+            collection_start_token: None,
+            collection_end_token: None,
+            entry_start: 0,
+            entry_end: 0,
+            empty_anchor_token: None,
+            empty_anchor_byte: None,
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let appended_result = crucible_yaml::cst::cst_push_node_spec(initial, node, 0);
+        let appended = match appended_result {
+            Ok(result) => result.0,
+            Err(_) => initial,
+        };
+        assert(appended_result.is_ok());
+        assert(appended.nodes == Seq::empty().push(node));
+        assert(appended.syntax_owner_slots[0] == Some(
+            CstSyntaxOwnerView {
+                token_index: 0,
+                kind: CstSyntaxOwnerKind::NodeProperty,
+                record_index: 0,
+            },
+        ));
+        assert(appended.syntax_owner_slots[1] == Some(
+            CstSyntaxOwnerView {
+                token_index: 1,
+                kind: CstSyntaxOwnerKind::NodeContent,
+                record_index: 0,
+            },
+        ));
+        assert(crucible_yaml::cst::cst_push_node_spec(appended, node, 9) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::NodeLimitExceeded,
+                byte_offset: 9,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_builder_claim_transition_is_exact_and_rejects_duplicate_ownership() {
     proof {
         let limits = crucible_yaml::CstLimitsView {
