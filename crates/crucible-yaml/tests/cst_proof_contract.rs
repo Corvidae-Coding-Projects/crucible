@@ -15,6 +15,51 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_empty_node_construction_is_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(0, limits, 13);
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_empty_node_spec);
+        reveal(crucible_yaml::cst::cst_byte_at_spec);
+        reveal(crucible_yaml::cst::cst_push_node_spec);
+        reveal_with_fuel(crucible_yaml::cst::cst_claim_node_references_spec, 7);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        let result = crucible_yaml::cst::cst_empty_node_spec(initial, Seq::empty(), 0);
+        assert(result.is_ok());
+        let (built, node_index) = match result {
+            Ok(value) => value,
+            Err(_) => (initial, 99),
+        };
+        assert(node_index == 0);
+        assert(built.nodes.len() == 1);
+        let node = built.nodes[0];
+        assert(node.kind == CstNodeKind::Empty && node.style == CstNodeStyle::Empty);
+        assert(node.token_start == 0 && node.token_end == 0);
+        assert(node.byte_start == 13 && node.byte_end == 13);
+        assert(node.empty_anchor_token == Some(0) && node.empty_anchor_byte == Some(13));
+        assert(node.anchor_property_token.is_none() && node.tag_property_token.is_none());
+        assert(node.scalar_or_alias_token.is_none());
+        assert(node.collection_start_token.is_none() && node.collection_end_token.is_none());
+        assert(node.entry_start == 0 && node.entry_end == 0);
+        assert(crucible_yaml::cst::cst_empty_node_spec(built, Seq::empty(), 0) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::NodeLimitExceeded,
+                byte_offset: 13,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_parser_frame_initialization_and_bounded_push_are_exact() {
     proof {
         let task = crucible_yaml::cst::cst_node_task_spec(2, 7, true, 4);

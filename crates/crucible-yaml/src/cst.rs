@@ -5511,6 +5511,35 @@ fn first_undeclared_tag_handle(
     None
 }
 
+pub open spec fn cst_empty_node_spec(
+    builder: CstBuilderView,
+    tokens: Seq<crate::token::CompletedTokenView>,
+    anchor: u64,
+) -> Result<(CstBuilderView, u64), CstErrorView> {
+    let byte = cst_byte_at_spec(tokens, anchor, builder.source_len_bytes);
+    cst_push_node_spec(
+        builder,
+        CstNodeView {
+            kind: CstNodeKind::Empty,
+            style: CstNodeStyle::Empty,
+            token_start: anchor,
+            token_end: anchor,
+            byte_start: byte,
+            byte_end: byte,
+            anchor_property_token: None,
+            tag_property_token: None,
+            scalar_or_alias_token: None,
+            collection_start_token: None,
+            collection_end_token: None,
+            entry_start: 0,
+            entry_end: 0,
+            empty_anchor_token: Some(anchor),
+            empty_anchor_byte: Some(byte),
+        },
+        byte,
+    )
+}
+
 fn empty_node(builder: &mut CstBuilder, tokens: &[CompletedToken], anchor: usize) -> (result:
     Result<u64, CstError>)
     requires
@@ -5518,9 +5547,17 @@ fn empty_node(builder: &mut CstBuilder, tokens: &[CompletedToken], anchor: usize
     ensures
         result.is_ok() ==> result.unwrap() < final(builder).nodes.len(),
         final(builder).syntax_owner_slots.len() == old(builder).syntax_owner_slots.len(),
+        cst_empty_node_spec(
+            old(builder)@,
+            crate::token::completed_token_views_spec(tokens@),
+            anchor as u64,
+        ) == match result {
+            Ok(index) => Ok((final(builder)@, index)),
+            Err(error) => Err(error@),
+        },
 {
     let byte = byte_at(tokens, anchor, builder.source_len_bytes);
-    builder.push_node(
+    let result = builder.push_node(
         CstNode {
             kind: CstNodeKind::Empty,
             style: CstNodeStyle::Empty,
@@ -5539,7 +5576,11 @@ fn empty_node(builder: &mut CstBuilder, tokens: &[CompletedToken], anchor: usize
             empty_anchor_byte: Some(byte),
         },
         byte,
-    )
+    );
+    proof {
+        reveal(cst_empty_node_spec);
+    }
+    result
 }
 
 fn single_pair_mapping(
