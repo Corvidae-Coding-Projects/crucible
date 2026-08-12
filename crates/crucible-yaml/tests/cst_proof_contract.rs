@@ -13,6 +13,57 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_builder_claim_transition_is_exact_and_rejects_duplicate_ownership() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(1, limits, 7);
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        assert(initial.syntax_owner_slots.len() == 1);
+        assert(initial.syntax_owner_slots[0].is_none());
+        let claimed_result = crucible_yaml::cst::cst_claim_syntax_token_spec(
+            initial,
+            0,
+            CstSyntaxOwnerKind::NodeContent,
+            2,
+        );
+        let claimed = match claimed_result {
+            Ok(builder) => builder,
+            Err(_) => initial,
+        };
+        assert(claimed_result.is_ok());
+        assert(claimed.syntax_owner_slots[0] == Some(
+            CstSyntaxOwnerView {
+                token_index: 0,
+                kind: CstSyntaxOwnerKind::NodeContent,
+                record_index: 2,
+            },
+        ));
+        let duplicate = crucible_yaml::cst::cst_claim_syntax_token_spec(
+            claimed,
+            0,
+            CstSyntaxOwnerKind::NodeProperty,
+            3,
+        );
+        assert(duplicate == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::InternalInvariantViolation,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_block_property_boundary_and_collection_permission_are_exact() {
     proof {
         let line_zero = SourcePositionView { byte_offset: 0, line: 0, column: 2 };

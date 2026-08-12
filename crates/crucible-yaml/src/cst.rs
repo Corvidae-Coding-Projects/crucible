@@ -297,7 +297,10 @@ impl View for CstError {
 }
 
 impl CstError {
-    fn at(kind: CstErrorKind, byte_offset: u64) -> Self {
+    fn at(kind: CstErrorKind, byte_offset: u64) -> (error: Self)
+        ensures
+            error@ == (CstErrorView { kind, byte_offset }),
+    {
         Self { kind, byte_offset }
     }
 
@@ -930,6 +933,33 @@ proof fn lemma_cst_syntax_owner_view_at(values: Seq<Option<CstSyntaxOwner>>, ind
         },
 {
     reveal(cst_syntax_owner_views_spec);
+}
+
+proof fn lemma_cst_syntax_owner_views_update(
+    values: Seq<Option<CstSyntaxOwner>>,
+    index: int,
+    owner: CstSyntaxOwner,
+)
+    requires
+        0 <= index < values.len(),
+    ensures
+        cst_syntax_owner_views_spec(values.update(index, Some(owner)))
+            == cst_syntax_owner_views_spec(values).update(index, Some(owner@)),
+{
+    reveal(cst_syntax_owner_views_spec);
+    assert(values.update(index, Some(owner)).map_values(
+        |value: Option<CstSyntaxOwner>|
+            match value {
+                Some(value) => Some(value@),
+                None => None,
+            },
+    ) =~= values.map_values(
+        |value: Option<CstSyntaxOwner>|
+            match value {
+                Some(value) => Some(value@),
+                None => None,
+            },
+    ).update(index, Some(owner@)));
 }
 
 impl View for CstSource {
@@ -3893,6 +3923,117 @@ struct CstBuilder {
     source_len_bytes: u64,
 }
 
+#[verifier::ext_equal]
+pub struct CstBuilderView {
+    pub documents: Seq<CstDocumentView>,
+    pub nodes: Seq<CstNodeView>,
+    pub sequence_entries: Seq<CstSequenceEntryView>,
+    pub mapping_entries: Seq<CstMappingEntryView>,
+    pub warnings: Seq<CstWarningView>,
+    pub syntax_owner_slots: Seq<Option<CstSyntaxOwnerView>>,
+    pub document_limit: u64,
+    pub node_limit: u64,
+    pub sequence_limit: u64,
+    pub mapping_limit: u64,
+    pub directive_limit: u64,
+    pub warning_limit: u64,
+    pub directive_count: u64,
+    pub maximum_depth: u64,
+    pub source_len_bytes: u64,
+}
+
+impl View for CstBuilder {
+    type V = CstBuilderView;
+
+    closed spec fn view(&self) -> CstBuilderView {
+        CstBuilderView {
+            documents: cst_document_views_spec(self.documents@),
+            nodes: cst_node_views_spec(self.nodes@),
+            sequence_entries: cst_sequence_entry_views_spec(self.sequence_entries@),
+            mapping_entries: cst_mapping_entry_views_spec(self.mapping_entries@),
+            warnings: cst_warning_views_spec(self.warnings@),
+            syntax_owner_slots: cst_syntax_owner_views_spec(self.syntax_owner_slots@),
+            document_limit: self.document_limit,
+            node_limit: self.node_limit,
+            sequence_limit: self.sequence_limit,
+            mapping_limit: self.mapping_limit,
+            directive_limit: self.directive_limit,
+            warning_limit: self.warning_limit,
+            directive_count: self.directive_count,
+            maximum_depth: self.maximum_depth,
+            source_len_bytes: self.source_len_bytes,
+        }
+    }
+}
+
+pub open spec fn cst_empty_builder_spec(
+    token_count: nat,
+    limits: CstLimitsView,
+    source_len_bytes: u64,
+) -> CstBuilderView {
+    CstBuilderView {
+        documents: Seq::empty(),
+        nodes: Seq::empty(),
+        sequence_entries: Seq::empty(),
+        mapping_entries: Seq::empty(),
+        warnings: Seq::empty(),
+        syntax_owner_slots: Seq::new(token_count, |_index: int| None),
+        document_limit: cst_effective_limit_spec(limits.max_documents, MAX_PROFILE1_CST_DOCUMENTS),
+        node_limit: cst_effective_limit_spec(limits.max_nodes, MAX_PROFILE1_CST_NODES),
+        sequence_limit: cst_effective_limit_spec(
+            limits.max_sequence_entries,
+            MAX_PROFILE1_CST_SEQUENCE_ENTRIES,
+        ),
+        mapping_limit: cst_effective_limit_spec(
+            limits.max_mapping_entries,
+            MAX_PROFILE1_CST_MAPPING_ENTRIES,
+        ),
+        directive_limit: cst_effective_limit_spec(
+            limits.max_directives,
+            MAX_PROFILE1_CST_DIRECTIVES,
+        ),
+        warning_limit: cst_effective_limit_spec(limits.max_warnings, MAX_PROFILE1_CST_WARNINGS),
+        directive_count: 0,
+        maximum_depth: 0,
+        source_len_bytes,
+    }
+}
+
+pub open spec fn cst_claim_syntax_token_spec(
+    builder: CstBuilderView,
+    token_index: u64,
+    kind: CstSyntaxOwnerKind,
+    record_index: u64,
+) -> Result<CstBuilderView, CstErrorView> {
+    match cst_claim_syntax_owner_slots_spec(
+        builder.syntax_owner_slots,
+        token_index,
+        kind,
+        record_index,
+    ) {
+        Ok(slots) => Ok(CstBuilderView { syntax_owner_slots: slots, ..builder }),
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_claim_syntax_owner_slots_spec(
+    slots: Seq<Option<CstSyntaxOwnerView>>,
+    token_index: u64,
+    kind: CstSyntaxOwnerKind,
+    record_index: u64,
+) -> Result<Seq<Option<CstSyntaxOwnerView>>, CstErrorView> {
+    if token_index >= slots.len() || slots[token_index as int].is_some() {
+        Err(CstErrorView { kind: CstErrorKind::InternalInvariantViolation, byte_offset: 0 })
+    } else {
+        Ok(
+            slots.update(
+                token_index as int,
+                Some(CstSyntaxOwnerView { token_index, kind, record_index }),
+            ),
+        )
+    }
+}
+
 impl CstBuilder {
     fn claim_syntax_token(
         &mut self,
@@ -3907,14 +4048,40 @@ impl CstBuilder {
             final(self).mapping_entries@ == old(self).mapping_entries@,
             final(self).warnings@ == old(self).warnings@,
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_claim_syntax_owner_slots_spec(
+                cst_syntax_owner_views_spec(old(self).syntax_owner_slots@),
+                token_index,
+                kind,
+                record_index,
+            ) == match result {
+                Ok(()) => Ok(cst_syntax_owner_views_spec(final(self).syntax_owner_slots@)),
+                Err(error) => Err(error@),
+            },
+            final(self).document_limit == old(self).document_limit,
+            final(self).node_limit == old(self).node_limit,
+            final(self).sequence_limit == old(self).sequence_limit,
+            final(self).mapping_limit == old(self).mapping_limit,
+            final(self).directive_limit == old(self).directive_limit,
+            final(self).warning_limit == old(self).warning_limit,
+            final(self).directive_count == old(self).directive_count,
+            final(self).maximum_depth == old(self).maximum_depth,
+            final(self).source_len_bytes == old(self).source_len_bytes,
     {
+        let ghost old_slots = self.syntax_owner_slots@;
         if token_index >= self.syntax_owner_slots.len() as u64
             || self.syntax_owner_slots[token_index as usize].is_some() {
+            proof {
+                reveal(cst_claim_syntax_owner_slots_spec);
+            }
             return Err(CstError::at(CstErrorKind::InternalInvariantViolation, 0));
         }
-        self.syntax_owner_slots[token_index as usize] = Some(
-            CstSyntaxOwner { token_index, kind, record_index },
-        );
+        let owner = CstSyntaxOwner { token_index, kind, record_index };
+        self.syntax_owner_slots[token_index as usize] = Some(owner);
+        proof {
+            lemma_cst_syntax_owner_views_update(old_slots, token_index as int, owner);
+            reveal(cst_claim_syntax_owner_slots_spec);
+            reveal(cst_syntax_owner_views_spec);
+        }
         Ok(())
     }
 
