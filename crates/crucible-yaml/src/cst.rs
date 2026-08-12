@@ -854,6 +854,18 @@ proof fn lemma_cst_sequence_entry_view_at(values: Seq<CstSequenceEntry>, index: 
     reveal(cst_sequence_entry_views_spec);
 }
 
+proof fn lemma_cst_sequence_entry_views_push(values: Seq<CstSequenceEntry>, value: CstSequenceEntry)
+    ensures
+        cst_sequence_entry_views_spec(values.push(value)) == cst_sequence_entry_views_spec(
+            values,
+        ).push(value@),
+{
+    reveal(cst_sequence_entry_views_spec);
+    assert(values.push(value).map_values(|entry: CstSequenceEntry| entry@) =~= values.map_values(
+        |entry: CstSequenceEntry| entry@,
+    ).push(value@));
+}
+
 proof fn lemma_cst_mapping_entry_view_at(values: Seq<CstMappingEntry>, index: int)
     requires
         0 <= index < values.len(),
@@ -861,6 +873,38 @@ proof fn lemma_cst_mapping_entry_view_at(values: Seq<CstMappingEntry>, index: in
         cst_mapping_entry_views_spec(values)[index] == values[index]@,
 {
     reveal(cst_mapping_entry_views_spec);
+}
+
+proof fn lemma_cst_mapping_entry_views_push(values: Seq<CstMappingEntry>, value: CstMappingEntry)
+    ensures
+        cst_mapping_entry_views_spec(values.push(value)) == cst_mapping_entry_views_spec(
+            values,
+        ).push(value@),
+{
+    reveal(cst_mapping_entry_views_spec);
+    assert(values.push(value).map_values(|entry: CstMappingEntry| entry@) =~= values.map_values(
+        |entry: CstMappingEntry| entry@,
+    ).push(value@));
+}
+
+proof fn lemma_cst_warning_views_push(values: Seq<CstWarning>, value: CstWarning)
+    ensures
+        cst_warning_views_spec(values.push(value)) == cst_warning_views_spec(values).push(value@),
+{
+    reveal(cst_warning_views_spec);
+    assert(values.push(value).map_values(|warning: CstWarning| warning@) =~= values.map_values(
+        |warning: CstWarning| warning@,
+    ).push(value@));
+}
+
+proof fn lemma_cst_document_views_push(values: Seq<CstDocument>, value: CstDocument)
+    ensures
+        cst_document_views_spec(values.push(value)) == cst_document_views_spec(values).push(value@),
+{
+    reveal(cst_document_views_spec);
+    assert(values.push(value).map_values(|document: CstDocument| document@) =~= values.map_values(
+        |document: CstDocument| document@,
+    ).push(value@));
 }
 
 proof fn lemma_cst_syntax_owner_view_fields(value: CstSyntaxOwner)
@@ -4114,6 +4158,98 @@ pub open spec fn cst_push_node_spec(
     }
 }
 
+pub open spec fn cst_push_sequence_entry_spec(
+    builder: CstBuilderView,
+    entry: CstSequenceEntryView,
+    offset: u64,
+) -> Result<CstBuilderView, CstErrorView> {
+    if builder.sequence_entries.len() >= builder.sequence_limit {
+        Err(CstErrorView { kind: CstErrorKind::SequenceEntryLimitExceeded, byte_offset: offset })
+    } else {
+        let index = builder.sequence_entries.len() as u64;
+        let appended = CstBuilderView {
+            sequence_entries: builder.sequence_entries.push(entry),
+            ..builder
+        };
+        cst_claim_optional_syntax_token_spec(
+            appended,
+            entry.indicator_token,
+            CstSyntaxOwnerKind::SequenceEntryIndicator,
+            index,
+        )
+    }
+}
+
+pub open spec fn cst_claim_mapping_entry_references_spec(
+    builder: CstBuilderView,
+    entry: CstMappingEntryView,
+    record_index: u64,
+) -> Result<CstBuilderView, CstErrorView> {
+    match cst_claim_optional_syntax_token_spec(
+        builder,
+        entry.explicit_key_token,
+        CstSyntaxOwnerKind::MappingEntryIndicator,
+        record_index,
+    ) {
+        Ok(after_key) => cst_claim_optional_syntax_token_spec(
+            after_key,
+            entry.mapping_value_token,
+            CstSyntaxOwnerKind::MappingEntryIndicator,
+            record_index,
+        ),
+        Err(error) => Err(error),
+    }
+}
+
+pub open spec fn cst_push_mapping_entry_spec(
+    builder: CstBuilderView,
+    entry: CstMappingEntryView,
+    offset: u64,
+) -> Result<CstBuilderView, CstErrorView> {
+    if builder.mapping_entries.len() >= builder.mapping_limit {
+        Err(CstErrorView { kind: CstErrorKind::MappingEntryLimitExceeded, byte_offset: offset })
+    } else {
+        let index = builder.mapping_entries.len() as u64;
+        let appended = CstBuilderView {
+            mapping_entries: builder.mapping_entries.push(entry),
+            ..builder
+        };
+        cst_claim_mapping_entry_references_spec(appended, entry, index)
+    }
+}
+
+pub open spec fn cst_push_warning_spec(builder: CstBuilderView, warning: CstWarningView) -> Result<
+    CstBuilderView,
+    CstErrorView,
+> {
+    if builder.warnings.len() >= builder.warning_limit {
+        Err(
+            CstErrorView {
+                kind: CstErrorKind::WarningLimitExceeded,
+                byte_offset: warning.byte_offset,
+            },
+        )
+    } else {
+        Ok(CstBuilderView { warnings: builder.warnings.push(warning), ..builder })
+    }
+}
+
+pub open spec fn cst_push_document_spec(
+    builder: CstBuilderView,
+    document: CstDocumentView,
+) -> Result<CstBuilderView, CstErrorView> {
+    if builder.documents.len() >= builder.document_limit {
+        Err(
+            CstErrorView {
+                kind: CstErrorKind::DocumentLimitExceeded,
+                byte_offset: document.byte_start,
+            },
+        )
+    } else {
+        Ok(CstBuilderView { documents: builder.documents.push(document), ..builder })
+    }
+}
+
 impl CstBuilder {
     fn claim_syntax_token(
         &mut self,
@@ -4279,15 +4415,58 @@ impl CstBuilder {
     >)
         ensures
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_push_sequence_entry_spec(old(self)@, entry@, offset) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
     {
         if self.sequence_entries.len() as u64 >= self.sequence_limit {
+            proof {
+                reveal(cst_push_sequence_entry_spec);
+            }
             return Err(CstError::at(CstErrorKind::SequenceEntryLimitExceeded, offset));
         }
         let index = self.sequence_entries.len() as u64;
+        let ghost old_entries = self.sequence_entries@;
         self.sequence_entries.push(entry);
-        if let Some(token) = entry.indicator_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::SequenceEntryIndicator, index)?;
+        proof {
+            lemma_cst_sequence_entry_views_push(old_entries, entry);
+            reveal(cst_push_sequence_entry_spec);
         }
+        self.claim_optional_syntax_token(
+            entry.indicator_token,
+            CstSyntaxOwnerKind::SequenceEntryIndicator,
+            index,
+        )?;
+        Ok(())
+    }
+
+    fn claim_mapping_entry_references(
+        &mut self,
+        entry: &CstMappingEntry,
+        record_index: u64,
+    ) -> (result: Result<(), CstError>)
+        ensures
+            final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_claim_mapping_entry_references_spec(old(self)@, entry@, record_index)
+                == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
+    {
+        proof {
+            reveal(cst_claim_mapping_entry_references_spec);
+        }
+        self.claim_optional_syntax_token(
+            entry.explicit_key_token,
+            CstSyntaxOwnerKind::MappingEntryIndicator,
+            record_index,
+        )?;
+        self.claim_optional_syntax_token(
+            entry.mapping_value_token,
+            CstSyntaxOwnerKind::MappingEntryIndicator,
+            record_index,
+        )?;
         Ok(())
     }
 
@@ -4297,40 +4476,71 @@ impl CstBuilder {
     >)
         ensures
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_push_mapping_entry_spec(old(self)@, entry@, offset) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
     {
         if self.mapping_entries.len() as u64 >= self.mapping_limit {
+            proof {
+                reveal(cst_push_mapping_entry_spec);
+            }
             return Err(CstError::at(CstErrorKind::MappingEntryLimitExceeded, offset));
         }
         let index = self.mapping_entries.len() as u64;
+        let ghost old_entries = self.mapping_entries@;
         self.mapping_entries.push(entry);
-        if let Some(token) = entry.explicit_key_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::MappingEntryIndicator, index)?;
+        proof {
+            lemma_cst_mapping_entry_views_push(old_entries, entry);
+            reveal(cst_push_mapping_entry_spec);
         }
-        if let Some(token) = entry.mapping_value_token {
-            self.claim_syntax_token(token, CstSyntaxOwnerKind::MappingEntryIndicator, index)?;
-        }
+        self.claim_mapping_entry_references(&entry, index)?;
         Ok(())
     }
 
     fn push_warning(&mut self, warning: CstWarning) -> (result: Result<(), CstError>)
         ensures
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_push_warning_spec(old(self)@, warning@) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
     {
         if self.warnings.len() as u64 >= self.warning_limit {
+            proof {
+                reveal(cst_push_warning_spec);
+            }
             return Err(CstError::at(CstErrorKind::WarningLimitExceeded, warning.byte_offset));
         }
+        let ghost old_warnings = self.warnings@;
         self.warnings.push(warning);
+        proof {
+            lemma_cst_warning_views_push(old_warnings, warning);
+            reveal(cst_push_warning_spec);
+        }
         Ok(())
     }
 
     fn push_document(&mut self, document: CstDocument) -> (result: Result<(), CstError>)
         ensures
             final(self).syntax_owner_slots.len() == old(self).syntax_owner_slots.len(),
+            cst_push_document_spec(old(self)@, document@) == match result {
+                Ok(()) => Ok(final(self)@),
+                Err(error) => Err(error@),
+            },
     {
         if self.documents.len() as u64 >= self.document_limit {
+            proof {
+                reveal(cst_push_document_spec);
+            }
             return Err(CstError::at(CstErrorKind::DocumentLimitExceeded, document.byte_start));
         }
+        let ghost old_documents = self.documents@;
         self.documents.push(document);
+        proof {
+            lemma_cst_document_views_push(old_documents, document);
+            reveal(cst_push_document_spec);
+        }
         Ok(())
     }
 }

@@ -13,6 +13,125 @@ use vstd::prelude::*;
 verus! {
 
 #[test]
+fn pure_builder_entry_warning_and_document_appends_are_exact() {
+    proof {
+        let limits = crucible_yaml::CstLimitsView {
+            max_documents: 1,
+            max_nodes: 1,
+            max_sequence_entries: 1,
+            max_mapping_entries: 1,
+            max_directives: 1,
+            max_warnings: 1,
+            max_depth: 1,
+        };
+        let initial = crucible_yaml::cst::cst_empty_builder_spec(3, limits, 12);
+        let sequence = CstSequenceEntryView {
+            node_index: 0,
+            token_start: 0,
+            token_end: 1,
+            indicator_token: Some(0),
+        };
+        let mapping = CstMappingEntryView {
+            key_node_index: 0,
+            value_node_index: 0,
+            token_start: 1,
+            token_end: 3,
+            explicit_key_token: Some(1),
+            mapping_value_token: Some(2),
+        };
+        let warning = CstWarningView {
+            kind: CstWarningKind::ReservedDirective,
+            document_index: 0,
+            token_index: 0,
+            byte_offset: 0,
+        };
+        let document = CstDocumentView {
+            token_start: 0,
+            token_end: 3,
+            byte_start: 0,
+            byte_end: 12,
+            prefix_token_start: 0,
+            prefix_token_end: 0,
+            directive_start: 0,
+            directive_end: 0,
+            explicit_start_token_start: 0,
+            explicit_start_token_end: 0,
+            root_token_start: 0,
+            root_token_end: 3,
+            explicit_end_token_start: 3,
+            explicit_end_token_end: 3,
+            suffix_token_start: 3,
+            suffix_token_end: 3,
+            root_node_index: 0,
+            explicit_start_token: None,
+            explicit_end_token: None,
+        };
+        reveal(crucible_yaml::cst::cst_empty_builder_spec);
+        reveal(crucible_yaml::cst::cst_push_sequence_entry_spec);
+        reveal(crucible_yaml::cst::cst_push_mapping_entry_spec);
+        reveal(crucible_yaml::cst::cst_claim_mapping_entry_references_spec);
+        reveal(crucible_yaml::cst::cst_push_warning_spec);
+        reveal(crucible_yaml::cst::cst_push_document_spec);
+        reveal(crucible_yaml::cst::cst_claim_optional_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_token_spec);
+        reveal(crucible_yaml::cst::cst_claim_syntax_owner_slots_spec);
+        let after_sequence_result = crucible_yaml::cst::cst_push_sequence_entry_spec(
+            initial,
+            sequence,
+            0,
+        );
+        let after_sequence = match after_sequence_result {
+            Ok(builder) => builder,
+            Err(_) => initial,
+        };
+        assert(after_sequence_result.is_ok());
+        assert(after_sequence.sequence_entries == Seq::empty().push(sequence));
+        assert(after_sequence.syntax_owner_slots[0].is_some());
+        let after_mapping_result = crucible_yaml::cst::cst_push_mapping_entry_spec(
+            after_sequence,
+            mapping,
+            4,
+        );
+        let after_mapping = match after_mapping_result {
+            Ok(builder) => builder,
+            Err(_) => after_sequence,
+        };
+        assert(after_mapping_result.is_ok());
+        assert(after_mapping.mapping_entries == Seq::empty().push(mapping));
+        assert(after_mapping.syntax_owner_slots[1].is_some());
+        assert(after_mapping.syntax_owner_slots[2].is_some());
+        let after_warning = match crucible_yaml::cst::cst_push_warning_spec(
+            after_mapping,
+            warning,
+        ) {
+            Ok(builder) => builder,
+            Err(_) => after_mapping,
+        };
+        let after_document = match crucible_yaml::cst::cst_push_document_spec(
+            after_warning,
+            document,
+        ) {
+            Ok(builder) => builder,
+            Err(_) => after_warning,
+        };
+        assert(after_document.warnings == Seq::empty().push(warning));
+        assert(after_document.documents == Seq::empty().push(document));
+        assert(crucible_yaml::cst::cst_push_warning_spec(after_document, warning) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::WarningLimitExceeded,
+                byte_offset: 0,
+            },
+        ));
+        assert(crucible_yaml::cst::cst_push_document_spec(after_document, document) == Err(
+            crucible_yaml::CstErrorView {
+                kind: crucible_yaml::CstErrorKind::DocumentLimitExceeded,
+                byte_offset: 0,
+            },
+        ));
+    }
+}
+
+#[test]
 fn pure_builder_node_append_claims_every_reference_and_honors_the_first_limit() {
     proof {
         let limits = crucible_yaml::CstLimitsView {
