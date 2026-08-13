@@ -1810,6 +1810,15 @@ exact first excluded provenance record before copying it. Scalar decoding does n
 normalization; code-point identity is preserved unless an explicit future language-profile version
 says otherwise.
 
+The CST-scalar dispatch submachine authenticates the atom, completed-token, and CST identities,
+then binds a scalar result to the exact CST node and completed scalar token before invoking the
+verified style-specific decoder. Zero-width empty nodes produce an explicit empty-style scalar
+record with neither a fabricated token nor fabricated decoded provenance. Alias and collection
+nodes remain outside this scalar producer and return no scalar record; the graph composer handles
+them through the independently authenticated alias bindings and collection-entry tables. The
+dispatch result is therefore a lossless graph-composer input, not a second parser or a reduced
+semantic graph.
+
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
 exact declaration in the same document. Verbatim tags bypass handle expansion. In accordance with

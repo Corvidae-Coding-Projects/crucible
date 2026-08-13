@@ -11,6 +11,7 @@ pub mod resolve;
 pub mod resolve_anchor;
 pub mod resolve_float;
 pub mod resolve_integer;
+pub mod resolve_scalar_node;
 pub mod resolve_special_float;
 pub mod resolve_tag;
 pub mod scalar_decode;
@@ -88,6 +89,11 @@ pub use resolve_tag::{
     resolve_profile1_node_tag_property, ResolvedTagCodePoint, ResolvedTagKind, ResolvedTagOrigin,
     ResolvedTagProperty, TagResolutionError, TagResolutionErrorKind, TagResolutionLimits,
     MAX_PROFILE1_RESOLVED_TAG_CODE_POINTS, TAG_RESOLUTION_VERSION,
+};
+
+pub use resolve_scalar_node::{
+    decode_profile1_cst_node_scalar, CstScalarDecodeError, CstScalarDecodeErrorKind,
+    CstScalarDecodeLimits, DecodedCstScalar, CST_SCALAR_DECODE_VERSION,
 };
 
 pub use scalar_decode::{

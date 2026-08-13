@@ -91,6 +91,11 @@ Current work establishes and extends:
   scalar-content representation, including direct Unicode, preserved internal space/tab content,
   multiline flow folding, exact atom/byte provenance, caller-lowered first-excluded output
   diagnostics, input authentication, and total executable-to-pure correspondence;
+- verified CST-node scalar dispatch across empty, plain, single-quoted, double-quoted, literal, and
+  folded styles, binding each scalar record to its exact CST node and completed token, preserving
+  the style-specific decoded provenance without fabricating content for zero-width empty nodes,
+  returning collections separately, authenticating every selected producer, and proving total
+  executable-to-pure correspondence for graph-composer consumption;
 - verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
   primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;

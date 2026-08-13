@@ -547,11 +547,17 @@ impl View for CstNode {
 }
 
 impl CstNode {
-    pub fn kind(&self) -> CstNodeKind {
+    pub fn kind(&self) -> (result: CstNodeKind)
+        ensures
+            result == self@.kind,
+    {
         self.kind
     }
 
-    pub fn style(&self) -> CstNodeStyle {
+    pub fn style(&self) -> (result: CstNodeStyle)
+        ensures
+            result == self@.style,
+    {
         self.style
     }
 
