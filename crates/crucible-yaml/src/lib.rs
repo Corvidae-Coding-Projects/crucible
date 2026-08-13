@@ -11,6 +11,7 @@ pub mod resolve;
 pub mod resolve_alias_cycle;
 pub mod resolve_anchor;
 pub mod resolve_canonical_scalar_key;
+pub mod resolve_canonical_structural_key;
 pub mod resolve_collection_tag;
 pub mod resolve_float;
 pub mod resolve_integer;
@@ -82,6 +83,15 @@ pub use resolve_canonical_scalar_key::{
     CanonicalScalarKeyRecord, CanonicalScalarKeySource,
     CANONICAL_SCALAR_KEY_TRANSFORMATION_VERSION, MAX_PROFILE1_CANONICAL_SCALAR_KEY_BYTES,
     MAX_PROFILE1_CANONICAL_SCALAR_KEY_RECORDS, MAX_PROFILE1_TOTAL_CANONICAL_SCALAR_KEY_BYTES,
+};
+
+pub use resolve_canonical_structural_key::{
+    canonical_structural_key_limits, compose_profile1_canonical_structural_keys,
+    CanonicalStructuralKeyError, CanonicalStructuralKeyErrorKind, CanonicalStructuralKeyLimits,
+    CanonicalStructuralKeyRecord, CanonicalStructuralKeySource,
+    CANONICAL_STRUCTURAL_KEY_TRANSFORMATION_VERSION, MAX_PROFILE1_CANONICAL_STRUCTURAL_KEY_BYTES,
+    MAX_PROFILE1_CANONICAL_STRUCTURAL_KEY_RECORDS, MAX_PROFILE1_MAPPING_SORT_ENTRIES,
+    MAX_PROFILE1_TOTAL_CANONICAL_STRUCTURAL_KEY_BYTES,
 };
 
 pub use resolve_anchor::{

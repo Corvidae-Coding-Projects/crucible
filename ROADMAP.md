@@ -144,6 +144,14 @@ Current work establishes and extends:
   lowered record, per-key byte, and aggregate-byte limits; allocation-free streaming over retained
   scalar/tag content; total executable-to-pure correspondence; and public exact-result proof
   contracts;
+- verified canonical structural-key identities over every semantic node, reusing exact scalar
+  identities, making aliases byte-for-byte transparent, preserving sequence order, ignoring
+  mapping presentation order through a verified iterative bottom-up merge sort over canonical
+  key/value pairs, and retaining complete custom collection-tag identity; one exact record per
+  node, explicit markers and length delimiters, exact per-code-point custom-tag provenance and
+  per-byte child provenance, independently caller-lowered record/per-key/aggregate/mapping-sort
+  caps at exact node anchors, total executable-to-pure correspondence, public exact-result proof
+  contracts, all mapping permutations, nested collection-key, alias, and exact-boundary fixtures;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

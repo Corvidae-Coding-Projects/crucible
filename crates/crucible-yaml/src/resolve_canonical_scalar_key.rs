@@ -173,7 +173,7 @@ impl View for CanonicalKeyByte {
 }
 
 impl CanonicalKeyByte {
-    fn new(value: u8, source_byte_offset: u64) -> (byte: Self)
+    pub(crate) fn new(value: u8, source_byte_offset: u64) -> (byte: Self)
         ensures
             byte@ == (CanonicalKeyByteView { value, source_byte_offset }),
     {
@@ -201,7 +201,10 @@ pub open spec fn canonical_key_byte_views_spec(values: Seq<CanonicalKeyByte>) ->
     Seq::new(values.len(), |index: int| values[index]@)
 }
 
-proof fn lemma_canonical_key_byte_views_push(values: Seq<CanonicalKeyByte>, value: CanonicalKeyByte)
+pub(crate) proof fn lemma_canonical_key_byte_views_push(
+    values: Seq<CanonicalKeyByte>,
+    value: CanonicalKeyByte,
+)
     ensures
         canonical_key_byte_views_spec(values.push(value)) == canonical_key_byte_views_spec(
             values,

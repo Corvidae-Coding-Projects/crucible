@@ -1944,9 +1944,45 @@ record count, per-key bytes, and total key bytes are independently caller-lowera
 absolute caps, and each failure reports the first excluded emitted byte before allocation. The
 public semantic predicate is equality with the total pure composition result and therefore
 authenticates the entire owned acyclic graph, exact record order, bytes, provenance, accounting,
-limit precedence, and diagnostics. Collection structural identities extend this same length-
-delimited representation in the following resolution machine; this scalar slice does not reduce
-the committed sequence/mapping-key, duplicate-key, or merge-expansion requirements.
+limit precedence, and diagnostics. This scalar machine is retained as the authenticated scalar
+input of the structural-key composition machine; it does not reduce the committed duplicate-key or
+merge-expansion requirements.
+
+Canonical structural-key composition consumes and owns that exact scalar-key source and emits one
+identity record for every semantic node in stable CST-node order. Scalar nodes retain the complete
+presentation-independent scalar identity. An alias record is byte-for-byte identical to its target
+node record, including retained diagnostic provenance, so anchor names and alias presentation never
+enter equality. A sequence record contains a structural/version prefix, complete resolved
+collection-tag identity, entry count, and the length-delimited child identities in semantic order.
+Sequence order therefore remains significant at every nesting depth.
+
+A mapping record contains the corresponding prefix, complete resolved mapping-tag identity, entry
+count, and every length-delimited key/value identity pair ordered lexicographically first by the
+canonical key bytes and then by the canonical value bytes. The executable uses a verified
+nonrecursive bottom-up merge sort over edge indices; it neither hashes identities nor clones full
+key/value buffers into sort records. Mapping presentation order is therefore irrelevant, including
+when two retained pre-diagnostic entries have equal keys and different values. The complete entry
+multiset remains present at this layer: duplicate-key rejection is the next machine and is not
+silently performed or hidden by canonicalization.
+
+Core sequence/mapping tags use distinct discriminators. Custom local and global collection tags
+add both a locality discriminator and their complete resolved Unicode tag identity, so distinct
+application tags cannot collapse. Structural metadata bytes use the owning node's exact byte
+anchor; each encoded custom-tag code point uses that code point's retained source-byte anchor; and
+reused scalar, child, and alias bytes retain their original per-byte provenance. Every variable-size
+component is length-delimited and every node kind is disjoint, making equality exact byte equality
+rather than hash equality.
+
+Structural record count, per-key bytes, aggregate stored key bytes, and mapping-sort entries are
+independently caller-lowerable beneath their absolute caps. The mapping-sort cap is checked before
+allocating its edge-index work vector, and all byte caps are checked before emitting the excluded
+byte. Each failure names the owning node's exact source anchor. The public semantic predicate is
+equality with the total pure composition result, authenticating the owned scalar/acyclic graph,
+one-record-per-node ordering, recursive bytes, provenance, accounting, limit precedence, and typed
+diagnostics. Proof and runtime fixtures cover alias transparency, nested collection keys, all
+mapping permutations, equal-key/different-value pair permutations, custom collection tags,
+sequence-order distinction, and exact accepted/rejected cap boundaries. This machine completes
+structural key equality without reducing the subsequent duplicate-key or merge-expansion scope.
 
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
