@@ -869,7 +869,24 @@ pub closed spec fn compare_byte_views_tail_spec(
     }
 }
 
-fn compare_byte_slices(left: &[CanonicalKeyByte], right: &[CanonicalKeyByte]) -> (order: i8)
+pub proof fn lemma_equal_single_canonical_byte_values_compare_equal(
+    value: u8,
+    left_source_byte_offset: u64,
+    right_source_byte_offset: u64,
+)
+    ensures
+        compare_byte_views_tail_spec(
+            seq![CanonicalKeyByteView { value, source_byte_offset: left_source_byte_offset }],
+            seq![CanonicalKeyByteView { value, source_byte_offset: right_source_byte_offset }],
+            0,
+            1,
+        ) == 0,
+{
+    reveal_with_fuel(compare_byte_views_tail_spec, 2);
+}
+
+pub(crate) fn compare_byte_slices(left: &[CanonicalKeyByte], right: &[CanonicalKeyByte]) -> (order:
+    i8)
     ensures
         order == compare_byte_views_tail_spec(
             crate::resolve_canonical_scalar_key::canonical_key_byte_views_spec(left@),

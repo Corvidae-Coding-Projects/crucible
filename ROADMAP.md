@@ -152,6 +152,14 @@ Current work establishes and extends:
   per-byte child provenance, independently caller-lowered record/per-key/aggregate/mapping-sort
   caps at exact node anchors, total executable-to-pure correspondence, public exact-result proof
   contracts, all mapping permutations, nested collection-key, alias, and exact-boundary fixtures;
+- verified duplicate explicit-key rejection after canonical resolution, using exact canonical byte
+  equality rather than host hashing; scalar, alias, sequence, mapping, empty-key, and custom-tag
+  equality; one-mapping scope; the globally earliest later equal key by source byte as the exact
+  diagnostic despite child-before-parent internal node order; intrinsic duplicate precedence over
+  a caller limit excluding the same mapping/key; independently lowered mapping and aggregate
+  mapping-entry accounting; an owned duplicate-free structural source; total executable
+  correspondence; an explicit all-pairs-distinct success theorem; and provenance-laundering forgery
+  rejection;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

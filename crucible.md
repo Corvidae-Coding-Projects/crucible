@@ -1984,6 +1984,33 @@ mapping permutations, equal-key/different-value pair permutations, custom collec
 sequence-order distinction, and exact accepted/rejected cap boundaries. This machine completes
 structural key equality without reducing the subsequent duplicate-key or merge-expansion scope.
 
+Duplicate-key rejection consumes and owns the exact canonical structural-key source. It checks
+each mapping independently in retained mapping-entry source order and compares key identity bytes,
+not host hashes or presentation spellings. Scalars therefore compare by resolved tag and canonical
+semantic value; aliases are transparent; sequence order remains significant; mapping order does
+not; empty keys participate as canonical null nodes; and complete custom scalar and collection
+tags remain part of equality. Equal keys in separate mappings are never conflated.
+
+Within one mapping, every later key is compared with all earlier keys and the first later equal key
+is a duplicate candidate at that key node's exact byte start. A discovery pass selects the minimum
+candidate byte across every mapping, so child-before-parent internal node numbering cannot displace
+an earlier source diagnostic. The implementation is iterative and allocation-free. Its work is
+bounded by the already enforced structural-key byte and mapping-entry caps. Intrinsic duplicate
+discovery completes before caller-lowered duplicate-check accounting is applied, so a limit cannot
+disguise a duplicate on the mapping or key it excludes. Mapping count and aggregate checked
+mapping-entry count are independently caller-lowerable beneath their profile caps; accepted exact
+boundaries are inclusive.
+
+Success emits one duplicate-free source that retains the entire authenticated structural-key input
+and exact checked counts. The total pure result fixes error precedence, offsets, accounting, and
+the owned output. In addition to executable correspondence, the public semantic predicate contains
+an independently extractable theorem that every earlier/later key pair in every retained mapping
+has unequal canonical bytes. A forged view cannot satisfy that predicate merely by changing byte
+provenance while retaining equal canonical values. Runtime fixtures cover normalized scalar
+spellings, styles, explicit standard tags, empty keys, aliases, recursively equal sequence and
+mapping keys, distinct custom tags, independent mapping scope, multiple-duplicate ordering, and
+exact caller-limit boundaries.
+
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
 does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with

@@ -723,6 +723,20 @@ impl SemanticTopologySource {
         self.source_len_bytes
     }
 
+    pub fn input_node_count(&self) -> (count: u64)
+        ensures
+            count == self@.input_node_count,
+    {
+        self.input_node_count
+    }
+
+    pub fn input_mapping_entry_count(&self) -> (count: u64)
+        ensures
+            count == self@.input_mapping_entry_count,
+    {
+        self.input_mapping_entry_count
+    }
+
     pub fn document_roots(&self) -> (values: &[SemanticDocumentRoot])
         ensures
             semantic_document_root_views_spec(values@) == self@.document_roots,

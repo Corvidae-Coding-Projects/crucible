@@ -13,6 +13,7 @@ pub mod resolve_anchor;
 pub mod resolve_canonical_scalar_key;
 pub mod resolve_canonical_structural_key;
 pub mod resolve_collection_tag;
+pub mod resolve_duplicate_key;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_node_table;
@@ -92,6 +93,13 @@ pub use resolve_canonical_structural_key::{
     CANONICAL_STRUCTURAL_KEY_TRANSFORMATION_VERSION, MAX_PROFILE1_CANONICAL_STRUCTURAL_KEY_BYTES,
     MAX_PROFILE1_CANONICAL_STRUCTURAL_KEY_RECORDS, MAX_PROFILE1_MAPPING_SORT_ENTRIES,
     MAX_PROFILE1_TOTAL_CANONICAL_STRUCTURAL_KEY_BYTES,
+};
+
+pub use resolve_duplicate_key::{
+    canonical_duplicate_key_limits, reject_profile1_duplicate_keys,
+    DuplicateFreeStructuralKeySource, DuplicateKeyError, DuplicateKeyErrorKind, DuplicateKeyLimits,
+    DUPLICATE_KEY_REJECTION_VERSION, MAX_PROFILE1_DUPLICATE_CHECKED_MAPPINGS,
+    MAX_PROFILE1_DUPLICATE_CHECKED_MAPPING_ENTRIES,
 };
 
 pub use resolve_anchor::{
