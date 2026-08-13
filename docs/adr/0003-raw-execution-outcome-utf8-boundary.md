@@ -1,4 +1,4 @@
-# ADR-0003: Raw execution outcome codec and UTF-8 materialization boundary
+# ADR-0003: Execution-evidence codecs and UTF-8 materialization boundary
 
 - **Status:** Accepted
 - **Date:** 2026-08-13
@@ -8,11 +8,11 @@
 
 ## Context and evidence
 
-The portable raw execution outcome is the first breadth-first domain record needed between target
-adapters, immutable observations, persistence, replay, and hard-failure oracles. An in-memory Rust
-wrapper with a version integer did not serialize anything and could not retain an actual future
-payload. Extension records also lacked the configured payload and inline-metadata limits required
-by the design.
+Portable raw execution outcomes and their enclosing raw observations are the first breadth-first
+domain records needed between target adapters, persistence, replay, and hard-failure oracles. An
+in-memory Rust wrapper with a version integer did not serialize anything and could not retain an
+actual future payload. Extension records also lacked the configured payload and inline-metadata
+limits required by the design.
 
 The pinned Verus toolchain specifies UTF-8 at the mathematical sequence level and specifies String
 mutation, but it does not specify safe `char::from_u32` or `std::str::from_utf8`. A direct probe was
@@ -21,15 +21,16 @@ and media types as Rust `String` values without one of those host operations.
 
 ## Decision
 
-Adopt the exact canonical binary version-1 format in specification section 9.5 and implement its
-encoder, byte parser, tag dispatch, bounds, semantic validation, error routing, and rejection-byte
-preservation in Verus Rust.
+Adopt the exact canonical binary version-1 formats in specification sections 9.5 and 9.6 and
+implement their encoders, byte parsers, tag dispatch, bounds, semantic validation, error routing,
+and rejection-byte preservation in Verus Rust.
 
 Register one narrow boundary, `CORE-HOST-UTF8-001`, solely for safe Rust UTF-8 validation and
 materialization of an already range-checked byte slice. It calls `std::str::from_utf8`, returns the
 exact valid text or the standard library's first invalid-byte offset, and performs no I/O. The
-verified caller checks the global encoded-byte cap and the declared string length against remaining
-input and applicable aggregate metadata budget before entering the boundary.
+verified execution and observation callers check the global encoded-byte cap and the declared
+string length against remaining input and the applicable identity, namespace, media-type, payload,
+or fixed artifact-ID byte budget before entering the boundary.
 
 ## Preserved invariants
 
@@ -40,7 +41,7 @@ input and applicable aggregate metadata budget before entering the boundary.
 - Every decoder failure retains the exact original bounded byte vector, including unknown future
   schema versions.
 - Decoded current-version values pass the same Verus semantic validator as directly constructed
-  outcomes before becoming validated values.
+  outcomes or observations before becoming validated values.
 - Extension namespace and media-type accounting is aggregate; payload size is independently capped
   per out-of-line record; caller limits cannot raise absolute policy.
 - This slice does not remove `RawObservation`, other initial domain serializers, persistence,
@@ -60,10 +61,11 @@ input and applicable aggregate metadata budget before entering the boundary.
 ## Verus and trusted-boundary impact
 
 `CORE-HOST-UTF8-001` is one `external_body`. Its consequence is limited to the truth of the returned
-String/invalid-offset pair; it cannot bypass encoded-byte, event, metadata, payload, stable-tag,
-trailing-byte, or post-decode semantic validation. Runtime fixtures cover ASCII and multibyte
-round trips plus invalid UTF-8 offsets. The boundary must be reconsidered whenever the pinned Verus
-or Rust string specifications add a supported safe UTF-8 materialization path.
+String/invalid-offset pair; it cannot bypass encoded-byte, event, observation-record, metadata,
+payload, stable-tag, trailing-byte, or post-decode semantic validation. Runtime fixtures cover both
+codecs, ASCII and multibyte round trips, aggregate budget lowering, and invalid UTF-8 offsets. The
+boundary must be reconsidered whenever the pinned Verus or Rust string specifications add a
+supported safe UTF-8 materialization path.
 
 The owner approved this single TCB addition on 2026-08-13. Strict TCB gates and publication require
 that approval to remain bound to the exact registered source occurrence, byte count, and line count.
@@ -91,8 +93,7 @@ contracts, and the strict TCB audit.
 
 ## Consequences and follow-up
 
-Raw outcomes now have a real persistence/transport contract usable by observations and adapters.
-The one host text boundary is explicit rather than hidden. Next breadth work adds `RawObservation`,
-captured-stream/resource records, and its versioned serialization, then persists those records and
-connects the first bounded CLI target adapter. Stronger full-codec algebraic proofs and structured
-codec fuzzing remain assurance-depth work, not removed scope.
+Raw outcomes and observations now have real persistence/transport contracts usable by adapters.
+The one host text boundary is explicit rather than hidden. Next breadth work persists observations
+and connects the first bounded CLI target adapter. Stronger full-codec algebraic proofs and
+structured codec fuzzing remain assurance-depth work, not removed scope.

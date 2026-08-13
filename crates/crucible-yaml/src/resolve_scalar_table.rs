@@ -3,30 +3,51 @@
 //! Entries retain their exact CST node indices, and aggregate accounting uses decoded content
 //! code points rather than presentation bytes.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::{CstNodeKind, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstNodeView, CstSourceView};
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve_scalar_value::{
     resolve_profile1_cst_node_scalar_value, ResolvedScalar, ScalarValueError, ScalarValueErrorKind,
     ScalarValueLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_value::{
     ResolvedScalarView, ScalarValueErrorView, ScalarValueLimitsView,
 };
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -625,7 +646,7 @@ enum SemanticScalarTableStep {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 enum SemanticScalarTableStepView {
     Skip,
     Scalar(ResolvedScalarView),
@@ -678,7 +699,7 @@ closed spec fn semantic_scalar_table_step_spec(
     }
 }
 
-#[allow(clippy::too_many_arguments)]  // Every authenticated scalar producer remains explicit.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every authenticated scalar producer remains explicit.
 fn semantic_scalar_table_step(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,
@@ -1319,7 +1340,6 @@ fn semantic_scalar_content(scalar: &ResolvedScalar) -> (content: Option<
     }
 }
 
-#[allow(clippy::too_many_arguments)]  // Every authenticated scalar producer remains explicit.
 pub fn compose_profile1_semantic_scalar_table(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

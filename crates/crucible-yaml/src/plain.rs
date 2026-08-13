@@ -6,22 +6,34 @@
 use crate::atom::{
     AtomizedSource, LexicalAtom, LexicalAtomKind, YamlIndicator, MAX_PROFILE1_LEXICAL_ATOMS,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::layout::LayoutSourceView;
 use crate::layout::{analyze_profile1_layout, LayoutSource};
 use crate::quoted::{
     canonical_quoted_scalar_limits, scan_profile1_quoted_scalars, QuotedScalarSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::{QuotedScalarSourceView, QuotedScalarView};
 use crate::structural::{
     canonical_structural_layout_limits, canonical_structural_scan_limits,
     scan_profile1_structural_lexemes, StructuralCandidateRole, StructuralLexeme,
     StructuralLexemeSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::structural::{StructuralLexemeSourceView, StructuralLexemeView};
 use crate::utf8::CRUCIBLE_YAML_PROFILE_VERSION;
 use vstd::prelude::*;
@@ -769,7 +781,7 @@ fn first_plain_terminating_colon(
     None
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn yaml_printable_plain_character(code_point: u32) -> (printable: bool)
     ensures
         printable == yaml_printable_plain_character_spec(code_point),
@@ -1144,7 +1156,7 @@ fn candidate_starts_property_or_alias(
 
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct PlainContextView {
     flow_depth: u64,
     line_indentation: u64,
@@ -1235,7 +1247,7 @@ fn initial_plain_context() -> (context: PlainContext)
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct PlainBodySuccessView {
     scalar: PlainScalarView,
     next_candidate_index: int,
@@ -1538,7 +1550,7 @@ fn finish_plain_body(
 }
 
 #[verifier::rlimit(160)]
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn scan_plain_scalar_body(
     atoms: &[LexicalAtom],
     candidates: &[StructuralLexeme],
@@ -1993,7 +2005,7 @@ closed spec fn block_header_indent_digit_spec(
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn block_header_indent_digit(atoms: &[LexicalAtom], start: usize, end: usize) -> (digit: Option<u8>)
     requires
         start <= end <= atoms@.len(),

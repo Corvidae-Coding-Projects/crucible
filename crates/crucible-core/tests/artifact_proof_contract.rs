@@ -1,12 +1,10 @@
-#![allow(unused_imports)]
-
 use crucible_core::{sha256, DigestDecodeError, HashError, Sha256Digest};
 use vstd::prelude::*;
 
 verus! {
 
 #[test]
-#[allow(unused_variables)]
+#[expect(unused_variables, reason = "the variable is consumed only by Verus proof code")]
 fn executable_hash_is_tied_to_the_pure_specification() {
     match sha256(b"abc") {
         Ok(digest) => assert(digest@ == crucible_core::artifact::sha256_spec(b"abc"@)),

@@ -1,6 +1,6 @@
 use crucible_xtask::{
-    parse_approvals, parse_ledger, reconcile_boundaries, validate_toolchain_lock, SourceFile,
-    SourceOrigin,
+    parse_approvals, parse_ledger, reconcile_boundaries, scan_boundaries, validate_toolchain_lock,
+    SourceFile, SourceOrigin,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -46,6 +46,34 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+fn contains_allow_attribute(contents: &[u8]) -> bool {
+    contents.split(|byte| *byte == b'\n').any(|line| {
+        let compact: Vec<u8> = line
+            .iter()
+            .copied()
+            .filter(|byte| !byte.is_ascii_whitespace())
+            .collect();
+        compact.starts_with(&[35, 91, 97, 108, 108, 111, 119, 40])
+            || compact.starts_with(&[35, 33, 91, 97, 108, 108, 111, 119, 40])
+    })
+}
+
+#[test]
+fn rust_sources_forbid_unchecked_allow_attributes() {
+    let root = workspace_root();
+    let mut sources = Vec::new();
+    visit(&root, &root, &mut sources);
+    let offenders: Vec<String> = sources
+        .iter()
+        .filter(|source| contains_allow_attribute(&source.contents))
+        .map(|source| String::from_utf8_lossy(&source.path).into_owned())
+        .collect();
+    assert!(
+        offenders.is_empty(),
+        "replace broad allow attributes with better code or a narrow reasoned expect: {offenders:?}"
+    );
+}
+
 #[test]
 fn checked_in_repository_satisfies_strict_tcb_and_toolchain_policy() {
     let root = workspace_root();
@@ -55,6 +83,40 @@ fn checked_in_repository_satisfies_strict_tcb_and_toolchain_policy() {
         .expect("valid ledger");
     let approvals = parse_approvals(&fs::read(root.join("tcb/approved.tsv")).expect("approvals"))
         .expect("valid approvals");
+    let occurrences = scan_boundaries(&sources).expect("scan boundaries");
+    for occurrence in &occurrences {
+        let approval = approvals
+            .iter()
+            .find(|approval| approval.id == occurrence.id)
+            .expect("matching approval");
+        let source = sources
+            .iter()
+            .find(|source| source.path == occurrence.source_path)
+            .expect("matching source");
+        assert_eq!(
+            approval.occurrence_line,
+            occurrence.line,
+            "boundary line: {:?}",
+            String::from_utf8_lossy(&occurrence.id)
+        );
+        assert_eq!(
+            approval.source_bytes,
+            source.contents.len(),
+            "boundary bytes: {:?}",
+            String::from_utf8_lossy(&occurrence.id)
+        );
+        assert_eq!(
+            approval.source_lines,
+            source
+                .contents
+                .iter()
+                .filter(|byte| **byte == b'\n')
+                .count()
+                + 1,
+            "boundary lines: {:?}",
+            String::from_utf8_lossy(&occurrence.id)
+        );
+    }
     reconcile_boundaries(&sources, &ledger, &approvals).expect("strict TCB reconciliation");
     validate_toolchain_lock(
         &fs::read(root.join("tools/verus-toolchain.lock")).expect("toolchain lock"),

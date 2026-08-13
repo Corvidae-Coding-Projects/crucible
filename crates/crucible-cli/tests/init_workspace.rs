@@ -3,7 +3,10 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicU64, Ordering};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "Verus requires the prelude crate marker even when this Rust test names no vstd item"
+)]
 use vstd::prelude::*;
 
 const APPLICATION_ID: i64 = 0x4352_5543;

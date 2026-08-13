@@ -6,21 +6,32 @@
 //! missing required fields, and emits records in schema order independent of YAML presentation
 //! order.
 use crate::lower::CanonicalYamlGraphSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::lower::CanonicalYamlGraphSourceView;
-#[allow(unused_imports)]
 use crate::lower_typed::TypedYamlValueBindingView;
 use crate::lower_typed::{
     bind_profile1_typed_yaml_value, TypedValueBindingErrorKind, TypedYamlValueBinding,
 };
 use crate::resolve_scalar_value::{ResolvedScalarTag, ResolvedScalarValue};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_value::{ResolvedScalarValueView, ResolvedScalarView};
 use crate::scalar_decode::DecodedContentScalar;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::scalar_decode::DecodedContentScalarView;
 use crate::schema::{CompiledTypedFieldSchema, TypedFieldDefinition, TypedSchemaValueKind};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::schema::{CompiledTypedFieldSchemaView, TypedFieldDefinitionView};
 use vstd::prelude::*;
 
@@ -175,7 +186,6 @@ impl View for TypedMappingFieldError {
 }
 
 impl TypedMappingFieldError {
-    #[allow(clippy::too_many_arguments)]
     fn at(
         kind: TypedMappingFieldErrorKind,
         byte_offset: u64,
@@ -296,7 +306,6 @@ impl View for TypedMappingField {
 }
 
 impl TypedMappingField {
-    #[allow(clippy::too_many_arguments)]
     fn new(
         mapping_entry_index: u64,
         schema_field_index: u64,
@@ -423,7 +432,6 @@ impl View for TypedMappingUnknownField {
 }
 
 impl TypedMappingUnknownField {
-    #[allow(clippy::too_many_arguments)]
     fn new(
         mapping_entry_index: u64,
         key_yaml_node_index: u64,
@@ -538,7 +546,7 @@ impl View for TypedMappingFieldPartition {
 }
 
 impl TypedMappingFieldPartition {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
     fn new(
         canonical_profile_version: u16,
         schema_version: u16,
@@ -653,7 +661,6 @@ struct MappingKeyCodePoint {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
 pub struct MappingKeyCodePointView {
     pub code_point: u32,
     pub byte_start: u64,
@@ -758,7 +765,6 @@ fn append_mapping_key_code_points(content: &[DecodedContentScalar]) -> (points: 
     points
 }
 
-#[allow(clippy::match_like_matches_macro)]
 fn mapping_key_for_node(graph: &CanonicalYamlGraphSource, key_node_index: u64) -> (result: Option<
     Vec<MappingKeyCodePoint>,
 >)
@@ -802,10 +808,7 @@ fn mapping_key_for_node(graph: &CanonicalYamlGraphSource, key_node_index: u64) -
         return None;
     }
     let scalar = &scalars[scalar_index as usize];
-    let value_is_string = match scalar.value() {
-        ResolvedScalarValue::String => true,
-        _ => false,
-    };
+    let value_is_string = matches!(scalar.value(), ResolvedScalarValue::String);
     if scalar.node_index() != node.resolved_node_index() || scalar.tag()
         != ResolvedScalarTag::CoreString || !value_is_string {
         proof {
@@ -1110,15 +1113,11 @@ pub open spec fn typed_schema_kind_is_mapping_spec(kind: TypedSchemaValueKind) -
     }
 }
 
-#[allow(clippy::match_like_matches_macro)]
 fn typed_schema_kind_is_mapping(kind: TypedSchemaValueKind) -> (is_mapping: bool)
     ensures
         is_mapping == typed_schema_kind_is_mapping_spec(kind),
 {
-    match kind {
-        TypedSchemaValueKind::Mapping | TypedSchemaValueKind::CustomMapping => true,
-        _ => false,
-    }
+    matches!(kind, TypedSchemaValueKind::Mapping | TypedSchemaValueKind::CustomMapping)
 }
 
 pub open spec fn scan_mapping_entries_spec(

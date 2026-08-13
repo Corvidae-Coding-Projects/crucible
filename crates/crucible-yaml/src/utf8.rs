@@ -558,7 +558,7 @@ proof fn lemma_prefix_views(scalars: Seq<DecodedScalar>, bom_bytes: u64, consume
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn continuation(byte: u8) -> (is_continuation: bool)
     ensures
         is_continuation == continuation_byte_spec(byte),
@@ -1563,7 +1563,6 @@ struct DecodedStep {
 
 #[verifier::rlimit(100)]
 #[verifier::spinoff_prover]
-#[allow(clippy::question_mark)]
 fn decode_next(input: &[u8], index: usize, line: u64, column: u64) -> (result: Result<
     DecodedStep,
     DecodeError,
@@ -1652,7 +1651,6 @@ fn decode_next(input: &[u8], index: usize, line: u64, column: u64) -> (result: R
 
 #[verifier::rlimit(100)]
 #[verifier::spinoff_prover]
-#[allow(clippy::question_mark)]
 pub fn decode_profile1(input: &[u8], limits: DecodeLimits, bom_policy: BomPolicy) -> (result:
     Result<DecodedSource, DecodeError>)
     ensures

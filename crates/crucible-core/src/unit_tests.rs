@@ -1,4 +1,7 @@
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use super::{IdDecodeError, IdKind, RunId};
 use vstd::prelude::*;
 

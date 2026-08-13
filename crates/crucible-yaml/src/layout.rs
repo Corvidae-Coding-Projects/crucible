@@ -4,7 +4,10 @@
 //! deliberately narrower than token formation: comments, directives, flow state, and scalar
 //! boundaries remain the responsibility of the following context-sensitive token scanner.
 use crate::atom::{AtomizedSource, LexicalAtom, LexicalAtomKind, MAX_PROFILE1_LEXICAL_ATOMS};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::utf8::CRUCIBLE_YAML_PROFILE_VERSION;
 use vstd::prelude::*;
@@ -445,7 +448,7 @@ impl LayoutSource {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct LayoutScanStateView {
     lines: Seq<LayoutLineView>,
     line_start: int,

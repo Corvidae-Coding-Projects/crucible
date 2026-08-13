@@ -4,30 +4,51 @@
 //! slots reference the independently verified scalar table, collection slots retain complete
 //! resolved collection tags, and alias slots carry explicit redirects without copying targets.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::{CstNode, CstNodeKind, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstNodeView, CstSourceView};
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve_anchor::{
     AliasBinding, AnchorAliasError, AnchorAliasErrorKind, AnchorAliasLimits, AnchorAliasSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_anchor::{AliasBindingView, AnchorAliasLimitsView, AnchorAliasSourceView};
 use crate::resolve_collection_tag::{
     resolve_profile1_cst_node_collection_tag, CollectionTagError, CollectionTagErrorKind,
     CollectionTagLimits, ResolvedCollection,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_collection_tag::{
     CollectionTagErrorView, CollectionTagLimitsView, ResolvedCollectionView,
 };
@@ -35,16 +56,25 @@ use crate::resolve_scalar_table::{
     SemanticScalarTableError, SemanticScalarTableErrorKind, SemanticScalarTableLimits,
     SemanticScalarTableSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_table::{SemanticScalarTableLimitsView, SemanticScalarTableSourceView};
 use crate::resolve_topology::{
     SemanticTopologyError, SemanticTopologyErrorKind, SemanticTopologyLimits,
     SemanticTopologySource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_topology::{SemanticTopologyLimitsView, SemanticTopologySourceView};
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -959,7 +989,7 @@ fn map_anchor_alias_error(error: AnchorAliasError) -> (mapped: SemanticNodeTable
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct SemanticNodeTableStepStateView {
     node_count: nat,
     collection_count: nat,
@@ -978,7 +1008,7 @@ struct SemanticNodeTableStep {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct SemanticNodeTableStepView {
     slot: SemanticNodeSlotView,
     collection: Option<ResolvedCollectionView>,
@@ -1186,7 +1216,7 @@ proof fn lemma_semantic_node_table_step_success_preserves_cursor_bounds(
     reveal(semantic_node_table_step_spec);
 }
 
-#[allow(clippy::too_many_arguments)]  // Every independently verified producer remains explicit.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every independently verified producer remains explicit.
 fn semantic_node_table_step(
     atomized: &AtomizedSource,
     completed: &CompletedTokenSource,
@@ -1483,7 +1513,7 @@ impl SemanticNodeTableBuild {
         build
     }
 
-    #[allow(non_shorthand_field_patterns)]  // Verus macro expansion retains explicit field names.
+    #[expect(non_shorthand_field_patterns, reason = "Verus macro expansion emits explicit field patterns before rustc linting")]  // Verus macro expansion retains explicit field names.
     fn apply_step(&mut self, step: SemanticNodeTableStep)
         ensures
             final(self)@ == semantic_node_table_apply_step_spec(old(self)@, step@),
@@ -1822,8 +1852,10 @@ pub proof fn lemma_semantic_node_table_well_formed_authenticates_exact_compositi
     reveal(semantic_node_table_source_well_formed_spec);
 }
 
-#[allow(clippy::too_many_arguments)]  // Every independently verified producer remains explicit.
-#[allow(non_shorthand_field_patterns)]  // Verus macro expansion retains explicit field names.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "every independently verified producer remains an explicit composition input"
+)]
 pub fn compose_profile1_semantic_node_table(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

@@ -1,5 +1,8 @@
 //! Verified canonical conversion of YAML 1.2.2 Core infinities and NaN.
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve::CoreScalarLimitsView;
 use crate::resolve::{
     classify_core_plain_scalar, CorePlainScalarClass, CoreScalarErrorKind, CoreScalarLimits,

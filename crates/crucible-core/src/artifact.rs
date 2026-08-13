@@ -4,7 +4,10 @@
 //! CAVP vectors. Its executable padding, schedule, rounds, block fold, output, canonical codec, and
 //! algorithm-labeled artifact-ID parser are related to pure Verus specs.
 use crate::ArtifactId;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use vstd::assert_seqs_equal;
 use vstd::prelude::*;
 use vstd::string::{StrSliceExecFns, StringExecFns};
@@ -469,7 +472,7 @@ pub open spec fn malformed_artifact_id_spec(text: Seq<char>) -> bool {
 
 // Direct comparisons keep the parser inside Verus's verified primitive surface;
 // `RangeInclusive::contains` would add iterator/library machinery to this check.
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_lowercase_ascii_letter(character: char) -> (is_letter: bool)
     ensures
         is_letter == lowercase_ascii_letter_spec(character),
@@ -477,7 +480,7 @@ fn is_lowercase_ascii_letter(character: char) -> (is_letter: bool)
     character >= 'a' && character <= 'z'
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_algorithm_label_character(character: char) -> (is_character: bool)
     ensures
         is_character == algorithm_label_character_spec(character),
@@ -1094,7 +1097,7 @@ pub proof fn lemma_artifact_id_spec_is_canonical(digest: Seq<u8>)
 // Keep the primitive shifts explicit so Verus proves this implementation against
 // `rotate_right_spec` instead of delegating the cryptographic operation to a
 // library intrinsic.
-#[allow(clippy::manual_rotate)]
+#[expect(clippy::manual_rotate, reason = "the bitwise expression is verified directly against the cryptographic rotate specification")]
 fn rotate_right(value: u32, count: u32) -> (rotated: u32)
     requires
         0 < count < 32,

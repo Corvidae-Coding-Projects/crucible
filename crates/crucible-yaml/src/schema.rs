@@ -656,7 +656,7 @@ pub open spec fn unicode_scalar_value_spec(code_point: u32) -> bool {
     code_point <= 0x10ffff && !(0xd800 <= code_point <= 0xdfff)
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn unicode_scalar_value(code_point: u32) -> (valid: bool)
     ensures
         valid == unicode_scalar_value_spec(code_point),

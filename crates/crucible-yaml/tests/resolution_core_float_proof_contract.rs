@@ -1,7 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
-use crucible_yaml::{convert_core_finite_float, CoreFiniteFloatErrorKind, CoreFiniteFloatLimits};
+#[expect(
+    unused_imports,
+    reason = "the error kind is referenced only inside Verus proof code"
+)]
+use crucible_yaml::CoreFiniteFloatErrorKind;
+use crucible_yaml::{convert_core_finite_float, CoreFiniteFloatLimits};
 use vstd::prelude::*;
 
 verus! {

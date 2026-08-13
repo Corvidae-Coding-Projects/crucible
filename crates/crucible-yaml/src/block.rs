@@ -4,25 +4,40 @@
 //! literal and folded headers, detects content indentation, applies YAML 1.2.2 folding/chomping,
 //! and retains exact source provenance for every normalized content code point.
 use crate::atom::{AtomizedSource, LexicalAtom, LexicalAtomKind, MAX_PROFILE1_LEXICAL_ATOMS};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::layout::{analyze_profile1_layout, LayoutLine, LayoutSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::layout::{LayoutLineView, LayoutSourceView};
 use crate::plain::{canonical_plain_scalar_limits, scan_profile1_plain_scalars, PlainScalarSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::{PlainScalarSourceView, PlainScalarView};
 use crate::quoted::{
     canonical_quoted_scalar_limits, scan_profile1_quoted_scalars, QuotedScalarSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::{QuotedScalarSourceView, QuotedScalarView};
 use crate::structural::{
     canonical_structural_layout_limits, canonical_structural_scan_limits,
     scan_profile1_structural_lexemes, StructuralCandidateRole, StructuralLexeme,
     StructuralLexemeSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::structural::{StructuralLexemeSourceView, StructuralLexemeView};
 use crate::utf8::CRUCIBLE_YAML_PROFILE_VERSION;
 use crate::YamlIndicator;
@@ -1026,7 +1041,7 @@ proof fn lemma_advancing_candidate_preserves_block_order(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct HeaderInfoView {
     chomping: BlockChomping,
     explicit_indentation: Option<u8>,
@@ -1193,7 +1208,7 @@ closed spec fn parse_block_header_spec(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct BlockProbeView {
     first_nonempty: Option<int>,
     first_nonempty_indentation: u64,
@@ -1363,7 +1378,7 @@ closed spec fn validate_leading_empty_spec(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct BlockEndView {
     end_line: int,
     last_nonempty: Option<int>,
@@ -2078,7 +2093,7 @@ closed spec fn candidate_index_after_block_spec(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct BlockScanView {
     scalars: Seq<BlockScalarView>,
     total_content_code_points: u64,
@@ -2116,7 +2131,7 @@ closed spec fn plain_index_after_atom_spec(
 
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct BlockGrammarContextView {
     parent_indentation: u64,
     node_start_column: u64,
@@ -3195,7 +3210,7 @@ fn effective_limit(requested: u64, absolute: u64) -> (effective: u64)
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn yaml_printable_block_character(code_point: u32) -> (printable: bool)
     ensures
         printable == crate::quoted::yaml_printable_character_spec(code_point),
@@ -3241,7 +3256,7 @@ proof fn lemma_atom_view_at(atoms: &[LexicalAtom], index: usize)
     reveal(crate::atom::lexical_atom_views_spec);
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn parse_block_header(
     atoms: &[LexicalAtom],
     line: &LayoutLine,
@@ -3964,7 +3979,7 @@ fn append_direct_content(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn append_block_gap(
     content: &mut Vec<BlockScalarContentScalar>,
     atoms: &[LexicalAtom],
@@ -4065,7 +4080,7 @@ fn append_block_gap(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn render_block_content(
     atoms: &[LexicalAtom],
     lines: &[LayoutLine],
@@ -4386,7 +4401,7 @@ fn render_block_content(
 
 #[verifier::rlimit(180)]
 #[verifier::spinoff_prover]
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn build_block_scalar(
     atoms: &[LexicalAtom],
     lines: &[LayoutLine],
@@ -5394,7 +5409,7 @@ fn block_candidate_style(role: StructuralCandidateRole) -> (style: Option<BlockS
 /// Authenticates upstream evidence and forms every complete profile-1 block scalar.
 #[verifier::rlimit(1000)]
 #[verifier::spinoff_prover]
-#[allow(clippy::implicit_saturating_sub)]
+#[expect(clippy::implicit_saturating_sub, reason = "the guarded subtraction is matched directly by the loop invariant")]
 pub fn scan_profile1_block_scalars(
     atomized: &AtomizedSource,
     layout: &LayoutSource,

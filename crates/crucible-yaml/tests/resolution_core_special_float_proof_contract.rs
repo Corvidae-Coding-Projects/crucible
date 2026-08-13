@@ -1,9 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
-use crucible_yaml::{
-    convert_core_special_float, CoreSpecialFloat, CoreSpecialFloatErrorKind, CoreSpecialFloatLimits,
-};
+use crucible_yaml::{convert_core_special_float, CoreSpecialFloatLimits};
+#[expect(
+    unused_imports,
+    reason = "these variants are referenced only inside Verus proof code"
+)]
+use crucible_yaml::{CoreSpecialFloat, CoreSpecialFloatErrorKind};
 use vstd::prelude::*;
 
 verus! {

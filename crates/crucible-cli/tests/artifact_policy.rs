@@ -3,7 +3,10 @@ use crucible_cli::{
     stored_artifact_is_exact, ObjectAddress, StoredArtifactSnapshot,
 };
 use crucible_core::{ArtifactId, ArtifactRef};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "Verus requires the prelude crate marker even when this Rust test names no vstd item"
+)]
 use vstd::prelude::*;
 
 const ABC_ID: &str = "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";

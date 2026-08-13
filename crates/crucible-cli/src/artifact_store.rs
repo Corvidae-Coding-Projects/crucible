@@ -273,7 +273,7 @@ pub open spec fn artifact_ref_equal_spec(
         == right.media_type
 }
 
-#[allow(clippy::ptr_arg)]
+#[expect(clippy::ptr_arg, reason = "owned-string views preserve the exact vstd equality proof surface")]
 fn same_string(left: &String, right: &String) -> (same: bool)
     ensures
         same == (left@ == right@),

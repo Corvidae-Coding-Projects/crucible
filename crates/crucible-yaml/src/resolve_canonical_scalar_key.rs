@@ -1,46 +1,81 @@
-#![allow(clippy::question_mark, clippy::single_match)]
 //! Verified collision-free canonical byte identities for resolved scalar nodes.
 //!
 //! Presentation style and spelling are excluded; resolved semantic tags and canonical values are
 //! encoded with explicit variant markers and fixed-width length delimiters. Every byte retains a
 //! source diagnostic anchor. Per-key and aggregate limits are checked before each allocation.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::CstSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::CstSourceView;
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve_alias_cycle::{
     AcyclicSemanticGraphSource, AliasCycleError, AliasCycleErrorKind, AliasCycleLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_alias_cycle::{AcyclicSemanticGraphSourceView, AliasCycleLimitsView};
 use crate::resolve_anchor::AnchorAliasLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_anchor::AnchorAliasLimitsView;
 use crate::resolve_node_table::SemanticNodeTableLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_node_table::SemanticNodeTableLimitsView;
 use crate::resolve_scalar_table::SemanticScalarTableLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_table::SemanticScalarTableLimitsView;
 use crate::resolve_scalar_value::{ResolvedScalar, ResolvedScalarTag, ResolvedScalarValue};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_value::{ResolvedScalarValueView, ResolvedScalarView};
 use crate::resolve_topology::SemanticTopologyLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_topology::SemanticTopologyLimitsView;
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -629,15 +664,9 @@ fn append_u32(
             Err(error) => Err(error@),
         },
 {
-    if let Err(error) = build.push((value >> 24) as u8, source, limits) {
-        return Err(error);
-    }
-    if let Err(error) = build.push((value >> 16) as u8, source, limits) {
-        return Err(error);
-    }
-    if let Err(error) = build.push((value >> 8) as u8, source, limits) {
-        return Err(error);
-    }
+    build.push((value >> 24) as u8, source, limits)?;
+    build.push((value >> 16) as u8, source, limits)?;
+    build.push((value >> 8) as u8, source, limits)?;
     build.push(value as u8, source, limits)
 }
 
@@ -665,9 +694,7 @@ fn append_u64(
             Err(error) => Err(error@),
         },
 {
-    if let Err(error) = append_u32(build, (value >> 32) as u32, source, limits) {
-        return Err(error);
-    }
+    append_u32(build, (value >> 32) as u32, source, limits)?;
     append_u32(build, value as u32, source, limits)
 }
 
@@ -779,15 +806,12 @@ fn append_same_source_u32_values(
         decreases values.len() - index,
     {
         let step = append_u32(&mut current, values[index], source, limits);
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(canonical_append_same_source_u32_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(canonical_append_same_source_u32_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(canonical_append_same_source_u32_tail_spec);
@@ -890,15 +914,12 @@ fn append_decoded_content(
             content[index].byte_start(),
             limits,
         );
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(canonical_append_decoded_content_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(canonical_append_decoded_content_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(canonical_append_decoded_content_tail_spec);
@@ -1001,15 +1022,12 @@ fn append_tag_content(
             content[index].byte_start(),
             limits,
         );
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(canonical_append_tag_content_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(canonical_append_tag_content_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(canonical_append_tag_content_tail_spec);
@@ -1398,15 +1416,12 @@ fn append_u8_values(
         decreases values.len() - index,
     {
         let step = current.push(values[index], source, limits);
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(canonical_append_u8_values_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(canonical_append_u8_values_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(canonical_append_u8_values_tail_spec);
@@ -1441,21 +1456,11 @@ fn encode_scalar_prefix(
         ResolvedScalarTag::CustomGlobal => 0x15,
         ResolvedScalarTag::CustomLocal => 0x16,
     };
-    if let Err(e) = current.push(0x43, node_byte, limits) {
-        return Err(e);
-    }
-    if let Err(e) = current.push(0x53, node_byte, limits) {
-        return Err(e);
-    }
-    if let Err(e) = current.push(0x4b, node_byte, limits) {
-        return Err(e);
-    }
-    if let Err(e) = current.push(1, node_byte, limits) {
-        return Err(e);
-    }
-    if let Err(e) = current.push(tag_marker, node_byte, limits) {
-        return Err(e);
-    }
+    current.push(0x43, node_byte, limits)?;
+    current.push(0x53, node_byte, limits)?;
+    current.push(0x4b, node_byte, limits)?;
+    current.push(1, node_byte, limits)?;
+    current.push(tag_marker, node_byte, limits)?;
     if matches!(
         scalar.tag(),
         ResolvedScalarTag::CustomGlobal | ResolvedScalarTag::CustomLocal
@@ -1470,15 +1475,9 @@ fn encode_scalar_prefix(
             ),
         };
         let content = tag.content();
-        if let Err(e) = append_u64(&mut current, content.len() as u64, node_byte, limits) {
-            return Err(e);
-        }
+        append_u64(&mut current, content.len() as u64, node_byte, limits)?;
         let ghost tag_input = current@;
-        current =
-        match append_tag_content(current, Ghost(tag_input), content, limits) {
-            Err(error) => return Err(error),
-            Ok(next) => next,
-        };
+        current = append_tag_content(current, Ghost(tag_input), content, limits)?;
     }
     Ok(current)
 }
@@ -1499,10 +1498,8 @@ fn encode_integer_value(
         },
 {
     let mut current = build;
-    if let Err(error) = current.push(0x22, node_byte, limits) {
-        return Err(error);
-    }
-    if let Err(error) = current.push(
+    current.push(0x22, node_byte, limits)?;
+    current.push(
         if integer.negative() {
             1
         } else {
@@ -1510,13 +1507,9 @@ fn encode_integer_value(
         },
         node_byte,
         limits,
-    ) {
-        return Err(error);
-    }
+    )?;
     let limbs = integer.limbs();
-    if let Err(error) = append_u64(&mut current, limbs.len() as u64, node_byte, limits) {
-        return Err(error);
-    }
+    append_u64(&mut current, limbs.len() as u64, node_byte, limits)?;
     let ghost input = current@;
     append_same_source_u32_values(current, Ghost(input), limbs, node_byte, limits)
 }
@@ -1537,10 +1530,8 @@ fn encode_float_value(
         },
 {
     let mut current = build;
-    if let Err(error) = current.push(0x23, node_byte, limits) {
-        return Err(error);
-    }
-    if let Err(error) = current.push(
+    current.push(0x23, node_byte, limits)?;
+    current.push(
         if float.negative() {
             1
         } else {
@@ -1548,20 +1539,12 @@ fn encode_float_value(
         },
         node_byte,
         limits,
-    ) {
-        return Err(error);
-    }
+    )?;
     let coefficient = float.coefficient_digits_le();
-    if let Err(error) = append_u64(&mut current, coefficient.len() as u64, node_byte, limits) {
-        return Err(error);
-    }
+    append_u64(&mut current, coefficient.len() as u64, node_byte, limits)?;
     let ghost coefficient_input = current@;
-    current =
-    match append_u8_values(current, Ghost(coefficient_input), coefficient, node_byte, limits) {
-        Err(error) => return Err(error),
-        Ok(next) => next,
-    };
-    if let Err(error) = current.push(
+    current = append_u8_values(current, Ghost(coefficient_input), coefficient, node_byte, limits)?;
+    current.push(
         if float.exponent_negative() {
             1
         } else {
@@ -1569,13 +1552,9 @@ fn encode_float_value(
         },
         node_byte,
         limits,
-    ) {
-        return Err(error);
-    }
+    )?;
     let exponent = float.exponent_digits_le();
-    if let Err(error) = append_u64(&mut current, exponent.len() as u64, node_byte, limits) {
-        return Err(error);
-    }
+    append_u64(&mut current, exponent.len() as u64, node_byte, limits)?;
     let ghost exponent_input = current@;
     append_u8_values(current, Ghost(exponent_input), exponent, node_byte, limits)
 }
@@ -1596,22 +1575,15 @@ fn encode_string_value(
         },
 {
     let mut current = build;
-    if let Err(error) = current.push(0x27, node_byte, limits) {
-        return Err(error);
-    }
+    current.push(0x27, node_byte, limits)?;
     match scalar.presentation().decoded() {
         None => {
-            if let Err(error) = append_u64(&mut current, 0, node_byte, limits) {
-                Err(error)
-            } else {
-                Ok(current)
-            }
+            append_u64(&mut current, 0, node_byte, limits)?;
+            Ok(current)
         },
         Some(decoded) => {
             let content = decoded.content();
-            if let Err(error) = append_u64(&mut current, content.len() as u64, node_byte, limits) {
-                return Err(error);
-            }
+            append_u64(&mut current, content.len() as u64, node_byte, limits)?;
             let ghost content_input = current@;
             append_decoded_content(current, Ghost(content_input), content, limits)
         },
@@ -1667,10 +1639,7 @@ fn encode_boolean_value(
             Err(error) => Err(error@),
         },
 {
-    let first = match push_owned_key_byte(build, Ghost(input), 0x21, node_byte, limits) {
-        Err(error) => return Err(error),
-        Ok(next) => next,
-    };
+    let first = push_owned_key_byte(build, Ghost(input), 0x21, node_byte, limits)?;
     let ghost second_input = first@;
     push_owned_key_byte(
         first,
@@ -2167,15 +2136,12 @@ fn compose_canonical_scalar_table(
         decreases scalars.len() - scalar_index,
     {
         let step = compose_canonical_scalar_table_item(graph, scalar_index, &mut build, limits);
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(canonical_scalar_table_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(canonical_scalar_table_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(canonical_scalar_table_tail_spec);
@@ -2380,7 +2346,8 @@ pub proof fn lemma_canonical_scalar_key_well_formed_authenticates_exact_result(
     reveal(canonical_scalar_key_source_well_formed_spec);
 }
 
-#[allow(clippy::too_many_arguments)]
+// Every independently authenticated scalar producer is explicit at the composition boundary.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 pub fn compose_profile1_canonical_scalar_keys(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

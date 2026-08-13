@@ -2,12 +2,11 @@ use crucible_yaml::{
     partition_profile1_typed_mapping_fields, CanonicalYamlGraphSource, CompiledTypedFieldSchema,
     TypedMappingFieldError, TypedMappingFieldLimits, TypedMappingFieldPartition,
 };
-#[allow(unused_imports)]
 use vstd::prelude::*;
 
 verus! {
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_partition_has_the_exact_total_pure_result(
     graph: &CanonicalYamlGraphSource,
     schema: &CompiledTypedFieldSchema,

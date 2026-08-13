@@ -7,9 +7,15 @@
 use crate::atom::{
     AtomizedSource, LexicalAtom, LexicalAtomKind, YamlIndicator, MAX_PROFILE1_LEXICAL_ATOMS,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::layout::LayoutSourceView;
 use crate::layout::{analyze_profile1_layout, LayoutSource};
 use crate::structural::{
@@ -17,7 +23,10 @@ use crate::structural::{
     scan_profile1_structural_lexemes, StructuralCandidateRole, StructuralLexeme,
     StructuralLexemeSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::structural::{StructuralLexemeSourceView, StructuralLexemeView};
 use crate::utf8::CRUCIBLE_YAML_PROFILE_VERSION;
 use vstd::prelude::*;
@@ -599,7 +608,7 @@ pub open spec fn hex_digit_value_spec(code_point: u32) -> Option<u32> {
     }
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn hex_digit_value(code_point: u32) -> (value: Option<u32>)
     ensures
         value == hex_digit_value_spec(code_point),
@@ -644,7 +653,7 @@ pub open spec fn yaml_printable_character_spec(code_point: u32) -> bool {
         <= code_point <= 0x10ffff)
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn yaml_printable_character(code_point: u32) -> (printable: bool)
     ensures
         printable == yaml_printable_character_spec(code_point),
@@ -654,7 +663,7 @@ fn yaml_printable_character(code_point: u32) -> (printable: bool)
         <= code_point && code_point <= 0xfffd) || (0x10000 <= code_point && code_point <= 0x10ffff)
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn escaped_unicode_scalar(code_point: u32) -> (valid: bool)
     ensures
         valid == escaped_unicode_scalar_spec(code_point),
@@ -671,7 +680,7 @@ enum DoubleEscapeState {
 
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct DoubleEscapeStateView {
     tag: u8,
     remaining: u8,
@@ -968,7 +977,7 @@ pub open spec fn quote_style_for_candidate_spec(candidate: StructuralLexemeView)
 
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
-#[allow(dead_code)]  // Fields are consumed by Verus specifications, not ordinary Rust code.
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]  // Fields are consumed by Verus specifications, not ordinary Rust code.
 struct QuotedContextView {
     flow_depth: u64,
     line_indentation: u64,
@@ -1554,7 +1563,7 @@ fn make_quoted_scalar(
 }
 
 #[verifier::rlimit(200)]
-#[allow(clippy::if_same_then_else, unused_assignments, unused_variables)]
+#[expect(clippy::if_same_then_else, unused_assignments, unused_variables, reason = "the pure-machine correspondence consumes branch state erased from ordinary Rust")]
 // The line counter is consumed by the pure-machine correspondence and loop invariants.
 fn scan_quoted_scalar_body(
     atoms: &[LexicalAtom],

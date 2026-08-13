@@ -3,12 +3,11 @@ use crucible_core::{
     RawExecutionOutcomeCodecLimits, RawExecutionOutcomeCodecRejection,
     ValidatedRawExecutionOutcome,
 };
-#[allow(unused_imports)]
 use vstd::prelude::*;
 
 verus! {
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_decoder_exposes_semantics_and_preserves_every_rejected_byte(
     encoded: Vec<u8>,
     limits: RawExecutionOutcomeCodecLimits,
@@ -22,7 +21,7 @@ fn executable_decoder_exposes_semantics_and_preserves_every_rejected_byte(
     decode_raw_execution_outcome(encoded, limits)
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_encoder_never_exceeds_the_clamped_absolute_limit(
     outcome: &ValidatedRawExecutionOutcome,
     requested_limit: u64,

@@ -6,7 +6,10 @@
 //! transitions.
 use crate::artifact::{parse_artifact_id, ArtifactIdParseError, ArtifactRefView, ContentDigest};
 use crate::{ArtifactRef, EvidenceId};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use vstd::assert_seqs_equal;
 use vstd::prelude::*;
 
@@ -846,7 +849,7 @@ pub open spec fn evidence_graph_well_formed_spec(graph: EvidenceGraphView) -> bo
 
 // Owned-string references preserve vstd's exact clone/equality specifications;
 // converting to `&str` would weaken the proof surface for this comparison.
-#[allow(clippy::ptr_arg)]
+#[expect(clippy::ptr_arg, reason = "owned-string views preserve the exact vstd equality proof surface")]
 fn same_string(left: &String, right: &String) -> (same: bool)
     ensures
         same == (left@ == right@),
@@ -1198,8 +1201,6 @@ fn validate_actor_identity(actor: &ActorIdentity, identifier_field: EvidenceFiel
     }
 }
 
-// Explicit typed-error returns keep each rejected field visible to Verus's branch contracts.
-#[allow(clippy::question_mark)]
 fn validate_transformation_identity(transformation: &TransformationIdentity) -> (result: Result<
     (),
     EvidenceValidationError,
@@ -1213,23 +1214,19 @@ fn validate_transformation_identity(transformation: &TransformationIdentity) -> 
     if string_is_empty(&transformation.version) {
         return Err(EvidenceValidationError::Empty(EvidenceField::TransformationVersion));
     }
-    if let Err(error) = validate_artifact_ref(
+    validate_artifact_ref(
         &transformation.implementation,
         EvidenceField::TransformationImplementation,
         EvidenceField::PayloadMediaType,
-    ) {
-        return Err(error);
-    }
+    )?;
     match &transformation.configuration {
         TransformationConfiguration::NoneDeclared => {},
         TransformationConfiguration::Artifact(configuration) => {
-            if let Err(error) = validate_artifact_ref(
+            validate_artifact_ref(
                 configuration,
                 EvidenceField::TransformationConfiguration,
                 EvidenceField::PayloadMediaType,
-            ) {
-                return Err(error);
-            }
+            )?;
         },
     }
     Ok(())
@@ -1258,7 +1255,6 @@ fn evidence_kind_requires_derivation(kind: EvidenceKind) -> (requires_derivation
     }
 }
 
-#[allow(clippy::question_mark)]
 fn validate_evidence_node(node: &EvidenceNode) -> (result: Result<(), EvidenceValidationError>)
     ensures
         result is Ok == evidence_node_structurally_valid_spec(node@),
@@ -1266,13 +1262,7 @@ fn validate_evidence_node(node: &EvidenceNode) -> (result: Result<(), EvidenceVa
     if string_is_empty(&node.id.0) {
         return Err(EvidenceValidationError::Empty(EvidenceField::EvidenceId));
     }
-    if let Err(error) = validate_artifact_ref(
-        &node.payload,
-        EvidenceField::Payload,
-        EvidenceField::PayloadMediaType,
-    ) {
-        return Err(error);
-    }
+    validate_artifact_ref(&node.payload, EvidenceField::Payload, EvidenceField::PayloadMediaType)?;
     if string_is_empty(&node.schema.namespace) {
         return Err(EvidenceValidationError::Empty(EvidenceField::SchemaNamespace));
     }
@@ -1282,24 +1272,17 @@ fn validate_evidence_node(node: &EvidenceNode) -> (result: Result<(), EvidenceVa
     if node.schema.version == 0 {
         return Err(EvidenceValidationError::Zero(EvidenceField::SchemaVersion));
     }
-    if let Err(error) = validate_actor_identity(
-        &node.producer.actor,
-        EvidenceField::ProducerActorIdentifier,
-    ) {
-        return Err(error);
-    }
+    validate_actor_identity(&node.producer.actor, EvidenceField::ProducerActorIdentifier)?;
     if string_is_empty(&node.producer.version) {
         return Err(EvidenceValidationError::Empty(EvidenceField::ProducerVersion));
     }
     match &node.producer.implementation {
         Some(implementation) => {
-            if let Err(error) = validate_artifact_ref(
+            validate_artifact_ref(
                 implementation,
                 EvidenceField::ProducerImplementation,
                 EvidenceField::PayloadMediaType,
-            ) {
-                return Err(error);
-            }
+            )?;
         },
         None => {
             if evidence_kind_requires_derivation(node.kind) {
@@ -1313,7 +1296,6 @@ fn validate_evidence_node(node: &EvidenceNode) -> (result: Result<(), EvidenceVa
     Ok(())
 }
 
-#[allow(clippy::question_mark)]
 fn validate_provenance_edge(edge: &ProvenanceEdge) -> (result: Result<(), EvidenceValidationError>)
     ensures
         result is Ok == provenance_edge_structurally_valid_spec(edge@),
@@ -1324,9 +1306,7 @@ fn validate_provenance_edge(edge: &ProvenanceEdge) -> (result: Result<(), Eviden
     if string_is_empty(&edge.object.0) {
         return Err(EvidenceValidationError::Empty(EvidenceField::DerivationInputs));
     }
-    if let Err(error) = validate_actor_identity(&edge.actor, EvidenceField::EdgeActorIdentifier) {
-        return Err(error);
-    }
+    validate_actor_identity(&edge.actor, EvidenceField::EdgeActorIdentifier)?;
     if edge.recorded_at.nanoseconds >= NANOSECONDS_PER_SECOND {
         return Err(EvidenceValidationError::TimestampOutOfRange);
     }
@@ -1337,7 +1317,7 @@ fn validate_provenance_edge(edge: &ProvenanceEdge) -> (result: Result<(), Eviden
 }
 
 // Explicit matches retain exact per-variant view postconditions without closure proof state.
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn clone_artifact_ref(artifact: &ArtifactRef) -> (cloned: ArtifactRef)
     ensures
         cloned@ == artifact@,
@@ -1370,7 +1350,7 @@ fn clone_schema_identity(schema: &SchemaIdentity) -> (cloned: SchemaIdentity)
     }
 }
 
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn clone_optional_artifact_ref(artifact: &Option<ArtifactRef>) -> (cloned: Option<ArtifactRef>)
     ensures
         match (&cloned, artifact) {
@@ -1432,7 +1412,7 @@ fn clone_transformation_identity(transformation: &TransformationIdentity) -> (cl
     }
 }
 
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn clone_optional_transformation_identity(
     transformation: &Option<TransformationIdentity>,
 ) -> (cloned: Option<TransformationIdentity>)

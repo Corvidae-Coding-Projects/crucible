@@ -811,6 +811,75 @@ parser successfully extracts structured events. Extension records must declare a
 and schema version and remain subject to configured size limits; an unversioned arbitrary
 metadata map must not become a compatibility escape hatch.
 
+`Duration` in this persisted record is a portable `(u64 seconds, u32 nanoseconds)` value with
+nanoseconds strictly below one billion. A captured stream's retained byte count must equal its
+artifact size, and `truncated` is true exactly when one or more bytes were discarded. The portable
+resource snapshot contains optional process, thread, open-file, handle, read-byte, and written-byte
+counters plus versioned resource extensions for platform-native measurements; a missing counter is
+not silently replaced with zero. Coverage retains a typed `CoverageProviderId`, provider-version identity,
+target-build identity, feature-space digest, out-of-line artifact, and new/total feature counts.
+State digests, schedule traces, and fault traces are namespace-identified, versioned
+artifact-backed records; schedule traces record decision count/completeness, while fault traces
+separately count reached, applied, skipped, shadowed, and rejected events. A bare numeric trace
+version without a namespace is not a portable schema identity.
+
+Raw observations use canonical binary serialization version 1 with four-byte magic `CROB`, a
+big-endian `u16` schema version, length-prefixed UTF-8 identities, a length-delimited canonical
+`RawExecutionOutcome`, complete stream/resource/coverage/state/schedule/fault fields, and ordered
+resource and observation extensions. Integers are fixed-width big-endian and every option/boolean
+accepts only zero or one. Decoding enforces a 128 MiB absolute/caller-lowered byte cap before nested
+work, preflights resource-extension and observation-extension counts before allocating records,
+passes the nested outcome through its own bounded decoder, semantically validates the complete
+observation, rejects truncation/trailing bytes/invalid UTF-8/options/durations with typed exact
+offsets, and retains the exact encoded bytes on every rejection including future schemas.
+
+The exact version-1 inner grammar is below. `string` is `u64 byte_length || byte_length bytes of
+canonical UTF-8`; `option<T>` is `u8 0` or `u8 1 || T`; `sequence<T>` is `u64 count || T[count]`;
+all integers are unsigned big-endian unless the referenced nested format says otherwise.
+
+```text
+observation = "CROB" || u16(1)
+              || string(run_id) || string(attempt_id)
+              || u64(outcome_bytes.len) || outcome_bytes
+              || stream(stdout) || stream(stderr)
+              || duration(wall_time) || option<duration>(cpu_time)
+              || option<u64>(peak_rss_bytes)
+              || resources
+              || option<coverage> || option<state>
+              || option<schedule> || option<fault>
+              || sequence<extension>(extensions)
+
+artifact  = u64(size_bytes) || string(algorithm_qualified_id)
+            || option<string>(media_type)
+stream    = artifact || bool(truncated) || u64(retained_bytes) || u64(discarded_bytes)
+duration  = u64(seconds) || u32(nanoseconds)
+extension = string(namespace) || u32(schema_version) || artifact
+resources = option<u64>(process_count) || option<u64>(thread_count)
+            || option<u64>(open_file_count) || option<u64>(handle_count)
+            || option<u64>(read_bytes) || option<u64>(written_bytes)
+            || sequence<extension>(resource_extensions)
+coverage  = string(provider_id) || string(provider_version) || string(target_build_id)
+            || string(feature_set_digest) || artifact
+            || u64(new_features) || u64(total_features)
+state     = string(namespace) || u32(schema_version) || artifact
+schedule  = string(namespace) || u32(schema_version) || artifact
+            || u64(decisions) || bool(complete)
+fault     = string(namespace) || u32(schema_version) || artifact
+            || u64(reached) || u64(applied) || u64(skipped)
+            || u64(shadowed) || u64(rejected) || bool(complete)
+```
+
+Observation admission has independent caller-lowerable absolute caps for 65,536 aggregate identity
+code points, 65,536 resource extensions, 1,048,576 top-level extensions, 1,048,576 aggregate
+extension-namespace code points, 1,048,576 aggregate inline media-type code points across every
+observation-owned artifact reference, and 1 TiB per out-of-line artifact record. Caller policy
+cannot raise those absolutes. Every declared string length is checked against the applicable
+remaining identity, namespace, or media budget before UTF-8 materialization. Success proves exact
+input identity and the public semantic predicate; codec success proves the same predicate, and
+codec rejection proves byte-for-byte input retention. The executable version-1 encoder/decoder is
+also frozen by a complete golden-byte fixture; a pure exact byte-to-value correspondence model
+remains required before the codec may be described as input-authenticating in the formal layer.
+
 ### 9.7 Evidence and provenance graph
 
 ```rust

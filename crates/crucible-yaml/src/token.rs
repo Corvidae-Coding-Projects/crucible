@@ -4,26 +4,44 @@
 //! one lossless token partition, validates directive/property spellings, and enforces typed flow
 //! delimiter nesting without delegating any YAML work to an external parser.
 use crate::atom::{AtomizedSource, LexicalAtom, LexicalAtomKind, MAX_PROFILE1_LEXICAL_ATOMS};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::block::{
     canonical_block_scalar_limits, scan_profile1_block_scalars, BlockScalarSource, BlockScalarStyle,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::{BlockScalarSourceView, BlockScalarView};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::layout::LayoutSourceView;
 use crate::layout::{analyze_profile1_layout, LayoutSource};
 use crate::plain::{canonical_plain_scalar_limits, scan_profile1_plain_scalars, PlainScalarSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::{PlainScalarSourceView, PlainScalarView};
 use crate::quoted::{
     canonical_quoted_scalar_limits, scan_profile1_quoted_scalars, QuotedScalarSource,
     QuotedScalarStyle,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::{QuotedScalarSourceView, QuotedScalarView};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::structural::StructuralLexemeSourceView;
 use crate::structural::{
     canonical_structural_layout_limits, canonical_structural_scan_limits,
@@ -2164,7 +2182,6 @@ closed spec fn token_advance_block_index_spec(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
 pub struct CompletedTokenStepView {
     pub token: CompletedTokenView,
     pub next_atom_index: int,
@@ -2762,7 +2779,7 @@ closed spec fn token_apply_flow_kind_spec(
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct CompletedTokenTailSuccessView {
     maximum_flow_depth: u64,
     tokens: Seq<CompletedTokenView>,
@@ -3652,7 +3669,7 @@ fn is_flow_indicator(kind: LexicalAtomKind) -> (result: bool)
         == LexicalAtomKind::Indicator(YamlIndicator::FlowMappingEnd)
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_hex(code_point: u32) -> (result: bool)
     ensures
         result == token_is_hex_spec(code_point),
@@ -3665,7 +3682,7 @@ pub open spec fn is_decimal_spec(code_point: u32) -> bool {
     0x30 <= code_point && code_point <= 0x39
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_decimal(code_point: u32) -> (result: bool)
     ensures
         result == is_decimal_spec(code_point),
@@ -3673,7 +3690,7 @@ fn is_decimal(code_point: u32) -> (result: bool)
     0x30 <= code_point && code_point <= 0x39
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_word(code_point: u32) -> (result: bool)
     ensures
         result == token_is_word_spec(code_point),
@@ -3682,7 +3699,6 @@ fn is_word(code_point: u32) -> (result: bool)
         && code_point <= 0x7a) || code_point == 0x2d
 }
 
-#[allow(clippy::manual_range_contains)]
 fn is_ns_uri_char(code_point: u32) -> (result: bool)
     ensures
         result == token_is_ns_uri_char_spec(code_point),
@@ -4062,7 +4078,7 @@ fn make_completed_part(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn make_completed_token(
     atoms: &[LexicalAtom],
     kind: CompletedTokenKind,
@@ -5767,7 +5783,7 @@ fn single_indicator_kind(kind: LexicalAtomKind) -> (result: Result<
 
 #[verifier::spinoff_prover]
 #[verifier::rlimit(500)]
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn next_completed_token(
     atoms: &[LexicalAtom],
     quotes: &[crate::quoted::QuotedScalar],

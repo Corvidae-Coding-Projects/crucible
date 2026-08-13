@@ -7,7 +7,10 @@ use crate::cst::CstNodeKind;
 use crate::resolve_canonical_structural_key::{
     CanonicalStructuralKeyRecord, CanonicalStructuralKeySource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_canonical_structural_key::{
     CanonicalStructuralKeyRecordView, CanonicalStructuralKeySourceView,
 };

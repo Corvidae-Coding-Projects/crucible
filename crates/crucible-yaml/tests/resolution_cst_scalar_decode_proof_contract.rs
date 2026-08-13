@@ -1,5 +1,7 @@
-#![allow(unused_imports)]
-
+#[expect(
+    unused_imports,
+    reason = "these variants are referenced only inside Verus proof code"
+)]
 use crucible_yaml::{CstNodeKind, CstNodeStyle, CstScalarDecodeErrorKind};
 use vstd::prelude::*;
 

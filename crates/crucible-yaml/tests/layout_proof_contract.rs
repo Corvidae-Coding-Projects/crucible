@@ -1,10 +1,12 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
-
 use crucible_yaml::{
     analyze_profile1_layout, atomize_profile1, decode_profile1, AtomizeLimits, BomPolicy,
-    DecodeLimits, LayoutErrorKind, LayoutLimits, LexicalAtomKind,
+    DecodeLimits, LayoutLimits,
 };
+#[expect(
+    unused_imports,
+    reason = "these variants are referenced only inside Verus proof code"
+)]
+use crucible_yaml::{LayoutErrorKind, LexicalAtomKind};
 use vstd::prelude::*;
 
 verus! {

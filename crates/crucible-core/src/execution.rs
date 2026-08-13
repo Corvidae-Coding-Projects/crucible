@@ -153,7 +153,6 @@ pub open spec fn completion_disposition_stable_tag_spec(value: CompletionDisposi
 }
 
 impl CompletionDisposition {
-    #[allow(clippy::match_same_arms)]
     pub fn stable_tag(self) -> (tag: u16)
         ensures
             tag == completion_disposition_stable_tag_spec(self),
@@ -1473,7 +1472,12 @@ impl RawExecutionOutcomeRejection {
     }
 }
 
-#[allow(clippy::result_large_err)]
+// A rejection retains the exact owned outcome so callers can persist or replay rejected evidence.
+// Boxing would add a mandatory error-path allocation without reducing the retained information.
+#[expect(
+    clippy::result_large_err,
+    reason = "rejections retain the exact owned outcome for deterministic replay"
+)]
 pub fn validate_raw_execution_outcome(
     outcome: RawExecutionOutcome,
     limits: RawExecutionOutcomeLimits,

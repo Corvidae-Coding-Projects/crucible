@@ -136,12 +136,12 @@ pub struct AuditSummary {
     pub source_files: usize,
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_identifier_start(byte: u8) -> bool {
     (byte >= b'a' && byte <= b'z') || (byte >= b'A' && byte <= b'Z') || byte == b'_'
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn is_identifier_continue(byte: u8) -> bool {
     is_identifier_start(byte) || (byte >= b'0' && byte <= b'9')
 }
@@ -627,7 +627,7 @@ pub fn parse_ledger(input: &[u8]) -> (result: Result<Vec<LedgerEntry>, AuditErro
     Ok(entries)
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn parse_bounded_usize(input: &[u8], start: usize, end: usize) -> (value: Option<usize>)
     requires
         start <= end,

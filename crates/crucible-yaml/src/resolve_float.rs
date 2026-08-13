@@ -1,4 +1,3 @@
-#![allow(clippy::vec_init_then_push)]
 //! Verified exact conversion of YAML 1.2.2 Core finite decimals.
 //!
 //! Coefficients and signed exponents use canonical little-endian decimal digits.  This preserves
@@ -6,7 +5,10 @@
 use crate::resolve::{
     classify_core_plain_scalar, CorePlainScalarClass, CoreScalarErrorKind, CoreScalarLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve::{CoreScalarLimitsView, CoreScalarRange};
 use vstd::prelude::*;
 
@@ -1370,8 +1372,7 @@ fn apply_signed_small_decimal(
     }
     let comparison = compare_decimal_magnitude_le(digits, delta_digits.as_slice());
     if comparison == 0 {
-        let mut zero = Vec::new();
-        zero.push(0);
+        let zero = vec![0];
         proof {
             reveal(apply_signed_small_decimal_spec);
             reveal(apply_signed_small_decimal_raw_spec);
@@ -1548,11 +1549,7 @@ pub fn convert_core_finite_float(input: &[u32], limits: CoreFiniteFloatLimits) -
             assert(exponent_start < exponent_end <= input.len());
             collect_range_digits(input, exponent_start, exponent_end)
         },
-        None => {
-            let mut zero = Vec::new();
-            zero.push(0);
-            zero
-        },
+        None => { vec![0] },
     };
     let ghost exponent_be_model = match exponent {
         Some(range) => decimal_range_digits_spec(input@, range),
@@ -1575,9 +1572,7 @@ pub fn convert_core_finite_float(input: &[u32], limits: CoreFiniteFloatLimits) -
     }
     let coefficient_is_zero = coefficient_digits_le.len() == 1 && coefficient_digits_le[0] == 0;
     let (normalized_exponent_negative, normalized_exponent_digits_le) = if coefficient_is_zero {
-        let mut zero = Vec::new();
-        zero.push(0);
-        (false, zero)
+        (false, vec![0])
     } else {
         let delta_negative = fraction_len > trailing_zeros as u64;
         let delta = if delta_negative {

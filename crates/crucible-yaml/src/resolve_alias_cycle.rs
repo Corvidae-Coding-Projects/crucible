@@ -5,39 +5,69 @@
 //! the graph is acyclic. The executable machine rejects the first nondecreasing alias edge before
 //! caller traversal caps, then builds exact per-node depths and an explicit deepest-path stack.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::CstSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::CstSourceView;
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve_anchor::AnchorAliasLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_anchor::AnchorAliasLimitsView;
 use crate::resolve_node_table::{
     SemanticAliasRedirect, SemanticNodeKind, SemanticNodeTableError, SemanticNodeTableErrorKind,
     SemanticNodeTableLimits, SemanticNodeTableSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_node_table::{
     SemanticAliasRedirectView, SemanticNodeTableLimitsView, SemanticNodeTableSourceView,
 };
 use crate::resolve_scalar_table::SemanticScalarTableLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_table::SemanticScalarTableLimitsView;
 use crate::resolve_topology::SemanticTopologyLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_topology::SemanticTopologyLimitsView;
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -668,7 +698,7 @@ fn semantic_node_neighbor_count(table: &SemanticNodeTableSource, node_index: usi
     count
 }
 
-#[allow(clippy::manual_is_multiple_of)]  // `% 2` mirrors the pure key/value ordinal model.
+#[expect(clippy::manual_is_multiple_of, reason = "modulo spelling mirrors the verified key-value ordinal model")]  // `% 2` mirrors the pure key/value ordinal model.
 fn semantic_node_neighbor(
     table: &SemanticNodeTableSource,
     node_index: usize,
@@ -736,7 +766,6 @@ struct SemanticChildDepth {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
 pub struct SemanticChildDepthView {
     pub depth: nat,
     pub child_node_index: Option<u64>,
@@ -1164,7 +1193,6 @@ pub closed spec fn semantic_depth_table_tail_spec(
     }
 }
 
-#[allow(clippy::question_mark)]  // Explicit branch preserves the mapped pure Result proof.
 fn semantic_depth_node_step(
     table: &SemanticNodeTableSource,
     build: &SemanticDepthBuild,
@@ -1191,10 +1219,7 @@ fn semantic_depth_node_step(
             Err(_) => true,
         },
 {
-    let child = match semantic_child_depth(table, build.node_depths.as_slice(), node_index) {
-        Err(error) => return Err(error),
-        Ok(child) => child,
-    };
+    let child = semantic_child_depth(table, build.node_depths.as_slice(), node_index)?;
     if child.depth == u64::MAX {
         return Err(
             AliasCycleError::at(
@@ -1677,7 +1702,7 @@ pub proof fn lemma_acyclic_semantic_graph_well_formed_authenticates_exact_result
     reveal(acyclic_semantic_graph_source_well_formed_spec);
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 pub fn resolve_profile1_alias_cycles(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

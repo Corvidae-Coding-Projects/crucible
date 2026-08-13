@@ -1,5 +1,3 @@
-#![allow(clippy::question_mark)]
-
 use crate::artifact::ArtifactRef;
 use crate::execution::{
     canonical_raw_execution_outcome_limits, validate_raw_execution_outcome, CompletionDisposition,
@@ -389,7 +387,7 @@ impl RawExecutionOutcomeCodecRejection {
     }
 }
 
-fn push_encoded_byte(output: &mut Vec<u8>, byte: u8, limit: u64) -> (accepted: bool)
+pub(crate) fn push_encoded_byte(output: &mut Vec<u8>, byte: u8, limit: u64) -> (accepted: bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -406,7 +404,8 @@ fn push_encoded_byte(output: &mut Vec<u8>, byte: u8, limit: u64) -> (accepted: b
     }
 }
 
-fn append_encoded_bytes(output: &mut Vec<u8>, bytes: &[u8], limit: u64) -> (accepted: bool)
+pub(crate) fn append_encoded_bytes(output: &mut Vec<u8>, bytes: &[u8], limit: u64) -> (accepted:
+    bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -432,7 +431,7 @@ fn append_encoded_bytes(output: &mut Vec<u8>, bytes: &[u8], limit: u64) -> (acce
     true
 }
 
-fn append_u16(output: &mut Vec<u8>, value: u16, limit: u64) -> (accepted: bool)
+pub(crate) fn append_u16(output: &mut Vec<u8>, value: u16, limit: u64) -> (accepted: bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -446,7 +445,7 @@ fn append_u16(output: &mut Vec<u8>, value: u16, limit: u64) -> (accepted: bool)
     )
 }
 
-fn append_u32(output: &mut Vec<u8>, value: u32, limit: u64) -> (accepted: bool)
+pub(crate) fn append_u32(output: &mut Vec<u8>, value: u32, limit: u64) -> (accepted: bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -464,7 +463,7 @@ fn append_u32(output: &mut Vec<u8>, value: u32, limit: u64) -> (accepted: bool)
     )
 }
 
-fn append_u64(output: &mut Vec<u8>, value: u64, limit: u64) -> (accepted: bool)
+pub(crate) fn append_u64(output: &mut Vec<u8>, value: u64, limit: u64) -> (accepted: bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -490,7 +489,7 @@ fn append_u64(output: &mut Vec<u8>, value: u64, limit: u64) -> (accepted: bool)
     )
 }
 
-fn append_string(output: &mut Vec<u8>, value: &str, limit: u64) -> (accepted: bool)
+pub(crate) fn append_string(output: &mut Vec<u8>, value: &str, limit: u64) -> (accepted: bool)
     requires
         old(output)@.len() <= limit,
         limit <= MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
@@ -501,7 +500,7 @@ fn append_string(output: &mut Vec<u8>, value: &str, limit: u64) -> (accepted: bo
     append_u64(output, bytes.len() as u64, limit) && append_encoded_bytes(output, bytes, limit)
 }
 
-fn encode_extension(
+pub(crate) fn encode_extension(
     output: &mut Vec<u8>,
     extension: &VersionedExtensionRef,
     limit: u64,
@@ -599,8 +598,8 @@ fn encode_event(output: &mut Vec<u8>, event: &RawExecutionEvent, limit: u64) -> 
     }
 }
 
-pub fn encode_raw_execution_outcome(
-    outcome: &ValidatedRawExecutionOutcome,
+pub(crate) fn encode_raw_execution_outcome_value(
+    value: &RawExecutionOutcome,
     requested_limit: u64,
 ) -> (result: Result<Vec<u8>, RawExecutionOutcomeCodecError>)
     ensures
@@ -614,7 +613,6 @@ pub fn encode_raw_execution_outcome(
 {
     let limit = effective_raw_execution_encoded_limit(requested_limit);
     let mut output = Vec::new();
-    let value = outcome.outcome();
     let accepted = push_encoded_byte(&mut output, RAW_EXECUTION_OUTCOME_MAGIC_0, limit)
         && push_encoded_byte(&mut output, RAW_EXECUTION_OUTCOME_MAGIC_1, limit)
         && push_encoded_byte(&mut output, RAW_EXECUTION_OUTCOME_MAGIC_2, limit)
@@ -668,6 +666,22 @@ pub fn encode_raw_execution_outcome(
     Ok(output)
 }
 
+pub fn encode_raw_execution_outcome(
+    outcome: &ValidatedRawExecutionOutcome,
+    requested_limit: u64,
+) -> (result: Result<Vec<u8>, RawExecutionOutcomeCodecError>)
+    ensures
+        match &result {
+            Ok(encoded) => encoded@.len() <= effective_raw_execution_encoded_limit_spec(
+                requested_limit,
+            ),
+            Err(error) => error@.kind
+                == RawExecutionOutcomeCodecErrorKind::EncodedByteLimitExceeded,
+        },
+{
+    encode_raw_execution_outcome_value(outcome.outcome(), requested_limit)
+}
+
 fn truncated(bytes: &[u8], event_index: Option<u64>) -> (error: RawExecutionOutcomeCodecError)
     ensures
         error@.kind == RawExecutionOutcomeCodecErrorKind::Truncated,
@@ -681,7 +695,7 @@ fn truncated(bytes: &[u8], event_index: Option<u64>) -> (error: RawExecutionOutc
     )
 }
 
-fn read_u8(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result: Result<
+pub(crate) fn read_u8(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result: Result<
     u8,
     RawExecutionOutcomeCodecError,
 >)
@@ -700,10 +714,8 @@ fn read_u8(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result
     }
 }
 
-fn read_u16(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result: Result<
-    u16,
-    RawExecutionOutcomeCodecError,
->)
+pub(crate) fn read_u16(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result:
+    Result<u16, RawExecutionOutcomeCodecError>)
     requires
         *old(index) <= bytes@.len(),
     ensures
@@ -719,10 +731,8 @@ fn read_u16(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (resul
     Ok(value)
 }
 
-fn read_u32(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result: Result<
-    u32,
-    RawExecutionOutcomeCodecError,
->)
+pub(crate) fn read_u32(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result:
+    Result<u32, RawExecutionOutcomeCodecError>)
     requires
         *old(index) <= bytes@.len(),
     ensures
@@ -739,10 +749,8 @@ fn read_u32(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (resul
     Ok(value)
 }
 
-fn read_u64(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result: Result<
-    u64,
-    RawExecutionOutcomeCodecError,
->)
+pub(crate) fn read_u64(bytes: &[u8], index: &mut usize, event_index: Option<u64>) -> (result:
+    Result<u64, RawExecutionOutcomeCodecError>)
     requires
         *old(index) <= bytes@.len(),
     ensures
@@ -778,7 +786,7 @@ fn host_decode_utf8_range(bytes: &[u8], start: usize, end: usize) -> (result: Re
     }
 }
 
-fn read_string(
+pub(crate) fn read_string(
     bytes: &[u8],
     index: &mut usize,
     max_bytes: u64,
@@ -793,10 +801,7 @@ fn read_string(
         *final(index) <= bytes@.len(),
 {
     let length_offset = *index;
-    let length = match read_u64(bytes, index, event_index) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let length = read_u64(bytes, index, event_index)?;
     if length > max_bytes {
         return match code_point_limit {
             Some(first_excluded) => Err(
@@ -861,17 +866,14 @@ fn decode_extension(
 {
     let namespace_length_offset = *index;
     let namespace_remaining = namespace_limit - usage.namespace_code_points;
-    let namespace = match read_string(
+    let namespace = read_string(
         bytes,
         index,
         namespace_remaining * 4,
         RawExecutionOutcomeCodecErrorKind::DeclaredNamespaceLimitExceeded,
         event_index,
         Some(namespace_remaining),
-    ) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    )?;
     let namespace_code_points = namespace.as_str().unicode_len() as u64;
     if namespace_code_points > namespace_remaining {
         return Err(
@@ -884,15 +886,9 @@ fn decode_extension(
         );
     }
     usage.namespace_code_points += namespace_code_points;
-    let schema_version = match read_u32(bytes, index, event_index) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let schema_version = read_u32(bytes, index, event_index)?;
     let payload_offset = *index;
-    let size_bytes = match read_u64(bytes, index, event_index) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let size_bytes = read_u64(bytes, index, event_index)?;
     if size_bytes > payload_limit {
         return Err(
             RawExecutionOutcomeCodecError::new(
@@ -902,38 +898,29 @@ fn decode_extension(
             ),
         );
     }
-    let artifact_id = match read_string(
+    let artifact_id = read_string(
         bytes,
         index,
         MAX_ENCODED_ARTIFACT_ID_BYTES,
         RawExecutionOutcomeCodecErrorKind::StringLengthLimitExceeded,
         event_index,
         None,
-    ) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    )?;
     let option_offset = *index;
-    let media_option = match read_u8(bytes, index, event_index) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let media_option = read_u8(bytes, index, event_index)?;
     let media_type = if media_option == 0 {
         None
     } else if media_option == 1 {
         let media_length_offset = *index;
         let media_remaining = media_type_limit - usage.media_type_code_points;
-        let media = match read_string(
+        let media = read_string(
             bytes,
             index,
             media_remaining * 4,
             RawExecutionOutcomeCodecErrorKind::DeclaredMediaTypeLimitExceeded,
             event_index,
             Some(media_remaining),
-        ) {
-            Ok(value) => value,
-            Err(error) => return Err(error),
-        };
+        )?;
         let media_code_points = media.as_str().unicode_len() as u64;
         if media_code_points > media_remaining {
             return Err(
@@ -1070,20 +1057,14 @@ fn decode_termination(
         final(usage).media_type_code_points <= media_type_limit,
 {
     let tag_offset = *index;
-    let tag = match read_u16(bytes, index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let tag = read_u16(bytes, index, None)?;
     match tag {
         1 => match read_u64(bytes, index, None) {
             Ok(value) => Ok(TerminationRecord::ExitCode { code: value as i64 }),
             Err(error) => Err(error),
         },
         2 => {
-            let signal = match read_u32(bytes, index, None) {
-                Ok(value) => value as i32,
-                Err(error) => return Err(error),
-            };
+            let signal = read_u32(bytes, index, None)? as i32;
             let bool_offset = *index;
             let core_dumped = match read_u8(bytes, index, None) {
                 Ok(0) => false,
@@ -1105,10 +1086,7 @@ fn decode_termination(
         },
         4 => {
             let cause_offset = *index;
-            let cause_tag = match read_u16(bytes, index, None) {
-                Ok(value) => value,
-                Err(error) => return Err(error),
-            };
+            let cause_tag = read_u16(bytes, index, None)?;
             match decode_reset_cause(cause_tag, cause_offset as u64) {
                 Ok(cause) => Ok(TerminationRecord::EmbeddedReset { cause }),
                 Err(error) => Err(error),
@@ -1116,10 +1094,7 @@ fn decode_termination(
         },
         5 => {
             let reason_offset = *index;
-            let reason_tag = match read_u16(bytes, index, None) {
-                Ok(value) => value,
-                Err(error) => return Err(error),
-            };
+            let reason_tag = read_u16(bytes, index, None)?;
             match decode_harness_reason(reason_tag, reason_offset as u64) {
                 Ok(reason) => Ok(TerminationRecord::HarnessTerminated { reason }),
                 Err(error) => Err(error),
@@ -1170,18 +1145,12 @@ fn decode_event(
 {
     let location = Some(event_index);
     let tag_offset = *index;
-    let tag = match read_u16(bytes, index, location) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let tag = read_u16(bytes, index, location)?;
     match tag {
         1 => Ok(RawExecutionEvent::TimeoutThresholdReached),
         2 => {
             let resource_offset = *index;
-            let resource_tag = match read_u16(bytes, index, location) {
-                Ok(value) => value,
-                Err(error) => return Err(error),
-            };
+            let resource_tag = read_u16(bytes, index, location)?;
             match decode_resource_kind(resource_tag, resource_offset as u64, event_index) {
                 Ok(resource) => Ok(RawExecutionEvent::ResourceThresholdReached { resource }),
                 Err(error) => Err(error),
@@ -1192,10 +1161,7 @@ fn decode_event(
         5 => Ok(RawExecutionEvent::WatchdogTriggered),
         6 | 7 => {
             let id_offset = *index;
-            let value = match read_u64(bytes, index, location) {
-                Ok(value) => value,
-                Err(error) => return Err(error),
-            };
+            let value = read_u64(bytes, index, location)?;
             let logical_process = match LogicalProcessId::new(value) {
                 Ok(id) => id,
                 Err(_) => return Err(
@@ -1266,22 +1232,10 @@ fn decode_raw_execution_outcome_body(
     };
     let mut index = 0usize;
     let magic_offset = index;
-    let magic_0 = match read_u8(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
-    let magic_1 = match read_u8(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
-    let magic_2 = match read_u8(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
-    let magic_3 = match read_u8(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let magic_0 = read_u8(bytes, &mut index, None)?;
+    let magic_1 = read_u8(bytes, &mut index, None)?;
+    let magic_2 = read_u8(bytes, &mut index, None)?;
+    let magic_3 = read_u8(bytes, &mut index, None)?;
     if magic_0 != RAW_EXECUTION_OUTCOME_MAGIC_0 || magic_1 != RAW_EXECUTION_OUTCOME_MAGIC_1
         || magic_2 != RAW_EXECUTION_OUTCOME_MAGIC_2 || magic_3 != RAW_EXECUTION_OUTCOME_MAGIC_3 {
         return Err(
@@ -1293,10 +1247,7 @@ fn decode_raw_execution_outcome_body(
         );
     }
     let schema_offset = index;
-    let schema_version = match read_u16(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let schema_version = read_u16(bytes, &mut index, None)?;
     if schema_version != RAW_EXECUTION_OUTCOME_SCHEMA_VERSION {
         return Err(
             RawExecutionOutcomeCodecError::new(
@@ -1307,19 +1258,10 @@ fn decode_raw_execution_outcome_body(
         );
     }
     let completion_offset = index;
-    let completion_tag = match read_u16(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
-    let completion = match decode_completion(completion_tag, completion_offset as u64) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let completion_tag = read_u16(bytes, &mut index, None)?;
+    let completion = decode_completion(completion_tag, completion_offset as u64)?;
     let count_offset = index;
-    let event_count = match read_u64(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let event_count = read_u64(bytes, &mut index, None)?;
     if event_count > event_limit {
         return Err(
             RawExecutionOutcomeCodecError::new(
@@ -1331,24 +1273,20 @@ fn decode_raw_execution_outcome_body(
     }
     let mut usage = DecodedMetadataUsage { namespace_code_points: 0, media_type_code_points: 0 };
     let option_offset = index;
-    let termination_option = match read_u8(bytes, &mut index, None) {
-        Ok(value) => value,
-        Err(error) => return Err(error),
-    };
+    let termination_option = read_u8(bytes, &mut index, None)?;
     let termination = if termination_option == 0 {
         None
     } else if termination_option == 1 {
-        match decode_termination(
-            bytes,
-            &mut index,
-            namespace_limit,
-            media_type_limit,
-            payload_limit,
-            &mut usage,
-        ) {
-            Ok(value) => Some(value),
-            Err(error) => return Err(error),
-        }
+        Some(
+            decode_termination(
+                bytes,
+                &mut index,
+                namespace_limit,
+                media_type_limit,
+                payload_limit,
+                &mut usage,
+            )?,
+        )
     } else {
         return Err(
             RawExecutionOutcomeCodecError::new(
@@ -1373,7 +1311,7 @@ fn decode_raw_execution_outcome_body(
             usage.media_type_code_points <= media_type_limit,
         decreases event_count - event_index,
     {
-        let event = match decode_event(
+        let event = decode_event(
             bytes,
             &mut index,
             event_index,
@@ -1381,10 +1319,7 @@ fn decode_raw_execution_outcome_body(
             media_type_limit,
             payload_limit,
             &mut usage,
-        ) {
-            Ok(value) => value,
-            Err(error) => return Err(error),
-        };
+        )?;
         events.push(event);
         event_index += 1;
     }

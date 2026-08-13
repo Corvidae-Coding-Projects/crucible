@@ -1,15 +1,17 @@
-#![allow(clippy::result_large_err)]
+#![expect(
+    clippy::result_large_err,
+    reason = "proof wrapper retains the exact rejected input required by the public contract"
+)]
 
 use crucible_core::{
     validate_raw_execution_outcome, RawExecutionOutcome, RawExecutionOutcomeLimits,
     RawExecutionOutcomeRejection, ValidatedRawExecutionOutcome,
 };
-#[allow(unused_imports)]
 use vstd::prelude::*;
 
 verus! {
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_validation_has_the_exact_total_pure_result(
     outcome: RawExecutionOutcome,
     limits: RawExecutionOutcomeLimits,

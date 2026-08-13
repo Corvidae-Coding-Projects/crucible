@@ -164,7 +164,7 @@ pub open spec fn core_digit_for_base_spec(code_point: u32, base: CoreIntegerBase
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn core_digit_for_base(code_point: u32, base: CoreIntegerBase) -> (digit: bool)
     ensures
         digit == core_digit_for_base_spec(code_point, base),

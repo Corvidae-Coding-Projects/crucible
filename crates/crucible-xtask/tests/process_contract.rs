@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "Verus requires the prelude crate marker even when this Rust test names no vstd item"
+)]
 use vstd::prelude::*;
 
 fn workspace_root() -> PathBuf {

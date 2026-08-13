@@ -1,10 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
-use crucible_yaml::{
-    atomize_profile1, decode_profile1, AtomizeErrorKind, AtomizeLimits, BomPolicy, DecodeLimits,
-    LexicalAtomKind, YamlIndicator,
-};
+use crucible_yaml::{atomize_profile1, decode_profile1, AtomizeLimits, BomPolicy, DecodeLimits};
+#[expect(
+    unused_imports,
+    reason = "these variants are referenced only inside Verus proof code"
+)]
+use crucible_yaml::{AtomizeErrorKind, LexicalAtomKind, YamlIndicator};
 use vstd::prelude::*;
 
 verus! {

@@ -1,5 +1,3 @@
-#![allow(unused_imports)]
-
 use vstd::prelude::*;
 
 verus! {

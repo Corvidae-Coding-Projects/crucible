@@ -1,13 +1,3 @@
-// The executable parser deliberately spells these operations out so each branch
-// remains visible to the mirrored Verus specification and its proof state.
-#![allow(clippy::implicit_saturating_add)]
-#![allow(clippy::implicit_saturating_sub)]
-#![allow(clippy::len_zero)]
-#![allow(clippy::needless_lifetimes)]
-#![allow(clippy::question_mark)]
-#![allow(clippy::too_many_arguments)]
-#![allow(clippy::vec_init_then_push)]
-
 use vstd::prelude::*;
 
 use crate::atom::{AtomizedSource, LexicalAtom};
@@ -2936,8 +2926,8 @@ fn cst_documents_and_warnings_are_ordered(
         assert(node_views.len() == nodes.len());
         assert(warning_views.len() == warnings.len());
     }
-    if documents.len() == 0 {
-        if nodes.len() != 0 {
+    if documents.is_empty() {
+        if !nodes.is_empty() {
             proof {
                 reveal(cst_documents_and_warnings_ordered_spec);
             }
@@ -3000,7 +2990,7 @@ fn cst_documents_and_warnings_are_ordered(
             ));
         }
     } else {
-        if nodes.len() == 0 {
+        if nodes.is_empty() {
             proof {
                 reveal(cst_documents_and_warnings_ordered_spec);
             }
@@ -5254,8 +5244,8 @@ pub open spec fn cst_part_of_kind_spec(
     cst_part_of_kind_from_spec(token.parts, 0, kind, token.parts.len() as nat + 1)
 }
 
-fn part_of_kind<'a>(token: &'a CompletedToken, kind: CompletedTokenPartKind) -> (result: Option<
-    &'a CompletedTokenPart,
+fn part_of_kind(token: &CompletedToken, kind: CompletedTokenPartKind) -> (result: Option<
+    &CompletedTokenPart,
 >)
     ensures
         match result {
@@ -6361,6 +6351,8 @@ pub open spec fn cst_single_pair_mapping_spec(
     }
 }
 
+// Each token boundary and indicator is an independent proof input to the exact mapping spec.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn single_pair_mapping(
     tokens: &[CompletedToken],
     key: u64,
@@ -7780,6 +7772,8 @@ pub open spec fn cst_specialize_parse_task_spec(
     }
 }
 
+// The transition names every parse-state coordinate so its executable and pure forms stay aligned.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn specialize_parse_task(
     task: ParseTask,
     kind: ParseTaskKind,
@@ -8245,7 +8239,7 @@ fn claim_flow_entry_tokens(
     Ok(())
 }
 
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn finish_iterative_sequence(
     tokens: &[CompletedToken],
     task: ParseTask,
@@ -8674,7 +8668,7 @@ fn push_iterative_mapping_entries(
     Ok(())
 }
 
-#[allow(clippy::manual_map)]
+#[expect(clippy::manual_map, reason = "explicit branches preserve per-variant Verus postconditions without closure proof state")]
 fn finish_iterative_mapping(
     tokens: &[CompletedToken],
     task: ParseTask,
@@ -8926,9 +8920,8 @@ fn initial_parse_tasks(
         cst_parse_task_stack_is_valid_spec(cst_parse_task_views_spec(tasks@)),
 {
     let task = node_task(start, end, allow_block_mapping, depth_left);
-    let mut tasks = Vec::new();
-    let ghost old_tasks = tasks@;
-    tasks.push(task);
+    let ghost old_tasks: Seq<ParseTask> = Seq::empty();
+    let tasks = vec![task];
     proof {
         lemma_cst_parse_task_views_push(old_tasks, task);
         reveal(cst_parse_task_views_spec);
@@ -9120,7 +9113,7 @@ fn finish_parse_node(
             Err(error) => Err(error@),
         },
 {
-    if tasks.len() != 0 || start > end {
+    if !tasks.is_empty() || start > end {
         proof {
             reveal(cst_parse_task_views_spec);
             reveal(cst_completed_node_view_spec);
@@ -13951,7 +13944,7 @@ fn step_block_sequence_state_zero(
         false
     };
     if !entry_at_indentation {
-        if task.pending_sequence.len() == 0 {
+        if task.pending_sequence.is_empty() {
             let offset = byte_at(tokens, task.opener, builder.source_len_bytes);
             let error = CstError::at(CstErrorKind::UnexpectedToken, offset);
             proof {
@@ -14308,7 +14301,7 @@ fn step_block_mapping_state_zero(
     let at_indentation = task.cursor < task.end && token_column(atoms, &tokens[task.cursor])
         == task.indentation;
     if !at_indentation {
-        if task.pending_mapping.len() == 0 {
+        if task.pending_mapping.is_empty() {
             let offset = byte_at(tokens, task.opener, builder.source_len_bytes);
             let error = CstError::at(CstErrorKind::UnexpectedToken, offset);
             proof {
@@ -14368,7 +14361,7 @@ fn step_block_mapping_state_zero(
     };
     if colon.is_none() {
         if !task.explicit_key {
-            if task.pending_mapping.len() == 0 {
+            if task.pending_mapping.is_empty() {
                 let offset = byte_at(tokens, task.cursor, builder.source_len_bytes);
                 let error = CstError::at(CstErrorKind::UnexpectedToken, offset);
                 proof {
@@ -15151,6 +15144,9 @@ fn step_block_mapping_state_two(
 }
 
 #[verifier::rlimit(800)]
+// Ghost snapshots are explicit proof witnesses; bundling them with mutable state would weaken the
+// old/final-state correspondence in this transition contract.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn dispatch_parse_task(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -15467,6 +15463,8 @@ fn dispatch_parse_task(
 }
 
 #[verifier::rlimit(600)]
+// Source bounds, depth, and the ghost builder snapshot are independent contract inputs.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn parse_node_iterative(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -15560,7 +15558,7 @@ fn parse_node_iterative(
             ),
         decreases machine.fuel,
     {
-        if machine.tasks.len() == 0 {
+        if machine.tasks.is_empty() {
             let result = machine_finish(&machine, start, end, working_builder.nodes.len() as u64);
             match result {
                 Ok(parsed) => {
@@ -15732,6 +15730,8 @@ fn parse_node_iterative(
     }
 }
 
+// Every authenticated upstream phase is deliberately supplied separately at the public boundary.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 pub fn parse_profile1_cst(
     atomized: &AtomizedSource,
     layout: &LayoutSource,
@@ -15891,16 +15891,12 @@ pub fn parse_profile1_cst(
             }
             directive_fuel -= 1;
             assert(syntax < tokens.len());
-            if let Err(error) = builder.record_directive(tokens[syntax].byte_start()) {
-                return Err(error);
-            }
-            if let Err(error) = builder.claim_syntax_token(
+            builder.record_directive(tokens[syntax].byte_start())?;
+            builder.claim_syntax_token(
                 syntax as u64,
                 CstSyntaxOwnerKind::Directive,
                 builder.documents.len() as u64,
-            ) {
-                return Err(error);
-            }
+            )?;
             saw_directive = true;
             let kind = tokens[syntax].kind();
             if kind == CompletedTokenKind::YamlDirective {
@@ -15931,10 +15927,7 @@ pub fn parse_profile1_cst(
                             token_index: syntax as u64,
                             byte_offset: tokens[syntax].byte_start(),
                         };
-                        match builder.push_warning(warning) {
-                            Ok(()) => {},
-                            Err(error) => return Err(error),
-                        }
+                        builder.push_warning(warning)?;
                     } else if minor > 2 {
                         let warning = CstWarning {
                             kind: CstWarningKind::FutureMinorVersion,
@@ -15942,10 +15935,7 @@ pub fn parse_profile1_cst(
                             token_index: syntax as u64,
                             byte_offset: tokens[syntax].byte_start(),
                         };
-                        match builder.push_warning(warning) {
-                            Ok(()) => {},
-                            Err(error) => return Err(error),
-                        }
+                        builder.push_warning(warning)?;
                     }
                 }
             } else if kind == CompletedTokenKind::TagDirective {
@@ -15985,10 +15975,7 @@ pub fn parse_profile1_cst(
                     token_index: syntax as u64,
                     byte_offset: tokens[syntax].byte_start(),
                 };
-                match builder.push_warning(warning) {
-                    Ok(()) => {},
-                    Err(error) => return Err(error),
-                }
+                builder.push_warning(warning)?;
             }
             syntax = skip_trivia(tokens, syntax + 1, tokens.len());
         }
@@ -15997,13 +15984,11 @@ pub fn parse_profile1_cst(
         let explicit_start_token = if syntax < tokens.len() && tokens[syntax].kind()
             == CompletedTokenKind::DirectivesEnd {
             let marker = syntax;
-            if let Err(error) = builder.claim_syntax_token(
+            builder.claim_syntax_token(
                 marker as u64,
                 CstSyntaxOwnerKind::DocumentStartMarker,
                 builder.documents.len() as u64,
-            ) {
-                return Err(error);
-            }
+            )?;
             syntax = skip_trivia(tokens, syntax + 1, tokens.len());
             Some(marker as u64)
         } else {
@@ -16042,13 +16027,10 @@ pub fn parse_profile1_cst(
             );
         }
         let root = if skip_trivia(tokens, content_start, boundary) >= boundary {
-            match empty_node(&mut builder, tokens, boundary) {
-                Ok(node) => node,
-                Err(error) => return Err(error),
-            }
+            empty_node(&mut builder, tokens, boundary)?
         } else {
             let ghost builder_view = builder@;
-            let (next_builder, parsed) = match parse_node_iterative(
+            let (next_builder, parsed) = parse_node_iterative(
                 atoms,
                 tokens,
                 content_start,
@@ -16057,10 +16039,7 @@ pub fn parse_profile1_cst(
                 depth_limit,
                 Ghost(builder_view),
                 builder,
-            ) {
-                Ok(result) => result,
-                Err(error) => return Err(error),
-            };
+            )?;
             builder = next_builder;
             let remaining = skip_trivia(tokens, parsed.next_token, boundary);
             if remaining != boundary {
@@ -16080,13 +16059,11 @@ pub fn parse_profile1_cst(
         }
         let explicit_end_token = if boundary < tokens.len() && tokens[boundary].kind()
             == CompletedTokenKind::DocumentEnd {
-            if let Err(error) = builder.claim_syntax_token(
+            builder.claim_syntax_token(
                 boundary as u64,
                 CstSyntaxOwnerKind::DocumentEndMarker,
                 builder.documents.len() as u64,
-            ) {
-                return Err(error);
-            }
+            )?;
             Some(boundary as u64)
         } else {
             None

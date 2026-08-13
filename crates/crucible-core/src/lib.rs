@@ -15,6 +15,8 @@ use vstd::prelude::*;
 pub mod artifact;
 pub mod execution;
 pub mod execution_codec;
+pub mod observation;
+pub mod observation_codec;
 pub mod provenance;
 
 pub use artifact::{
@@ -37,6 +39,20 @@ pub use execution_codec::{
     encode_raw_execution_outcome, RawExecutionOutcomeCodecError, RawExecutionOutcomeCodecErrorKind,
     RawExecutionOutcomeCodecLimits, RawExecutionOutcomeCodecRejection,
     MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
+};
+pub use observation::{
+    canonical_raw_observation_limits, validate_raw_observation, CapturedStreamRef, CoverageRef,
+    FaultTrace, RawObservation, RawObservationError, RawObservationErrorKind,
+    RawObservationErrorView, RawObservationLimits, RawObservationLocation, RawObservationRejection,
+    RecordedDuration, RecordedDurationError, ResourceSnapshot, ScheduleTrace, StateDigest,
+    ValidatedRawObservation, MAX_RAW_OBSERVATION_EXTENSIONS,
+    MAX_RAW_OBSERVATION_IDENTITY_CODE_POINTS, MAX_RAW_OBSERVATION_RESOURCE_EXTENSIONS,
+    RAW_OBSERVATION_SCHEMA_VERSION,
+};
+pub use observation_codec::{
+    canonical_raw_observation_codec_limits, decode_raw_observation, encode_raw_observation,
+    RawObservationCodecError, RawObservationCodecErrorKind, RawObservationCodecLimits,
+    RawObservationCodecRejection, MAX_RAW_OBSERVATION_ENCODED_BYTES,
 };
 pub use provenance::{
     ActorIdentity, ActorKind, EvidenceEnvelope, EvidenceEnvelopeError, EvidenceField,
@@ -65,6 +81,7 @@ pub enum IdKind {
     Artifact,
     Evidence,
     ProofArtifact,
+    CoverageProvider,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,7 +101,10 @@ pub open spec fn same_id_kind_spec(left: IdKind, right: IdKind) -> bool {
     left == right
 }
 
-#[allow(clippy::match_like_matches_macro)]
+#[expect(
+    clippy::match_like_matches_macro,
+    reason = "the exhaustive match is the executable witness Verus relates to spec equality"
+)]
 pub fn same_id_kind(left: IdKind, right: IdKind) -> (same: bool)
     ensures
         same == same_id_kind_spec(left, right),
@@ -105,7 +125,8 @@ pub fn same_id_kind(left: IdKind, right: IdKind) -> (same: bool)
         | (IdKind::Engine, IdKind::Engine)
         | (IdKind::Artifact, IdKind::Artifact)
         | (IdKind::Evidence, IdKind::Evidence)
-        | (IdKind::ProofArtifact, IdKind::ProofArtifact) => true,
+        | (IdKind::ProofArtifact, IdKind::ProofArtifact)
+        | (IdKind::CoverageProvider, IdKind::CoverageProvider) => true,
         _ => false,
     }
 }
@@ -221,6 +242,7 @@ define_text_id!(EngineId, IdKind::Engine);
 define_text_id!(ArtifactId, IdKind::Artifact);
 define_text_id!(EvidenceId, IdKind::Evidence);
 define_text_id!(ProofArtifactId, IdKind::ProofArtifact);
+define_text_id!(CoverageProviderId, IdKind::CoverageProvider);
 
 #[cfg(test)]
 mod artifact_runtime_tests;

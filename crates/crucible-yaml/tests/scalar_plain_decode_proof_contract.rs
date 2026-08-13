@@ -1,5 +1,7 @@
-#![allow(unused_imports)]
-
+#[expect(
+    unused_imports,
+    reason = "the origin variants are referenced only inside Verus proof code"
+)]
 use crucible_yaml::DecodedContentOrigin;
 use vstd::prelude::*;
 

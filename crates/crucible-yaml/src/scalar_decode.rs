@@ -6,18 +6,30 @@
 //! folding. Plain scalars apply that same verified flow folding directly to their authenticated
 //! presentation ranges. All five styles retain exact atom and byte provenance.
 use crate::atom::{AtomizedSource, LexicalAtom, LexicalAtomKind};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::block::{
     BlockScalarContentOrigin, BlockScalarContentScalar, BlockScalarSource, BlockScalarStyle,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::{BlockScalarContentScalarView, BlockScalarSourceView};
 use crate::plain::{PlainScalar, PlainScalarSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::{PlainScalarSourceView, PlainScalarView};
 use crate::quoted::{QuotedScalar, QuotedScalarSource, QuotedScalarStyle};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::{QuotedScalarSourceView, QuotedScalarView};
 use vstd::prelude::*;
 
@@ -2139,7 +2151,7 @@ fn simple_double_escape_value(code_point: u32) -> (value: Option<u32>)
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn scalar_hex_digit_value(code_point: u32) -> (value: Option<u32>)
     ensures
         value == scalar_hex_digit_value_spec(code_point),
@@ -2395,7 +2407,7 @@ fn decode_flow_break_content(atoms: &[LexicalAtom], breaks: &[usize], escaped: b
     content
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn decoded_double_quoted_step(
     atoms: &[LexicalAtom],
     index: usize,

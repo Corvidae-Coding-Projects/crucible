@@ -1,8 +1,10 @@
-#![allow(unused_imports)]
-
+#[expect(
+    unused_imports,
+    reason = "the error kind is referenced only inside Verus proof code"
+)]
+use crucible_yaml::CoreScalarErrorKind;
 use crucible_yaml::{
-    classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarErrorKind,
-    CoreScalarLimits, CoreScalarRange,
+    classify_core_plain_scalar, CorePlainScalarClass, CoreScalarLimits, CoreScalarRange,
 };
 use vstd::prelude::*;
 

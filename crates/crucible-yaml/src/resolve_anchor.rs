@@ -1,15 +1,24 @@
 //! Verified document-scoped YAML anchor and alias binding.
 use crate::atom::{AtomizedSource, LexicalAtom};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::cst::{CstDocument, CstSource, CstSyntaxOwner, CstSyntaxOwnerKind};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstDocumentView, CstSourceView, CstSyntaxOwnerView};
 use crate::token::{
     CompletedToken, CompletedTokenKind, CompletedTokenPart, CompletedTokenPartKind,
     CompletedTokenSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::{CompletedTokenPartView, CompletedTokenSourceView, CompletedTokenView};
 use vstd::prelude::*;
 
@@ -1162,7 +1171,7 @@ fn anchor_alias_part_valid(
     valid
 }
 
-#[allow(clippy::too_many_arguments)]  // The verified transition names every authenticated input.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // The verified transition names every authenticated input.
 fn process_anchor_alias_token(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -1392,7 +1401,7 @@ fn process_anchor_alias_token(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Keeps the loop contract explicit and independently reusable.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Keeps the loop contract explicit and independently reusable.
 fn scan_anchor_alias_document_tokens(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],
@@ -1524,7 +1533,7 @@ fn scan_anchor_alias_document_tokens(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the complete pure document-scan state.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the complete pure document-scan state.
 fn scan_anchor_alias_documents(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],

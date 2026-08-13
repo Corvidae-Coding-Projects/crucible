@@ -1,10 +1,9 @@
 use crucible_cli::{database_snapshot_is_exact, DatabaseSnapshot};
-#[allow(unused_imports)]
 use vstd::prelude::*;
 
 verus! {
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn exact_runtime_policy_matches_its_pure_model(snapshot: &DatabaseSnapshot) -> (exact: bool)
     ensures
         exact == crucible_cli::database_snapshot_is_exact_spec(snapshot@),

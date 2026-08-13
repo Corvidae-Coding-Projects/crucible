@@ -37,8 +37,13 @@ Current work establishes and extends:
   events as independent facts; enforce caller-lowered event, aggregate extension-metadata, and
   per-record payload limits; expose exact stable tags and semantic-validation proofs; and round-trip
   through a bounded canonical version-1 byte codec with typed malformed-input diagnostics and exact
-  rejection-byte preservation. `RawObservation`, stream/resource records, persistence, execution
-  controls, and target adapters remain on the breadth path;
+  rejection-byte preservation;
+- immutable raw observations retaining complete stream truncation accounting, portable resource
+  counters, typed coverage-provider identity, namespace-versioned state/schedule/fault artifacts,
+  and versioned extensions under independent caller-lowered limits, with full-field canonical
+  round trips and retained rejection bytes. The pure exact byte-to-value correspondence proof
+  remains depth work without reducing the required codec contract; SQLite observation persistence,
+  live bounded capture, execution controls, and target adapters remain on the breadth path;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - streaming and directory corpus ingestion, object reachability checking, generation barriers, and
   conservative garbage collection on top of the initial bounded local artifact path;

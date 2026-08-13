@@ -1,19 +1,27 @@
-#![allow(clippy::vec_init_then_push)]
 //! Verified explicit YAML tag-property resolution.
 //!
 //! YAML 1.2.2 tag percent escapes are identity-bearing presentation characters: they are
 //! validated by completed-token formation, retained verbatim here, and never UTF-8-decoded.
 use crate::atom::{AtomizedSource, LexicalAtom};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::cst::{CstDocument, CstNode, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstDocumentView, CstNodeView, CstSourceView};
 use crate::token::{
     CompletedToken, CompletedTokenKind, CompletedTokenPart, CompletedTokenPartKind,
     CompletedTokenSource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::{CompletedTokenPartView, CompletedTokenSourceView, CompletedTokenView};
 use vstd::prelude::*;
 
@@ -1331,7 +1339,10 @@ fn append_generated_tag_content(
     }
 }
 
-#[allow(clippy::vec_init_then_push)]  // Mirrors the exact constructed sequence in the Verus spec.
+#[expect(
+    clippy::vec_init_then_push,
+    reason = "stepwise construction mirrors the exact Verus sequence used by the tag proof"
+)]
 fn default_secondary_prefix() -> (code_points: Vec<u32>)
     ensures
         code_points@ == default_secondary_prefix_code_points_spec(),
@@ -1361,7 +1372,7 @@ fn default_secondary_prefix() -> (code_points: Vec<u32>)
     code_points
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn ascii_tag_scheme_first(code_point: u32) -> (valid: bool)
     ensures
         valid == ascii_tag_scheme_first_spec(code_point),
@@ -1369,7 +1380,7 @@ fn ascii_tag_scheme_first(code_point: u32) -> (valid: bool)
     (0x41 <= code_point && code_point <= 0x5a) || (0x61 <= code_point && code_point <= 0x7a)
 }
 
-#[allow(clippy::manual_range_contains)]  // Mirrors the arithmetic Verus specification directly.
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]  // Mirrors the arithmetic Verus specification directly.
 fn ascii_tag_scheme_continuation(code_point: u32) -> (valid: bool)
     ensures
         valid == ascii_tag_scheme_continuation_spec(code_point),
@@ -1579,6 +1590,10 @@ fn resolve_non_specific_tag(
     Ok(tag)
 }
 
+#[expect(
+    clippy::vec_init_then_push,
+    reason = "stepwise primary-prefix construction preserves the exact Verus sequence proof"
+)]
 fn resolve_explicit_tag_token(
     atoms: &[LexicalAtom],
     tokens: &[CompletedToken],

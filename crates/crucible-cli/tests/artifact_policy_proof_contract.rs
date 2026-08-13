@@ -3,12 +3,11 @@ use crucible_cli::{
     stored_artifact_is_exact, ObjectAddress, PreparedArtifactPublication, StoredArtifactSnapshot,
 };
 use crucible_core::{ArtifactId, ArtifactRef};
-#[allow(unused_imports)]
 use vstd::prelude::*;
 
 verus! {
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_publication_plan_has_the_pure_address(contents: &[u8]) -> (result: Result<
     PreparedArtifactPublication,
     crucible_cli::ArtifactStoreError,
@@ -28,7 +27,7 @@ fn executable_publication_plan_has_the_pure_address(contents: &[u8]) -> (result:
     prepare_artifact_publication(contents)
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_address_has_only_canonical_components(id: &ArtifactId) -> (result: Result<
     ObjectAddress,
     crucible_cli::ArtifactStoreError,
@@ -42,7 +41,7 @@ fn executable_address_has_only_canonical_components(id: &ArtifactId) -> (result:
     object_address_for_artifact(id)
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_address_matcher_has_exact_pure_meaning(
     id: &ArtifactId,
     address: &ObjectAddress,
@@ -53,7 +52,7 @@ fn executable_address_matcher_has_exact_pure_meaning(
     object_address_matches_id(id, address)
 }
 
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 fn executable_stored_snapshot_check_has_exact_pure_meaning(
     expected: &ArtifactRef,
     require_import: bool,

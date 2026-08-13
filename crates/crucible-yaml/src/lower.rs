@@ -246,7 +246,7 @@ impl View for CanonicalYamlNode {
 }
 
 impl CanonicalYamlNode {
-    #[allow(clippy::too_many_arguments)]  // Every canonical record field remains explicit.
+    #[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every canonical record field remains explicit.
     fn new(
         source_node_index: u64,
         resolved_node_index: u64,
@@ -1669,7 +1669,6 @@ fn canonical_mapping_record_index(node_index: u64, mappings: &[ExpandedMappingRe
     None
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the exact pure sequence-edge transition.
 fn lower_sequence_edges(
     parent_node_index: u64,
     edge_start: usize,
@@ -1823,7 +1822,6 @@ fn lower_sequence_edges(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the exact pure effective-mapping transition.
 fn lower_mapping_entries(
     receiver_node_index: u64,
     entry_start: usize,
@@ -1996,7 +1994,7 @@ fn lower_mapping_entries(
 }
 
 // The node/root composition functions below retain the same exact operational model.
-#[allow(clippy::too_many_arguments)]  // Every authenticated graph and build input remains explicit.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every authenticated graph and build input remains explicit.
 fn append_canonical_node(
     source_node_index: u64,
     resolved_node_index: u64,
@@ -2314,7 +2312,7 @@ fn append_canonical_node(
     }
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the total pure node-lowering state.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the total pure node-lowering state.
 fn lower_canonical_nodes(
     nodes_output: &mut Vec<CanonicalYamlNode>,
     sequence_output: &mut Vec<CanonicalSequenceEntry>,

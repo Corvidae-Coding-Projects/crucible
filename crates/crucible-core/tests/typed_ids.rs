@@ -1,7 +1,7 @@
 use crucible_core::{
-    ArtifactId, CampaignId, CanonicalIdEnvelope, EngineId, EvidenceId, ExperimentId, FindingId,
-    FindingInstanceId, IdDecodeError, IdKind, OracleId, ParticipantId, PatchId, ProofArtifactId,
-    RunAttemptId, RunId, ScenarioId, TargetBuildId, TargetId,
+    ArtifactId, CampaignId, CanonicalIdEnvelope, CoverageProviderId, EngineId, EvidenceId,
+    ExperimentId, FindingId, FindingInstanceId, IdDecodeError, IdKind, OracleId, ParticipantId,
+    PatchId, ProofArtifactId, RunAttemptId, RunId, ScenarioId, TargetBuildId, TargetId,
 };
 use vstd::prelude::*;
 
@@ -27,6 +27,9 @@ fn every_required_id_is_a_concrete_public_type() {
     let _artifact_id: ArtifactId = ArtifactId::new(value.clone());
     let _evidence_id: EvidenceId = EvidenceId::new(value.clone());
     let _proof_artifact_id: ProofArtifactId = ProofArtifactId::new(value);
+    let _coverage_provider_id: CoverageProviderId = CoverageProviderId::new(
+        String::from_str("coverage-provider"),
+    );
 }
 
 #[test]

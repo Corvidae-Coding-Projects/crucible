@@ -1,7 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
-use crucible_yaml::{decode_profile1, BomPolicy, DecodeErrorKind, DecodeLimits};
+#[expect(
+    unused_imports,
+    reason = "the error kind is referenced only inside Verus proof code"
+)]
+use crucible_yaml::DecodeErrorKind;
+use crucible_yaml::{decode_profile1, BomPolicy, DecodeLimits};
 use vstd::prelude::*;
 
 verus! {

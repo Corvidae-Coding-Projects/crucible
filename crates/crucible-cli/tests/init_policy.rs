@@ -3,7 +3,10 @@ use crucible_cli::{
     DatabaseSnapshot, InitializationDecision, InitializationError, MigrationRecord, PathKind,
     WorkspaceMetadata, WorkspaceSnapshot,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "Verus requires the prelude crate marker even when this Rust test names no vstd item"
+)]
 use vstd::prelude::*;
 
 fn exact_database() -> DatabaseSnapshot {

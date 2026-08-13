@@ -7,13 +7,19 @@
 use crate::atom::{
     AtomizedSource, LexicalAtom, LexicalAtomKind, YamlIndicator, MAX_PROFILE1_LEXICAL_ATOMS,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::{AtomizedSourceView, LexicalAtomView};
 use crate::layout::{
     analyze_profile1_layout, LayoutLimits, LayoutSource, MAX_PROFILE1_INDENTATION_COLUMNS,
     MAX_PROFILE1_LAYOUT_LINES,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::layout::{LayoutLimitsView, LayoutSourceView};
 use crate::utf8::CRUCIBLE_YAML_PROFILE_VERSION;
 use vstd::prelude::*;
@@ -409,7 +415,6 @@ impl StructuralLexemeSource {
 
 #[verifier::ext_equal]
 #[derive(Clone, Copy)]
-#[allow(dead_code)]
 pub struct StructuralCursorView {
     pub atom_index: int,
     pub line_number: u64,
@@ -442,7 +447,7 @@ impl View for StructuralCursor {
 }
 
 #[verifier::ext_equal]
-#[allow(dead_code)]
+#[expect(dead_code, reason = "used by Verus proof contracts after ordinary Rust erasure")]
 struct StructuralStepView {
     kind: StructuralLexemeKind,
     line_number: u64,

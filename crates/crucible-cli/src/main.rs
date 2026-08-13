@@ -44,7 +44,7 @@ enum HostWorkspaceAction {
 #[derive(Debug)]
 // The verified orchestration consumes this boundary result immediately; indirection would add a
 // second allocator-backed host behavior solely to shrink a short-lived enum.
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant, reason = "short-lived trusted-boundary results avoid an additional host allocation")]
 enum HostWorkspaceOutcome {
     Snapshot(WorkspaceSnapshot),
     Published,
@@ -78,7 +78,6 @@ enum HostArtifactError {
 }
 
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 enum HostArtifactOutcome {
     Source(Vec<u8>, String),
     Published,

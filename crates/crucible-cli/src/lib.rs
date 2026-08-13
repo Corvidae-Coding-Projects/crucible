@@ -4,7 +4,10 @@ mod artifact_store;
 
 pub use artifact_store::*;
 
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use vstd::assert_seqs_equal;
 use vstd::prelude::*;
 
@@ -148,7 +151,10 @@ pub open spec fn same_path_kind_spec(left: PathKind, right: PathKind) -> bool {
     left == right
 }
 
-#[allow(clippy::match_like_matches_macro)]
+#[expect(
+    clippy::match_like_matches_macro,
+    reason = "the exhaustive match is the executable witness Verus relates to spec equality"
+)]
 pub fn same_path_kind(left: PathKind, right: PathKind) -> (same: bool)
     ensures
         same == same_path_kind_spec(left, right),

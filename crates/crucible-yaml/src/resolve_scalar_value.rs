@@ -1,18 +1,33 @@
 //! Verified YAML 1.2.2 Core semantic resolution for authenticated CST scalar nodes.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::{CstNode, CstNodeKind, CstNodeStyle, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstNodeView, CstSourceView};
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve::{
     classify_core_plain_scalar, CorePlainScalarClass, CoreScalarErrorKind, CoreScalarLimits,
@@ -20,18 +35,27 @@ use crate::resolve::{
 use crate::resolve_float::{
     convert_core_finite_float, CoreFiniteFloat, CoreFiniteFloatErrorKind, CoreFiniteFloatLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_float::{CoreFiniteFloatLimitsView, CoreFiniteFloatView};
 use crate::resolve_integer::{
     convert_core_integer, CoreInteger, CoreIntegerErrorKind, CoreIntegerLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_integer::{CoreIntegerLimitsView, CoreIntegerView};
 use crate::resolve_scalar_node::{
     decode_profile1_cst_node_scalar, CstScalarDecodeError, CstScalarDecodeErrorKind,
     CstScalarDecodeLimits, DecodedCstScalar,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_node::{
     CstScalarDecodeErrorView, CstScalarDecodeLimitsView, DecodedCstScalarView,
 };
@@ -39,16 +63,25 @@ use crate::resolve_tag::{
     resolve_profile1_node_tag_property, ResolvedTagKind, ResolvedTagProperty, TagResolutionError,
     TagResolutionErrorKind, TagResolutionLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_tag::{
     ResolvedTagCodePointView, ResolvedTagPropertyView, TagResolutionErrorView,
     TagResolutionLimitsView,
 };
 use crate::scalar_decode::{DecodedContentScalar, DecodedScalarStyle};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::scalar_decode::{DecodedContentScalarView, DecodedScalarContentView};
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -1689,7 +1722,7 @@ fn map_tag_resolution_error(error: TagResolutionError) -> (mapped: ScalarValueEr
     mapped
 }
 
-#[allow(clippy::too_many_arguments)]  // Every authenticated producer remains an explicit input.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every authenticated producer remains an explicit input.
 pub fn resolve_profile1_cst_node_scalar_value(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

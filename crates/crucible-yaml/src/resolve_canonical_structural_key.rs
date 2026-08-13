@@ -1,4 +1,3 @@
-#![allow(clippy::question_mark, clippy::single_match)]
 //! Verified canonical identities for every resolved YAML semantic node.
 //!
 //! Scalar identities reuse the presentation-independent scalar encoding. Aliases are exactly
@@ -6,49 +5,88 @@
 //! sorted sequence of canonical key/value identity pairs. Collection tags, including the complete
 //! resolved spelling of custom tags, are part of the identity.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::CstSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::CstSourceView;
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::resolve_alias_cycle::AliasCycleLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_alias_cycle::AliasCycleLimitsView;
 use crate::resolve_anchor::AnchorAliasLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_anchor::AnchorAliasLimitsView;
 use crate::resolve_canonical_scalar_key::{
     compose_profile1_canonical_scalar_keys, CanonicalKeyByte, CanonicalScalarKeyError,
     CanonicalScalarKeyErrorKind, CanonicalScalarKeyLimits, CanonicalScalarKeySource,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_canonical_scalar_key::{
     CanonicalKeyByteView, CanonicalScalarKeyErrorView, CanonicalScalarKeyLimitsView,
     CanonicalScalarKeySourceView,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_collection_tag::ResolvedCollectionView;
 use crate::resolve_collection_tag::{ResolvedCollection, ResolvedCollectionTag};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_node_table::SemanticNodeTableLimitsView;
 use crate::resolve_node_table::{SemanticNodeKind, SemanticNodeTableLimits};
 use crate::resolve_scalar_table::SemanticScalarTableLimits;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_table::SemanticScalarTableLimitsView;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_topology::SemanticTopologyLimitsView;
 use crate::resolve_topology::{SemanticMappingEdge, SemanticTopologyLimits};
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 
@@ -669,15 +707,12 @@ impl StructuralKeyBuild {
                 bytes[index].source_byte_offset(),
                 limits,
             );
-            match step {
-                Err(error) => {
-                    proof {
-                        reveal(structural_append_bytes_tail_spec);
-                        assert(expected == Err(error@));
-                    }
-                    return Err(error);
-                },
-                Ok(()) => {},
+            if let Err(error) = step {
+                proof {
+                    reveal(structural_append_bytes_tail_spec);
+                    assert(expected == Err(error@));
+                }
+                return Err(error);
             }
             proof {
                 reveal(structural_append_bytes_tail_spec);
@@ -1820,15 +1855,12 @@ fn append_collection_tag_content(
             content[index].byte_start(),
             limits,
         );
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(append_collection_tag_content_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(append_collection_tag_content_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(append_collection_tag_content_tail_spec);
@@ -2174,7 +2206,8 @@ pub open spec fn encode_sequence_spec(
 }
 
 #[verifier::rlimit(50)]
-#[allow(clippy::too_many_arguments)]
+// The child range, authenticated graph tables, and builder snapshot are independent proof inputs.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn encode_sequence(
     node_index: usize,
     collection: &ResolvedCollection,
@@ -2328,17 +2361,14 @@ fn encode_sequence(
             &records[child_index],
             limits,
         );
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(encode_sequence_children_tail_spec);
-                    reveal(crate::resolve_topology::semantic_sequence_edge_views_spec);
-                    reveal(canonical_structural_key_record_views_spec);
-                    assert(finish_structural_bytes_spec(expected) == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(encode_sequence_children_tail_spec);
+                reveal(crate::resolve_topology::semantic_sequence_edge_views_spec);
+                reveal(canonical_structural_key_record_views_spec);
+                assert(finish_structural_bytes_spec(expected) == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(encode_sequence_children_tail_spec);
@@ -2626,16 +2656,13 @@ fn append_sorted_mapping_pairs(
             records,
             limits,
         );
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(encode_mapping_pairs_tail_spec);
-                    reveal(crate::resolve_topology::semantic_mapping_edge_views_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(encode_mapping_pairs_tail_spec);
+                reveal(crate::resolve_topology::semantic_mapping_edge_views_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(encode_mapping_pairs_tail_spec);
@@ -2765,7 +2792,8 @@ pub open spec fn encode_mapping_spec(
 }
 
 #[verifier::rlimit(60)]
-#[allow(clippy::too_many_arguments)]
+// Mapping ordering and each authenticated table remain explicit in the executable/spec relation.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 fn encode_mapping(
     node_index: usize,
     collection: &ResolvedCollection,
@@ -3551,15 +3579,12 @@ fn compose_structural_records(
         decreases nodes.len() - node_index,
     {
         let step = compose_structural_record_item(scalar_keys, node_index, &mut build, limits);
-        match step {
-            Err(error) => {
-                proof {
-                    reveal(structural_records_tail_spec);
-                    assert(expected == Err(error@));
-                }
-                return Err(error);
-            },
-            Ok(()) => {},
+        if let Err(error) = step {
+            proof {
+                reveal(structural_records_tail_spec);
+                assert(expected == Err(error@));
+            }
+            return Err(error);
         }
         proof {
             reveal(structural_records_tail_spec);
@@ -3592,7 +3617,6 @@ pub open spec fn finalize_canonical_structural_key_spec(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub open spec fn compose_profile1_canonical_structural_keys_spec(
     atomized: AtomizedSourceView,
     quoted: QuotedScalarSourceView,
@@ -3636,7 +3660,6 @@ pub open spec fn compose_profile1_canonical_structural_keys_spec(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub open spec fn canonical_structural_key_source_well_formed_spec(
     atomized: AtomizedSourceView,
     quoted: QuotedScalarSourceView,
@@ -3670,7 +3693,6 @@ pub open spec fn canonical_structural_key_source_well_formed_spec(
     ) == Ok(source)
 }
 
-#[allow(clippy::too_many_arguments)]
 pub proof fn lemma_canonical_structural_key_success_is_well_formed(
     atomized: AtomizedSourceView,
     quoted: QuotedScalarSourceView,
@@ -3724,7 +3746,6 @@ pub proof fn lemma_canonical_structural_key_success_is_well_formed(
     reveal(canonical_structural_key_source_well_formed_spec);
 }
 
-#[allow(clippy::too_many_arguments)]
 pub proof fn lemma_canonical_structural_key_well_formed_authenticates_exact_result(
     atomized: AtomizedSourceView,
     quoted: QuotedScalarSourceView,
@@ -3778,7 +3799,8 @@ pub proof fn lemma_canonical_structural_key_well_formed_authenticates_exact_resu
     reveal(canonical_structural_key_source_well_formed_spec);
 }
 
-#[allow(clippy::too_many_arguments)]
+// Every independently authenticated producer is explicit at the composition boundary.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
 pub fn compose_profile1_canonical_structural_keys(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

@@ -1,10 +1,24 @@
-#![allow(unused_imports)]
-
+#[expect(
+    unused_imports,
+    reason = "these views are referenced only inside Verus proof code"
+)]
 use crucible_yaml::atom::{LexicalAtomKind, LexicalAtomView};
+#[expect(
+    unused_imports,
+    reason = "these token views are referenced only inside Verus proof code"
+)]
 use crucible_yaml::token::{
     CompletedTokenPartKind, CompletedTokenPartView, CompletedTokenSourceView, CompletedTokenView,
 };
+#[expect(
+    unused_imports,
+    reason = "these source views are referenced only inside Verus proof code"
+)]
 use crucible_yaml::utf8::{SourcePositionView, SourceSpanView};
+#[expect(
+    unused_imports,
+    reason = "these CST views are referenced only inside Verus proof code"
+)]
 use crucible_yaml::{
     CompletedTokenKind, CstDocumentView, CstMappingEntryView, CstNodeKind, CstNodeStyle,
     CstNodeView, CstSequenceEntryView, CstSourceView, CstSyntaxOwnerKind, CstSyntaxOwnerView,

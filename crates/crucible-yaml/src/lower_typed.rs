@@ -3,16 +3,28 @@
 //! This is the exact kind-authentication submachine used by graph-wide schema-directed lowering.
 //! It distinguishes every Core scalar value, custom scalar tags, and Core/custom collection tags
 //! without coercion or host numeric conversion.
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::lower::CanonicalYamlGraphSourceView;
 use crate::lower::{CanonicalYamlGraphSource, CanonicalYamlNodeKind};
 use crate::resolve_collection_tag::ResolvedCollectionTag;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_collection_tag::ResolvedCollectionView;
 use crate::resolve_scalar_value::{ResolvedScalarTag, ResolvedScalarValue};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_scalar_value::{ResolvedScalarValueView, ResolvedScalarView};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::schema::CompiledTypedFieldSchemaView;
 use crate::schema::{CompiledTypedFieldSchema, TypedSchemaValueKind};
 use vstd::prelude::*;
@@ -72,7 +84,7 @@ impl View for TypedYamlValueBinding {
 }
 
 impl TypedYamlValueBinding {
-    #[allow(clippy::too_many_arguments)]
+    #[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]
     fn new(
         canonical_profile_version: u16,
         schema_version: u16,
@@ -338,7 +350,6 @@ pub open spec fn typed_scalar_kind_matches_spec(
     }
 }
 
-#[allow(clippy::match_like_matches_macro)]
 fn typed_scalar_kind_matches(
     kind: TypedSchemaValueKind,
     tag: ResolvedScalarTag,
@@ -347,48 +358,49 @@ fn typed_scalar_kind_matches(
     ensures
         matches == typed_scalar_kind_matches_spec(kind, tag, value@),
 {
-    match (kind, tag, value) {
+    matches!(
+        (kind, tag, value),
         (
             TypedSchemaValueKind::Null,
             ResolvedScalarTag::CoreNull,
             ResolvedScalarValue::Null,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::Boolean,
             ResolvedScalarTag::CoreBoolean,
             ResolvedScalarValue::Boolean(_),
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::Integer,
             ResolvedScalarTag::CoreInteger,
             ResolvedScalarValue::Integer(_),
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::FiniteFloat,
             ResolvedScalarTag::CoreFloat,
             ResolvedScalarValue::FiniteFloat(_),
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::PositiveInfinity,
             ResolvedScalarTag::CoreFloat,
             ResolvedScalarValue::PositiveInfinity,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::NegativeInfinity,
             ResolvedScalarTag::CoreFloat,
             ResolvedScalarValue::NegativeInfinity,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::NotANumber,
             ResolvedScalarTag::CoreFloat,
             ResolvedScalarValue::NotANumber,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::String,
             ResolvedScalarTag::CoreString,
             ResolvedScalarValue::String,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::CustomScalar,
             ResolvedScalarTag::CustomGlobal,
             ResolvedScalarValue::String,
@@ -397,9 +409,8 @@ fn typed_scalar_kind_matches(
             TypedSchemaValueKind::CustomScalar,
             ResolvedScalarTag::CustomLocal,
             ResolvedScalarValue::String,
-        ) => true,
-        _ => false,
-    }
+        )
+    )
 }
 
 pub open spec fn typed_collection_kind_matches_spec(
@@ -442,7 +453,6 @@ pub open spec fn typed_collection_kind_matches_spec(
     }
 }
 
-#[allow(clippy::match_like_matches_macro)]
 fn typed_collection_kind_matches(
     kind: TypedSchemaValueKind,
     node_kind: CanonicalYamlNodeKind,
@@ -451,13 +461,14 @@ fn typed_collection_kind_matches(
     ensures
         matches == typed_collection_kind_matches_spec(kind, node_kind, tag),
 {
-    match (kind, node_kind, tag) {
+    matches!(
+        (kind, node_kind, tag),
         (
             TypedSchemaValueKind::Sequence,
             CanonicalYamlNodeKind::Sequence,
             ResolvedCollectionTag::CoreSequence,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::CustomSequence,
             CanonicalYamlNodeKind::Sequence,
             ResolvedCollectionTag::CustomGlobal,
@@ -466,13 +477,13 @@ fn typed_collection_kind_matches(
             TypedSchemaValueKind::CustomSequence,
             CanonicalYamlNodeKind::Sequence,
             ResolvedCollectionTag::CustomLocal,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::Mapping,
             CanonicalYamlNodeKind::Mapping,
             ResolvedCollectionTag::CoreMapping,
-        ) => true,
-        (
+        )
+        | (
             TypedSchemaValueKind::CustomMapping,
             CanonicalYamlNodeKind::Mapping,
             ResolvedCollectionTag::CustomGlobal,
@@ -481,9 +492,8 @@ fn typed_collection_kind_matches(
             TypedSchemaValueKind::CustomMapping,
             CanonicalYamlNodeKind::Mapping,
             ResolvedCollectionTag::CustomLocal,
-        ) => true,
-        _ => false,
-    }
+        )
+    )
 }
 
 pub open spec fn canonical_yaml_graph_scalars_spec(graph: CanonicalYamlGraphSourceView) -> Seq<

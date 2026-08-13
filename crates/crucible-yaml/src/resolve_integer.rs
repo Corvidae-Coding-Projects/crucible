@@ -1,10 +1,12 @@
-#![allow(clippy::vec_init_then_push)]
 //! Verified arbitrary-width conversion of YAML 1.2.2 Core integers.
 //!
 //! Magnitudes use canonical little-endian base-1,000,000,000 limbs.  Conversion never passes
 //! through a host-width integer and applies its effective limb cap to each canonical per-digit
 //! result before the next digit is admitted.
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve::CoreScalarLimitsView;
 use crate::resolve::{
     classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarErrorKind,
@@ -192,7 +194,7 @@ pub open spec fn core_integer_digit_value_spec(code_point: u32, base: CoreIntege
     }
 }
 
-#[allow(clippy::manual_range_contains)]
+#[expect(clippy::manual_range_contains, reason = "arithmetic spelling mirrors the Verus specification and proof obligations")]
 fn core_integer_digit_value(code_point: u32, base: CoreIntegerBase) -> (value: Option<u32>)
     ensures
         value == core_integer_digit_value_spec(code_point, base),
@@ -535,6 +537,10 @@ pub open spec fn convert_core_integer_spec(
     }
 }
 
+#[expect(
+    clippy::vec_init_then_push,
+    reason = "stepwise initialization preserves the exact Verus Seq::empty().push proof model"
+)]
 fn convert_core_integer_digits(
     input: &[u32],
     start: usize,

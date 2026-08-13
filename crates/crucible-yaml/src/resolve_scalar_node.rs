@@ -1,30 +1,51 @@
 //! Verified dispatch from authenticated CST scalar nodes to style-specific semantic decoders.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::block::BlockScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::block::BlockScalarSourceView;
 use crate::cst::{CstNode, CstNodeKind, CstNodeStyle, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstNodeView, CstSourceView};
 use crate::plain::PlainScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::plain::PlainScalarSourceView;
 use crate::quoted::QuotedScalarSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::quoted::QuotedScalarSourceView;
 use crate::scalar_decode::{
     decode_profile1_block_scalar_content, decode_profile1_double_quoted_scalar_content,
     decode_profile1_plain_scalar_content, decode_profile1_single_quoted_scalar_content,
     DecodedScalarContent, ScalarDecodeError, ScalarDecodeErrorKind, ScalarDecodeLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::scalar_decode::{
     DecodedScalarContentView, ScalarDecodeErrorView, ScalarDecodeLimitsView,
 };
 use crate::token::{CompletedTokenKind, CompletedTokenSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::{CompletedTokenSourceView, CompletedTokenView};
 use vstd::prelude::*;
 
@@ -516,7 +537,7 @@ fn wrap_scalar_decode_result(
     }
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the exact pure dispatch contract inputs.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the exact pure dispatch contract inputs.
 fn decode_cst_node_scalar(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,
@@ -713,7 +734,7 @@ fn decode_cst_node_scalar(
     result
 }
 
-#[allow(clippy::too_many_arguments)]  // Every independently authenticated producer is explicit.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every independently authenticated producer is explicit.
 pub fn decode_profile1_cst_node_scalar(
     atomized: &AtomizedSource,
     quoted: &QuotedScalarSource,

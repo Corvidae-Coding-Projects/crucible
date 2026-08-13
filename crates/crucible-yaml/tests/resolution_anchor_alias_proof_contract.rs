@@ -1,6 +1,3 @@
-#![allow(unused_imports)]
-
-use crucible_yaml::AnchorAliasErrorKind;
 use vstd::prelude::*;
 
 verus! {

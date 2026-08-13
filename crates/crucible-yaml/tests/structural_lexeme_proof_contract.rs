@@ -1,5 +1,7 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
 use crucible_yaml::{
     analyze_profile1_layout, atomize_profile1, canonical_structural_layout_limits, decode_profile1,

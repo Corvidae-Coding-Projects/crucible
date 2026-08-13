@@ -3278,7 +3278,7 @@ fn charge_and_push_entry(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Every authenticated graph and build input remains explicit.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every authenticated graph and build input remains explicit.
 fn append_mapping_source(
     source_mapping_node_index: u64,
     destination_start: usize,
@@ -3571,7 +3571,7 @@ fn append_mapping_source(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the complete pure explicit-edge transition.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the complete pure explicit-edge transition.
 fn append_explicit_mapping_edges(
     mapping_node_index: u64,
     edge_start: usize,
@@ -3808,7 +3808,7 @@ fn append_explicit_mapping_edges(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the complete pure merge-source transition.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the complete pure merge-source transition.
 fn append_merge_sources(
     sources: &[u64],
     destination_start: usize,
@@ -3970,7 +3970,7 @@ fn append_merge_sources(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Keeps every proof-relevant graph view independently named.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Keeps every proof-relevant graph view independently named.
 fn append_merge_mapping_edges(
     edge_start: usize,
     edge_end: usize,
@@ -4183,7 +4183,7 @@ fn append_merge_mapping_edges(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Every authenticated producer remains an explicit input.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Every authenticated producer remains an explicit input.
 fn expand_one_mapping(
     node_index: usize,
     mappings: &mut Vec<ExpandedMappingRecord>,
@@ -4350,7 +4350,7 @@ fn expand_one_mapping(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]  // Mirrors the total pure node-expansion state.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Mirrors the total pure node-expansion state.
 fn expand_merge_nodes(
     mappings: &mut Vec<ExpandedMappingRecord>,
     entries: &mut Vec<ExpandedMappingEntry>,
@@ -4560,7 +4560,7 @@ fn push_reference_frame(stack: &mut Vec<ExpandedReferenceFrame>, frame: Expanded
     }
 }
 
-#[allow(clippy::too_many_arguments)]  // Keeps traversal inputs aligned with the exact pure model.
+#[expect(clippy::too_many_arguments, reason = "independent proof inputs remain explicit in the executable-to-spec contract")]  // Keeps traversal inputs aligned with the exact pure model.
 fn count_expanded_reference_root(
     root_node_index: u64,
     starting_references: u64,

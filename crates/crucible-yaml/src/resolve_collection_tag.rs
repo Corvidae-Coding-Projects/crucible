@@ -1,21 +1,33 @@
 //! Verified semantic-tag resolution for authenticated YAML collection nodes.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::cst::{CstNode, CstNodeKind, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{CstNodeView, CstSourceView};
 use crate::resolve_scalar_value::ExplicitScalarTagClass;
 use crate::resolve_tag::{
     resolve_profile1_node_tag_property, ResolvedTagProperty, TagResolutionError,
     TagResolutionErrorKind, TagResolutionLimits,
 };
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::resolve_tag::{
     ResolvedTagPropertyView, TagResolutionErrorView, TagResolutionLimitsView,
 };
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 

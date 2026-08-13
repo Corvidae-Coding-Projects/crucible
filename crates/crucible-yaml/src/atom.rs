@@ -4,7 +4,10 @@
 //! scalar and source span while assigning whitespace, line-feed, indicator, or content meaning.
 //! Context-sensitive token formation, indentation, comments, and scalar bodies consume these
 //! atoms in the following lexer stage.
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::utf8::{DecodedScalarView, DecodedSourceView};
 use crate::utf8::{
     DecodedSource, SourceSpan, SourceSpanView, CRUCIBLE_YAML_PROFILE_VERSION,

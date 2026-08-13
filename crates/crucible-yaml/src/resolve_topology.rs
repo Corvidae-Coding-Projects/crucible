@@ -1,14 +1,23 @@
 //! Verified, bounded projection of authenticated CST topology into semantic tables.
 use crate::atom::AtomizedSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::atom::AtomizedSourceView;
 use crate::cst::{CstDocument, CstMappingEntry, CstNode, CstNodeKind, CstSequenceEntry, CstSource};
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::cst::{
     CstDocumentView, CstMappingEntryView, CstNodeView, CstSequenceEntryView, CstSourceView,
 };
 use crate::token::CompletedTokenSource;
-#[allow(unused_imports)]
+#[expect(
+    unused_imports,
+    reason = "used by Verus proof code after ordinary Rust erasure"
+)]
 use crate::token::CompletedTokenSourceView;
 use vstd::prelude::*;
 

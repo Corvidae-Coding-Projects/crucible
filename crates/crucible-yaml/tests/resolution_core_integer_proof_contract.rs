@@ -1,7 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
-use crucible_yaml::{convert_core_integer, CoreIntegerErrorKind, CoreIntegerLimits};
+#[expect(
+    unused_imports,
+    reason = "the error kind is referenced only inside Verus proof code"
+)]
+use crucible_yaml::CoreIntegerErrorKind;
+use crucible_yaml::{convert_core_integer, CoreIntegerLimits};
 use vstd::prelude::*;
 
 verus! {

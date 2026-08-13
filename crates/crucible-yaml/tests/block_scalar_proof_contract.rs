@@ -1,13 +1,14 @@
-#![allow(unused_imports)]
-#![allow(clippy::single_match)]
+#![expect(
+    clippy::single_match,
+    reason = "explicit match arms carry branch-specific Verus assertions"
+)]
 
 use crucible_yaml::{
     analyze_profile1_layout, atomize_profile1, canonical_block_scalar_limits,
     canonical_plain_scalar_limits, canonical_quoted_scalar_limits,
     canonical_structural_layout_limits, canonical_structural_scan_limits, decode_profile1,
     scan_profile1_block_scalars, scan_profile1_plain_scalars, scan_profile1_quoted_scalars,
-    scan_profile1_structural_lexemes, AtomizeLimits, BlockScalarScanLimits, BomPolicy,
-    DecodeLimits,
+    scan_profile1_structural_lexemes, AtomizeLimits, BomPolicy, DecodeLimits,
 };
 use vstd::prelude::*;
 

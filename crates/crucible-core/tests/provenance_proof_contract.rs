@@ -1,12 +1,15 @@
-#![allow(unused_imports)]
 // Explicit result matches and incremental vectors expose branch/sequence state to Verus.
-#![allow(clippy::single_match, clippy::vec_init_then_push)]
+#![expect(
+    clippy::single_match,
+    clippy::vec_init_then_push,
+    reason = "explicit construction and branches mirror the Verus proof model"
+)]
 
 use crucible_core::{
-    ActorIdentity, ActorKind, ArtifactIdentityError, ArtifactRef, EvidenceGraph,
-    EvidenceGraphError, EvidenceId, EvidenceKind, EvidenceNode, GraphInsertOutcome,
-    ProducerIdentity, ProvenanceEdge, ProvenanceRelation, SchemaIdentity,
-    TransformationConfiguration, TransformationIdentity, UtcTimestamp,
+    ActorIdentity, ActorKind, ArtifactRef, EvidenceGraph, EvidenceGraphError, EvidenceId,
+    EvidenceKind, EvidenceNode, GraphInsertOutcome, ProducerIdentity, ProvenanceEdge,
+    ProvenanceRelation, SchemaIdentity, TransformationConfiguration, TransformationIdentity,
+    UtcTimestamp,
 };
 use vstd::prelude::*;
 
