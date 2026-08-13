@@ -16,6 +16,7 @@ pub mod resolve_collection_tag;
 pub mod resolve_duplicate_key;
 pub mod resolve_float;
 pub mod resolve_integer;
+pub mod resolve_merge;
 pub mod resolve_node_table;
 pub mod resolve_scalar_node;
 pub mod resolve_scalar_table;
@@ -117,6 +118,14 @@ pub use resolve_collection_tag::{
 pub use resolve_integer::{
     convert_core_integer, CoreInteger, CoreIntegerError, CoreIntegerErrorKind, CoreIntegerLimits,
     CORE_INTEGER_CONVERSION_VERSION, CORE_INTEGER_MAGNITUDE_RADIX, MAX_PROFILE1_CORE_INTEGER_LIMBS,
+};
+
+pub use resolve_merge::{
+    canonical_merge_expansion_limits, expand_profile1_merge_keys, ExpandedMappingEntry,
+    ExpandedMappingRecord, ExpandedSemanticGraphSource, MergeExpansionError,
+    MergeExpansionErrorKind, MergeExpansionLimits, MAX_PROFILE1_EXPANDED_MAPPING_ENTRIES,
+    MAX_PROFILE1_EXPANDED_REFERENCES, MAX_PROFILE1_MERGE_MAPPING_RECORDS,
+    MAX_PROFILE1_MERGE_SOURCES, MERGE_EXPANSION_TRANSFORMATION_VERSION,
 };
 
 pub use resolve_node_table::{

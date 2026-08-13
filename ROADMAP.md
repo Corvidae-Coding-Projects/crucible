@@ -160,6 +160,15 @@ Current work establishes and extends:
   mapping-entry accounting; an owned duplicate-free structural source; total executable
   correspondence; an explicit all-pairs-distinct success theorem; and provenance-laundering forgery
   rejection;
+- verified YAML merge-key expansion over the owned duplicate-free structural graph, recognizing
+  only untagged plain `<<` and the exact explicit merge tag; accepting direct mappings or sequences
+  of mapping aliases; enforcing earlier-source and explicit-receiver precedence through exact
+  canonical structural bytes; retaining graph sharing and complete source-edge provenance rather
+  than materializing alias trees; recording every mapping, including empty and unaffected mappings;
+  preflighting intrinsic shape errors before independently caller-lowered mapping, expanded-entry,
+  full-tree-reference, and merge-source caps; total executable-to-pure correspondence; exact input
+  identity and deterministic-output anti-forgery proofs; and deep traversal, precedence, shape,
+  tag/style distinction, provenance, and exact-boundary fixtures;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

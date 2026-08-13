@@ -2021,6 +2021,16 @@ override every inherited entry regardless of source order. The resolved diagnost
 explicit non-merge entries in source order followed by still-unshadowed inherited entries in merge
 precedence and source order. Merge keys themselves do not appear in the semantic mapping.
 
+The merge result remains a shared semantic graph rather than a materialized alias tree. It records
+every mapping, including mappings with no merge key, and each effective entry retains its key and
+value node identities, original mapping and mapping-edge identities, and whether it was inherited.
+Inherited suppression compares the complete canonical structural bytes, never a host hash. Mapping
+records, effective entries, fully expanded tree references, and individual merge sources have
+independent caller-lowered caps. Invalid merge shapes are diagnosed before those caller limits can
+hide them. The executable result is equal to a total pure model, owns the exact duplicate-free
+input, and has public identity and uniqueness theorems so a substituted input or output cannot be
+authenticated as the expansion result.
+
 Duplicate-key checking occurs after tag and scalar resolution and before merge application.
 Two scalar keys are equal only when their resolved tag and canonical semantic value are equal;
 sequence and mapping keys use structural equality over the acyclic resolved graph, with mapping
@@ -2031,18 +2041,18 @@ canonical keys are rejected at the later key. Merge precedence suppresses an inh
 after that same exact equality check and never hides a duplicate among the receiving mapping's
 explicit entries.
 
-The absolute semantic-node, sequence-edge, mapping-entry, anchor, alias, tag-byte, per-scalar decoded
-code-point, aggregate decoded code-point, integer-magnitude-limb, finite-float coefficient-digit,
-finite-float exponent-digit, expanded-reference, canonical-key-byte, and work-stack caps are each
-1,048,576; the absolute semantic depth is 4,096.
-Callers MAY lower every cap but cannot raise it. Expanded-reference cost counts each node occurrence that a fully materialized tree
-would visit, including repeated visits through aliases and merges, even though the public graph
-retains sharing; checked addition rejects exponential alias or merge amplification before
-allocation. Intrinsic invalid spelling, tag compatibility, missing alias, cycle, invalid merge
-shape, and duplicate explicit key errors take precedence over the caller cap that would otherwise
-exclude the same record. Limit errors identify the first source token whose admission or expansion
-would exceed the effective bound, and all arithmetic is checked against both the profile cap and
-`u64` representation.
+The absolute semantic-node, sequence-edge, mapping-entry, anchor, alias, tag-byte, per-scalar
+decoded-code-point, aggregate decoded-code-point, integer-magnitude-limb, finite-float
+coefficient-digit, finite-float exponent-digit, expanded-reference, canonical-key-byte, and
+work-stack caps are each 1,048,576; the absolute semantic depth is 4,096. Callers MAY lower every
+cap but cannot raise it. Expanded-reference cost counts each node occurrence that a fully
+materialized tree would visit, including repeated visits through aliases and merges, even though
+the public graph retains sharing; checked addition rejects exponential alias or merge amplification
+before allocation. Intrinsic invalid spelling, tag compatibility, missing alias, cycle, invalid
+merge shape, and duplicate explicit key errors take precedence over the caller cap that would
+otherwise exclude the same record. Limit errors identify the first source token whose admission or
+expansion would exceed the effective bound, and all arithmetic is checked against both the profile
+cap and `u64` representation.
 
 The executable scalar decoders, handle/anchor tables, graph composer, cycle detector, merge
 expander, and canonical-key machine are iterative Verus Rust. The pure transformation is total
