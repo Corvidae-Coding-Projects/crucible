@@ -169,6 +169,14 @@ Current work establishes and extends:
   full-tree-reference, and merge-source caps; total executable-to-pure correspondence; exact input
   identity and deterministic-output anti-forgery proofs; and deep traversal, precedence, shape,
   tag/style distinction, provenance, and exact-boundary fixtures;
+- verified canonical YAML graph lowering over the owned merge-expanded source, retaining one stable
+  record for every source node while eliminating alias kinds from the lowered type; normalizing
+  sequence children, effective mapping keys and values, and document roots to final targets;
+  preserving scalar and collection tag identities plus exact source-edge, receiver, merge-source,
+  and inherited/explicit provenance; reusing shared target edge intervals instead of materializing
+  alias trees; independently caller-lowered node, sequence-entry, mapping-entry, and document-root
+  caps with exact first-excluded diagnostics; total executable correspondence; and public exact
+  input-identity and deterministic-output anti-forgery proofs;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

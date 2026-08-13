@@ -61,5 +61,9 @@ begin.
   validation; exact tag-character and BOM-context diagnostics; caller-lowered absolute limits; a
   total pure result model; exact executable correspondence; and public partition, formation,
   balance, anti-laundering, scalar-identity, parts, trivia-maximality, and limit proof surfaces.
+- Verified alias-transparent canonical YAML DAG lowering after duplicate rejection and merge
+  expansion, with stable source-node identity, normalized roots and collection edges, retained
+  scalar/collection tags and merge provenance, graph sharing, four independent resource caps, a
+  total pure result model, exact executable correspondence, and public anti-forgery contracts.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

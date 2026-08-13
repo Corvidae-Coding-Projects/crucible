@@ -1276,9 +1276,11 @@ tokens with exact spans
 concrete syntax tree
     ↓ alias, tag, and scalar resolution
 semantic YAML graph
-    ↓ canonical lowering
+    ↓ duplicate rejection, merge application, and canonical graph lowering
+alias-transparent canonical YAML DAG
+    ↓ schema-directed typed-field lowering
 typed Crucible configuration
-    ↓ schema and cross-field validation
+    ↓ schema-version, unknown-field, and cross-field validation
 verified effective configuration
 ```
 
@@ -2030,6 +2032,27 @@ independent caller-lowered caps. Invalid merge shapes are diagnosed before those
 hide them. The executable result is equal to a total pure model, owns the exact duplicate-free
 input, and has public identity and uniqueness theorems so a substituted input or output cannot be
 authenticated as the expansion result.
+
+Canonical graph lowering consumes and owns that exact merge-expanded source. It emits one stable
+record for every source node but has no alias node kind: each alias record names its final resolved
+node and reuses that target's scalar or collection identity and canonical edge interval. Every
+sequence child, effective mapping key and value, and document root is likewise rewritten to its
+final non-alias node. Non-alias sequences retain exact source-edge identity. Effective mappings
+retain receiver identity plus original mapping, original edge, and inherited/explicit provenance.
+Scalar indices preserve the complete resolved value, tag, decoded presentation, and code-point
+provenance; collection indices preserve the complete resolved collection tag. The owned input
+retains all presentation evidence and source spans without copying it into the canonical DAG.
+
+The lowering transform is iterative and graph-preserving. It does not materialize alias subtrees,
+duplicate collection edges for alias records, discard unaffected mappings, or erase merge
+provenance. Node records, canonical sequence entries, canonical mapping entries, and document roots
+have independent caller-lowered caps of at most 1,048,576, with exact first-excluded source-byte
+diagnostics and inclusive accepted boundaries. Its total pure model fixes every output record and
+error; executable correspondence covers success and failure. Public contracts authenticate exact
+input ownership, version/accounting identity, and deterministic output uniqueness. This canonical
+YAML DAG is the input to schema-directed typed-field lowering; completing this graph transform does
+not narrow or replace the separate typed Crucible configuration, schema validation, canonical
+serialization, or digest-stability requirements.
 
 Duplicate-key checking occurs after tag and scalar resolution and before merge application.
 Two scalar keys are equal only when their resolved tag and canonical semantic value are equal;

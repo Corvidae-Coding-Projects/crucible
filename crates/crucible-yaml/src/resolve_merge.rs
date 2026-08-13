@@ -462,39 +462,66 @@ impl ExpandedSemanticGraphSource {
         }
     }
 
-    pub fn profile_version(&self) -> u16 {
+    pub fn profile_version(&self) -> (value: u16)
+        ensures
+            value == self@.profile_version,
+    {
         self.profile_version
     }
 
-    pub fn transformation_version(&self) -> u16 {
+    pub fn transformation_version(&self) -> (value: u16)
+        ensures
+            value == self@.transformation_version,
+    {
         self.transformation_version
     }
 
-    pub fn source_len_bytes(&self) -> u64 {
+    pub fn source_len_bytes(&self) -> (value: u64)
+        ensures
+            value == self@.source_len_bytes,
+    {
         self.source_len_bytes
     }
 
-    pub fn input_node_count(&self) -> u64 {
+    pub fn input_node_count(&self) -> (value: u64)
+        ensures
+            value == self@.input_node_count,
+    {
         self.input_node_count
     }
 
-    pub fn expanded_reference_count(&self) -> u64 {
+    pub fn expanded_reference_count(&self) -> (value: u64)
+        ensures
+            value == self@.expanded_reference_count,
+    {
         self.expanded_reference_count
     }
 
-    pub fn merge_source_count(&self) -> u64 {
+    pub fn merge_source_count(&self) -> (value: u64)
+        ensures
+            value == self@.merge_source_count,
+    {
         self.merge_source_count
     }
 
-    pub fn input(&self) -> &DuplicateFreeStructuralKeySource {
+    pub fn input(&self) -> (value: &DuplicateFreeStructuralKeySource)
+        ensures
+            value@ == self@.input,
+    {
         &self.input
     }
 
-    pub fn mappings(&self) -> &[ExpandedMappingRecord] {
+    pub fn mappings(&self) -> (values: &[ExpandedMappingRecord])
+        ensures
+            expanded_mapping_record_views_spec(values@) == self@.mappings,
+    {
         self.mappings.as_slice()
     }
 
-    pub fn entries(&self) -> &[ExpandedMappingEntry] {
+    pub fn entries(&self) -> (values: &[ExpandedMappingEntry])
+        ensures
+            expanded_mapping_entry_views_spec(values@) == self@.entries,
+    {
         self.entries.as_slice()
     }
 }

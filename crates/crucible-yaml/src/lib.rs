@@ -5,6 +5,7 @@ pub mod atom;
 pub mod block;
 pub mod cst;
 pub mod layout;
+pub mod lower;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
@@ -58,6 +59,15 @@ pub use layout::{
     analyze_profile1_layout, LayoutError, LayoutErrorKind, LayoutLimits, LayoutLine, LayoutSource,
     LINE_LAYOUT_TRANSFORMATION_VERSION, MAX_PROFILE1_INDENTATION_COLUMNS,
     MAX_PROFILE1_LAYOUT_LINES,
+};
+
+pub use lower::{
+    canonical_lowering_limits, lower_profile1_canonical_graph, CanonicalDocumentRoot,
+    CanonicalLoweringError, CanonicalLoweringErrorKind, CanonicalLoweringLimits,
+    CanonicalMappingEntry, CanonicalSequenceEntry, CanonicalYamlGraphSource, CanonicalYamlNode,
+    CanonicalYamlNodeKind, CANONICAL_LOWERING_TRANSFORMATION_VERSION,
+    MAX_PROFILE1_CANONICAL_DOCUMENT_ROOTS, MAX_PROFILE1_CANONICAL_MAPPING_ENTRIES,
+    MAX_PROFILE1_CANONICAL_NODES, MAX_PROFILE1_CANONICAL_SEQUENCE_ENTRIES,
 };
 
 pub use quoted::{
