@@ -69,5 +69,9 @@ begin.
   lowering, including every scalar and custom-tagged collection kind, nested sequence/mapping
   references, required-field metadata, stable field IDs, Unicode names, ambiguity rejection,
   caller-lowered resource caps, exact pure semantics, and public identity/uniqueness contracts.
+- Added verified canonical-YAML value binding against every typed schema kind, with exact Core and
+  custom tag separation, distinct finite/nonfinite scalar variants, alias-transparent resolved-node
+  identity, scalar/collection record authentication, source-anchored typed diagnostics, a total
+  pure result model, and public deterministic-output anti-forgery contracts.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

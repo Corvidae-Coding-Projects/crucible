@@ -184,6 +184,12 @@ Current work establishes and extends:
   names; global ID and per-mapping name uniqueness; independently caller-lowered node, field, and
   aggregate-name caps; total executable correspondence; and public exact-input identity and
   deterministic-output anti-forgery proofs;
+- verified canonical-value/schema-node binding as the kind-authentication submachine for typed-field
+  lowering, distinguishing all Core scalar variants, positive and negative infinity, NaN, strings,
+  custom local/global scalars, Core sequences/mappings, and custom local/global collections without
+  coercion; retaining alias-transparent resolved-node, scalar/collection, schema-node, and exact
+  source-range identities; rejecting forged record identities and bounds; and proving total
+  executable correspondence plus deterministic-output anti-forgery semantics;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

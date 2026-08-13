@@ -2073,6 +2073,20 @@ contracts prove exact input identity and deterministic output uniqueness. This p
 not by itself claim that YAML fields have been lowered, required or unknown-field policy has been
 validated, cross-field invariants have been checked, or a canonical serialization has been emitted.
 
+Typed-field lowering begins with an exact value-binding submachine. Given one canonical YAML node
+and one compiled schema node, it binds only matching pairs: Core null, boolean, arbitrary-width
+integer, exact finite float, positive infinity, negative infinity, NaN, and string values retain
+their distinct resolved tags and value variants; custom scalar, sequence, and mapping schemas
+require a custom local or global tag; and Core collection schemas reject custom-tagged collections.
+No numeric conversion, string coercion, or tag erasure occurs. Alias records bind through their
+canonical resolved-node and scalar/collection identity while diagnostics remain anchored to the
+alias or value occurrence being lowered. The submachine rejects inconsistent record indices,
+ranges, edge intervals, and version/accounting metadata before returning a typed binding. Its total
+pure result fixes both successes and source-anchored typed errors, and its public exact-result
+contract prevents a different binding from authenticating for the same graph, schema, and indices.
+Graph-wide field traversal, recognized/unknown field partitioning, and required-field validation
+remain subsequent machines rather than being silently folded into this local compatibility check.
+
 Duplicate-key checking occurs after tag and scalar resolution and before merge application.
 Two scalar keys are equal only when their resolved tag and canonical semantic value are equal;
 sequence and mapping keys use structural equality over the acyclic resolved graph, with mapping

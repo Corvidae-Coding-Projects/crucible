@@ -6,6 +6,7 @@ pub mod block;
 pub mod cst;
 pub mod layout;
 pub mod lower;
+pub mod lower_typed;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
@@ -69,6 +70,11 @@ pub use lower::{
     CanonicalYamlNodeKind, CANONICAL_LOWERING_TRANSFORMATION_VERSION,
     MAX_PROFILE1_CANONICAL_DOCUMENT_ROOTS, MAX_PROFILE1_CANONICAL_MAPPING_ENTRIES,
     MAX_PROFILE1_CANONICAL_NODES, MAX_PROFILE1_CANONICAL_SEQUENCE_ENTRIES,
+};
+
+pub use lower_typed::{
+    bind_profile1_typed_yaml_value, TypedValueBindingError, TypedValueBindingErrorKind,
+    TypedYamlValueBinding, TYPED_YAML_VALUE_BINDING_VERSION,
 };
 
 pub use quoted::{
