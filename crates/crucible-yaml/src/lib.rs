@@ -13,6 +13,7 @@ pub mod resolve_collection_tag;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_scalar_node;
+pub mod resolve_scalar_table;
 pub mod resolve_scalar_value;
 pub mod resolve_special_float;
 pub mod resolve_tag;
@@ -112,6 +113,13 @@ pub use resolve_topology::{
 pub use resolve_scalar_node::{
     decode_profile1_cst_node_scalar, CstScalarDecodeError, CstScalarDecodeErrorKind,
     CstScalarDecodeLimits, DecodedCstScalar, CST_SCALAR_DECODE_VERSION,
+};
+
+pub use resolve_scalar_table::{
+    canonical_semantic_scalar_table_limits, compose_profile1_semantic_scalar_table,
+    SemanticScalarTableError, SemanticScalarTableErrorKind, SemanticScalarTableLimits,
+    SemanticScalarTableSource, MAX_PROFILE1_TOTAL_SEMANTIC_SCALAR_CODE_POINTS,
+    SEMANTIC_SCALAR_TABLE_TRANSFORMATION_VERSION,
 };
 
 pub use resolve_scalar_value::{

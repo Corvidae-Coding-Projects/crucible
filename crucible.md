@@ -1856,6 +1856,17 @@ preventing a forged CST view from laundering an otherwise plausible topology tab
 collection values, alias redirection, cycle rejection, duplicate-key checks, and merge expansion
 compose over these stable identities in the subsequent resolution machines.
 
+Scalar semantic-node population is an independently verified aggregate transformation over those
+stable CST identities. It emits exactly one complete resolved-scalar record for every scalar or
+zero-width empty CST node, in increasing CST-node order, while collection and alias nodes remain
+for their dedicated producers. Besides preserving the per-scalar tag, canonical value, decoded
+presentation, and provenance, it counts decoded content across the entire source. A caller-lowered
+scalar-record cap fails at the first excluded scalar node; a caller-lowered aggregate-content cap
+fails at the exact first excluded decoded content code point, not merely at the containing node.
+Per-scalar content, tag, integer-limb, and finite-float digit caps retain their existing nested
+typed diagnostics and precedence. The public success theorem extracts both exact CST coverage and
+exact aggregate accounting, while the executable loop remains iterative and bounded.
+
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
 exact declaration in the same document. Verbatim tags bypass handle expansion. In accordance with

@@ -110,6 +110,11 @@ Current work establishes and extends:
   per sequence or mapping entry; independently caller-lowered caps with exact first-excluded byte
   diagnostics; authenticated CST/token inputs; public anti-laundering semantics; and total
   executable-to-pure correspondence;
+- verified aggregate semantic scalar-table population in CST order, covering every scalar and
+  zero-width empty node exactly once; preserving complete resolved values, tags, presentation, and
+  provenance; enforcing independent scalar-record, aggregate-content, and nested scalar limits at
+  the exact first excluded code point; and proving total executable correspondence plus public
+  exact-coverage and exact-accounting extraction;
 - verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
   primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;

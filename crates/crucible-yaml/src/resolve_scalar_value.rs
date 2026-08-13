@@ -886,6 +886,35 @@ pub open spec fn resolve_profile1_cst_node_scalar_value_spec(
     }
 }
 
+pub proof fn lemma_resolved_scalar_success_retains_requested_node_index(
+    atomized: AtomizedSourceView,
+    quoted: QuotedScalarSourceView,
+    plain: PlainScalarSourceView,
+    block: BlockScalarSourceView,
+    completed: CompletedTokenSourceView,
+    cst: CstSourceView,
+    node_index: u64,
+    limits: ScalarValueLimitsView,
+    scalar: ResolvedScalarView,
+)
+    requires
+        resolve_profile1_cst_node_scalar_value_spec(
+            atomized,
+            quoted,
+            plain,
+            block,
+            completed,
+            cst,
+            node_index,
+            limits,
+        ) == Ok(Some(scalar)),
+    ensures
+        scalar.node_index == node_index,
+{
+    reveal(resolve_profile1_cst_node_scalar_value_spec);
+    reveal(resolve_decoded_scalar_value_spec);
+}
+
 fn decoded_scalar_matches_node(
     decoded: &DecodedCstScalar,
     node: &CstNode,
