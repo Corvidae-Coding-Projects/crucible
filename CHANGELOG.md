@@ -65,5 +65,9 @@ begin.
   expansion, with stable source-node identity, normalized roots and collection edges, retained
   scalar/collection tags and merge provenance, graph sharing, four independent resource caps, a
   total pure result model, exact executable correspondence, and public anti-forgery contracts.
+- Added verified compilation for the versioned typed-field schema graph consumed by configuration
+  lowering, including every scalar and custom-tagged collection kind, nested sequence/mapping
+  references, required-field metadata, stable field IDs, Unicode names, ambiguity rejection,
+  caller-lowered resource caps, exact pure semantics, and public identity/uniqueness contracts.
 
 [Unreleased]: https://github.com/Corvidae-Coding-Projects/crucible/commits/main

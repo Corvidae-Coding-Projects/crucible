@@ -2054,6 +2054,25 @@ YAML DAG is the input to schema-directed typed-field lowering; completing this g
 not narrow or replace the separate typed Crucible configuration, schema validation, canonical
 serialization, or digest-stability requirements.
 
+The typed-field schema consumed by that lowering stage is itself an authenticated, independently
+versioned graph rather than an untyped host-language map. Schema nodes distinguish null, boolean,
+arbitrary-width integer, exact finite float, both infinities, NaN, string, custom scalar, sequence,
+custom sequence, mapping, and custom mapping values. Sequence nodes name their exact item schema;
+mapping nodes own contiguous field intervals. Each field retains a globally stable nonzero field
+identity, a nonempty Unicode-scalar name, an exact value-schema reference, and required/optional
+metadata. Compilation rejects malformed node shapes and references, gaps or overlaps in field
+ownership, invalid Unicode scalar values, duplicate stable identities globally, and duplicate names
+within a mapping. Empty mappings and recursive schema references remain representable; runtime
+lowering termination is governed by the finite acyclic YAML graph and its separate work limits.
+
+Schema compilation is iterative Verus Rust and owns its exact input on success. Schema nodes,
+fields, and aggregate field-name code points have independent caller-lowered caps of at most
+1,048,576 with inclusive accepted boundaries and exact first-excluded schema indices. A total pure
+result model fixes the successful compiled schema or first typed schema diagnostic, and public
+contracts prove exact input identity and deterministic output uniqueness. This prerequisite does
+not by itself claim that YAML fields have been lowered, required or unknown-field policy has been
+validated, cross-field invariants have been checked, or a canonical serialization has been emitted.
+
 Duplicate-key checking occurs after tag and scalar resolution and before merge application.
 Two scalar keys are equal only when their resolved tag and canonical semantic value are equal;
 sequence and mapping keys use structural equality over the acyclic resolved graph, with mapping

@@ -177,6 +177,13 @@ Current work establishes and extends:
   alias trees; independently caller-lowered node, sequence-entry, mapping-entry, and document-root
   caps with exact first-excluded diagnostics; total executable correspondence; and public exact
   input-identity and deterministic-output anti-forgery proofs;
+- verified typed-field schema compilation for the next lowering stage, with independent schema and
+  compiler versions; exact scalar, sequence, mapping, and custom-tagged value kinds; nested
+  sequence-item and mapping-field references; losslessly retained required-field metadata and
+  globally stable field IDs; contiguous ownership of mapping field ranges; nonempty Unicode scalar
+  names; global ID and per-mapping name uniqueness; independently caller-lowered node, field, and
+  aggregate-name caps; total executable correspondence; and public exact-input identity and
+  deterministic-output anti-forgery proofs;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

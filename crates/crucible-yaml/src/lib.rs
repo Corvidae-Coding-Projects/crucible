@@ -26,6 +26,7 @@ pub mod resolve_special_float;
 pub mod resolve_tag;
 pub mod resolve_topology;
 pub mod scalar_decode;
+pub mod schema;
 pub mod structural;
 pub mod token;
 pub mod utf8;
@@ -75,6 +76,15 @@ pub use quoted::{
     QuotedScalarErrorKind, QuotedScalarScanLimits, QuotedScalarSource, QuotedScalarStyle,
     MAX_PROFILE1_QUOTED_SCALARS, MAX_PROFILE1_QUOTED_SCALAR_ATOMS,
     QUOTED_SCALAR_TRANSFORMATION_VERSION,
+};
+
+pub use schema::{
+    canonical_typed_field_schema_limits, compile_typed_field_schema, CompiledTypedFieldSchema,
+    TypedFieldDefinition, TypedFieldSchema, TypedFieldSchemaError, TypedFieldSchemaErrorKind,
+    TypedFieldSchemaLimits, TypedSchemaNode, TypedSchemaValueKind,
+    MAX_PROFILE1_TYPED_SCHEMA_FIELDS, MAX_PROFILE1_TYPED_SCHEMA_NAME_CODE_POINTS,
+    MAX_PROFILE1_TYPED_SCHEMA_NODES, TYPED_FIELD_SCHEMA_COMPILATION_VERSION,
+    TYPED_FIELD_SCHEMA_VERSION,
 };
 
 pub use resolve::{
