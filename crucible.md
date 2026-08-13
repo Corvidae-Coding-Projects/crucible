@@ -1844,6 +1844,18 @@ The result retains the CST node index, collection kind, canonical semantic tag, 
 explicit tag provenance. Non-collection nodes return no collection record only after source and
 CST identity and node-index bounds are authenticated, leaving them to the scalar or alias producer.
 
+Semantic graph construction begins with a separate verified topology projection rather than a
+recursive host graph. It emits one root record for every CST document, one node record for every
+CST node, and source-ordered sequence and mapping edge tables that retain the original CST entry
+indices, child indices, token intervals, and node byte ranges exactly. Collection node edge
+intervals remain indices into the corresponding edge table, so child-before-parent identities and
+sharing are preserved without renumbering. Document-root, node, sequence-edge, and mapping-edge
+caps are independently caller-lowerable; each failure names the first excluded source record at
+its exact byte anchor. Its public semantic predicate includes the completed CST semantic contract,
+preventing a forged CST view from laundering an otherwise plausible topology table. Scalar and
+collection values, alias redirection, cycle rejection, duplicate-key checks, and merge expansion
+compose over these stable identities in the subsequent resolution machines.
+
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
 exact declaration in the same document. Verbatim tags bypass handle expansion. In accordance with

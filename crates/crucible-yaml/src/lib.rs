@@ -16,6 +16,7 @@ pub mod resolve_scalar_node;
 pub mod resolve_scalar_value;
 pub mod resolve_special_float;
 pub mod resolve_tag;
+pub mod resolve_topology;
 pub mod scalar_decode;
 pub mod structural;
 pub mod token;
@@ -97,6 +98,15 @@ pub use resolve_tag::{
     resolve_profile1_node_tag_property, ResolvedTagCodePoint, ResolvedTagKind, ResolvedTagOrigin,
     ResolvedTagProperty, TagResolutionError, TagResolutionErrorKind, TagResolutionLimits,
     MAX_PROFILE1_RESOLVED_TAG_CODE_POINTS, TAG_RESOLUTION_VERSION,
+};
+
+pub use resolve_topology::{
+    canonical_semantic_topology_limits, compose_profile1_semantic_topology, SemanticDocumentRoot,
+    SemanticMappingEdge, SemanticSequenceEdge, SemanticTopologyError, SemanticTopologyErrorKind,
+    SemanticTopologyLimits, SemanticTopologyNode, SemanticTopologySource,
+    MAX_PROFILE1_SEMANTIC_DOCUMENT_ROOTS, MAX_PROFILE1_SEMANTIC_MAPPING_EDGES,
+    MAX_PROFILE1_SEMANTIC_NODES, MAX_PROFILE1_SEMANTIC_SEQUENCE_EDGES,
+    SEMANTIC_TOPOLOGY_TRANSFORMATION_VERSION,
 };
 
 pub use resolve_scalar_node::{

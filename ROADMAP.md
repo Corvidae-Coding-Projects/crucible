@@ -105,6 +105,11 @@ Current work establishes and extends:
   non-specific Core kind tags, exact `!!seq`/`!!map` compatibility, rejection of scalar standard
   tags on collections, losslessly retained custom local/global tags, authenticated scalar/alias
   bypass, exact tag-limit and node-index diagnostics, and total executable-to-pure correspondence;
+- verified bounded semantic-topology projection with one exact document-root record per CST
+  document, one identity/range-preserving record per CST node, and one source-ordered edge record
+  per sequence or mapping entry; independently caller-lowered caps with exact first-excluded byte
+  diagnostics; authenticated CST/token inputs; public anti-laundering semantics; and total
+  executable-to-pure correspondence;
 - verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
   primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;

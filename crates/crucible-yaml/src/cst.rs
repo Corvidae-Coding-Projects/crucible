@@ -400,7 +400,10 @@ impl View for CstSequenceEntry {
 }
 
 impl CstSequenceEntry {
-    pub fn node_index(&self) -> u64 {
+    pub fn node_index(&self) -> (result: u64)
+        ensures
+            result == self@.node_index,
+    {
         self.node_index
     }
 
@@ -459,19 +462,31 @@ impl View for CstMappingEntry {
 }
 
 impl CstMappingEntry {
-    pub fn key_node_index(&self) -> u64 {
+    pub fn key_node_index(&self) -> (result: u64)
+        ensures
+            result == self@.key_node_index,
+    {
         self.key_node_index
     }
 
-    pub fn value_node_index(&self) -> u64 {
+    pub fn value_node_index(&self) -> (result: u64)
+        ensures
+            result == self@.value_node_index,
+    {
         self.value_node_index
     }
 
-    pub fn token_start(&self) -> u64 {
+    pub fn token_start(&self) -> (result: u64)
+        ensures
+            result == self@.token_start,
+    {
         self.token_start
     }
 
-    pub fn token_end(&self) -> u64 {
+    pub fn token_end(&self) -> (result: u64)
+        ensures
+            result == self@.token_end,
+    {
         self.token_end
     }
 
@@ -582,7 +597,10 @@ impl CstNode {
         self.byte_start
     }
 
-    pub fn byte_end(&self) -> u64 {
+    pub fn byte_end(&self) -> (result: u64)
+        ensures
+            result == self@.byte_end,
+    {
         self.byte_end
     }
 
@@ -615,11 +633,17 @@ impl CstNode {
         self.collection_end_token
     }
 
-    pub fn entry_start(&self) -> u64 {
+    pub fn entry_start(&self) -> (result: u64)
+        ensures
+            result == self@.entry_start,
+    {
         self.entry_start
     }
 
-    pub fn entry_end(&self) -> u64 {
+    pub fn entry_end(&self) -> (result: u64)
+        ensures
+            result == self@.entry_end,
+    {
         self.entry_end
     }
 
@@ -891,7 +915,7 @@ proof fn lemma_cst_node_views_push(values: Seq<CstNode>, value: CstNode)
     ).push(value@));
 }
 
-proof fn lemma_cst_sequence_entry_view_at(values: Seq<CstSequenceEntry>, index: int)
+pub proof fn lemma_cst_sequence_entry_view_at(values: Seq<CstSequenceEntry>, index: int)
     requires
         0 <= index < values.len(),
     ensures
@@ -912,7 +936,7 @@ proof fn lemma_cst_sequence_entry_views_push(values: Seq<CstSequenceEntry>, valu
     ).push(value@));
 }
 
-proof fn lemma_cst_mapping_entry_view_at(values: Seq<CstMappingEntry>, index: int)
+pub proof fn lemma_cst_mapping_entry_view_at(values: Seq<CstMappingEntry>, index: int)
     requires
         0 <= index < values.len(),
     ensures
@@ -1142,11 +1166,17 @@ impl CstSource {
         self.nodes.as_slice()
     }
 
-    pub fn sequence_entries(&self) -> &[CstSequenceEntry] {
+    pub fn sequence_entries(&self) -> (result: &[CstSequenceEntry])
+        ensures
+            cst_sequence_entry_views_spec(result@) == self@.sequence_entries,
+    {
         self.sequence_entries.as_slice()
     }
 
-    pub fn mapping_entries(&self) -> &[CstMappingEntry] {
+    pub fn mapping_entries(&self) -> (result: &[CstMappingEntry])
+        ensures
+            cst_mapping_entry_views_spec(result@) == self@.mapping_entries,
+    {
         self.mapping_entries.as_slice()
     }
 
