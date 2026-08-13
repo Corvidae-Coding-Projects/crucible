@@ -9,6 +9,7 @@ pub mod plain;
 pub mod quoted;
 pub mod resolve;
 pub mod resolve_anchor;
+pub mod resolve_collection_tag;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_scalar_node;
@@ -68,6 +69,12 @@ pub use resolve_anchor::{
     resolve_profile1_anchor_aliases, AliasBinding, AnchorAliasError, AnchorAliasErrorKind,
     AnchorAliasLimits, AnchorAliasSource, AnchorDeclaration, ANCHOR_ALIAS_RESOLUTION_VERSION,
     MAX_PROFILE1_ALIAS_BINDINGS, MAX_PROFILE1_ANCHOR_DECLARATIONS,
+};
+
+pub use resolve_collection_tag::{
+    resolve_profile1_cst_node_collection_tag, CollectionTagError, CollectionTagErrorKind,
+    CollectionTagLimits, ResolvedCollection, ResolvedCollectionTag,
+    COLLECTION_TAG_RESOLUTION_VERSION,
 };
 
 pub use resolve_integer::{

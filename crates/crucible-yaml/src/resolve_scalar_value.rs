@@ -1009,7 +1009,8 @@ fn tag_content_matches_ascii(
     true
 }
 
-fn explicit_scalar_tag_class(tag: &ResolvedTagProperty) -> (class: ExplicitScalarTagClass)
+pub(crate) fn explicit_scalar_tag_class(tag: &ResolvedTagProperty) -> (class:
+    ExplicitScalarTagClass)
     ensures
         class == explicit_scalar_tag_class_spec(tag@),
 {
@@ -1121,7 +1122,7 @@ fn scalar_value_anchor(
     }
 }
 
-fn explicit_tag_anchor(tag: &ResolvedTagProperty, node: &CstNode) -> (offset: u64)
+pub(crate) fn explicit_tag_anchor(tag: &ResolvedTagProperty, node: &CstNode) -> (offset: u64)
     ensures
         offset == explicit_tag_anchor_spec(tag@, node@),
 {

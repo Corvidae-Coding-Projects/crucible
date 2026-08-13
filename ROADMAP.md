@@ -101,6 +101,10 @@ Current work establishes and extends:
   quoted/block string behavior; explicit `!!null`, `!!bool`, `!!int`, `!!float`, and `!!str`
   spelling checks; scalar rejection of `!!seq`/`!!map`; non-specific `!`; losslessly retained local
   and global custom tags; exact nested-limit diagnostics; and anti-forgery node-index binding;
+- verified collection-tag composition for sequence and mapping nodes, including implicit and
+  non-specific Core kind tags, exact `!!seq`/`!!map` compatibility, rejection of scalar standard
+  tags on collections, losslessly retained custom local/global tags, authenticated scalar/alias
+  bypass, exact tag-limit and node-index diagnostics, and total executable-to-pure correspondence;
 - verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
   primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;

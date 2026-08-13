@@ -1836,6 +1836,14 @@ decoded-content, tag, magnitude, coefficient, or exponent limit is preserved as 
 source diagnostic. The public result retains the CST node index, explicit tag record, full decoded
 presentation provenance, canonical semantic tag, and canonical semantic value.
 
+Collection-tag composition authenticates the completed-token source and CST before inspecting node
+kind. Untagged and non-specific sequence or mapping nodes receive the corresponding Core tag;
+`!!seq` and `!!map` require the exact compatible collection kind; scalar standard tags are rejected
+on collections; and unknown local or global tags remain lossless application-defined identities.
+The result retains the CST node index, collection kind, canonical semantic tag, and complete
+explicit tag provenance. Non-collection nodes return no collection record only after source and
+CST identity and node-index bounds are authenticated, leaving them to the scalar or alias producer.
+
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
 exact declaration in the same document. Verbatim tags bypass handle expansion. In accordance with
