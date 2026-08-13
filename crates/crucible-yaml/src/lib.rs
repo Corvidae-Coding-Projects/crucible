@@ -10,6 +10,7 @@ pub mod quoted;
 pub mod resolve;
 pub mod resolve_alias_cycle;
 pub mod resolve_anchor;
+pub mod resolve_canonical_scalar_key;
 pub mod resolve_collection_tag;
 pub mod resolve_float;
 pub mod resolve_integer;
@@ -73,6 +74,14 @@ pub use resolve_alias_cycle::{
     canonical_alias_cycle_limits, resolve_profile1_alias_cycles, AcyclicSemanticGraphSource,
     AliasCycleError, AliasCycleErrorKind, AliasCycleLimits, SemanticVisitState,
     ALIAS_CYCLE_RESOLUTION_VERSION, MAX_PROFILE1_SEMANTIC_DEPTH, MAX_PROFILE1_SEMANTIC_WORK_STACK,
+};
+
+pub use resolve_canonical_scalar_key::{
+    canonical_scalar_key_limits, compose_profile1_canonical_scalar_keys, CanonicalKeyByte,
+    CanonicalScalarKeyError, CanonicalScalarKeyErrorKind, CanonicalScalarKeyLimits,
+    CanonicalScalarKeyRecord, CanonicalScalarKeySource,
+    CANONICAL_SCALAR_KEY_TRANSFORMATION_VERSION, MAX_PROFILE1_CANONICAL_SCALAR_KEY_BYTES,
+    MAX_PROFILE1_CANONICAL_SCALAR_KEY_RECORDS, MAX_PROFILE1_TOTAL_CANONICAL_SCALAR_KEY_BYTES,
 };
 
 pub use resolve_anchor::{

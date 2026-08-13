@@ -1925,6 +1925,29 @@ explicit work-stack limits are independently caller-lowerable and report the byt
 first excluded node. The public success predicate binds all of this evidence to the total pure
 cycle-resolution result and rejects forged forward redirects.
 
+Canonical scalar-key composition consumes and owns that exact acyclic semantic graph and emits one
+key record for every resolved scalar node. Each identity begins with a transformation/version
+prefix, a resolved-tag discriminator, and an exact semantic-value discriminator. Core null,
+boolean, arbitrary-width integer, exact finite-float, infinity, NaN, and string values use their
+already normalized semantic records, so presentation variants such as `1`/`01`, `TRUE`/`true`,
+`null`/`~`, `1.0`/`10e-1`, and plain/quoted strings compare by semantic identity rather than source
+spelling. Local and global custom tags additionally encode their complete resolved tag content;
+two different custom tag identities therefore cannot collapse merely because both carry the same
+scalar value. Every variable-length component has a fixed-width length delimiter and every variant
+has a distinct marker. Equality is exact byte equality, never host hash equality.
+
+Every emitted byte retains a source-byte diagnostic anchor. Tag-content and decoded string bytes
+use their retained per-code-point provenance; normalized numeric metadata uses the owning scalar's
+exact node anchor. The executable encoder streams directly over retained tag, decoded-content,
+integer-limb, and float-digit slices without cloning them into temporary aggregate buffers. Scalar
+record count, per-key bytes, and total key bytes are independently caller-lowerable beneath their
+absolute caps, and each failure reports the first excluded emitted byte before allocation. The
+public semantic predicate is equality with the total pure composition result and therefore
+authenticates the entire owned acyclic graph, exact record order, bytes, provenance, accounting,
+limit precedence, and diagnostics. Collection structural identities extend this same length-
+delimited representation in the following resolution machine; this scalar slice does not reduce
+the committed sequence/mapping-key, duplicate-key, or merge-expansion requirements.
+
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
 does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with

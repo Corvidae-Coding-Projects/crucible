@@ -188,7 +188,7 @@ pub enum ResolvedScalarValueView {
 impl View for ResolvedScalarValue {
     type V = ResolvedScalarValueView;
 
-    closed spec fn view(&self) -> ResolvedScalarValueView {
+    open spec fn view(&self) -> ResolvedScalarValueView {
         match self {
             ResolvedScalarValue::Null => ResolvedScalarValueView::Null,
             ResolvedScalarValue::Boolean(value) => ResolvedScalarValueView::Boolean(*value),

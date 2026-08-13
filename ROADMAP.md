@@ -137,6 +137,13 @@ Current work establishes and extends:
   stable CST node identity; exact per-node semantic depths and completion states; deterministic
   visit order and deepest-path evidence; independently caller-lowered depth and work-stack limits;
   total executable correspondence; and a forged-forward-redirect anti-laundering proof fixture;
+- verified canonical scalar-key identities over every resolved scalar node, with presentation-
+  independent Core null, boolean, arbitrary-width integer, exact finite-float, infinity, NaN, and
+  Unicode string encodings; exact lossless local/global custom-tag identity; explicit variant and
+  length delimiters rather than hash equality; per-byte source anchors; independently caller-
+  lowered record, per-key byte, and aggregate-byte limits; allocation-free streaming over retained
+  scalar/tag content; total executable-to-pure correspondence; and public exact-result proof
+  contracts;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
