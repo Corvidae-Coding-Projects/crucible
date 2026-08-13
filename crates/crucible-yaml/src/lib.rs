@@ -78,10 +78,10 @@ pub use resolve_special_float::{
 
 pub use scalar_decode::{
     decode_profile1_block_scalar_content, decode_profile1_double_quoted_scalar_content,
-    decode_profile1_single_quoted_scalar_content, DecodedContentOrigin, DecodedContentScalar,
-    DecodedScalarContent, DecodedScalarStyle, ScalarDecodeError, ScalarDecodeErrorKind,
-    ScalarDecodeLimits, MAX_PROFILE1_DECODED_SCALAR_CONTENT_CODE_POINTS,
-    SCALAR_DECODE_TRANSFORMATION_VERSION,
+    decode_profile1_plain_scalar_content, decode_profile1_single_quoted_scalar_content,
+    DecodedContentOrigin, DecodedContentScalar, DecodedScalarContent, DecodedScalarStyle,
+    ScalarDecodeError, ScalarDecodeErrorKind, ScalarDecodeLimits,
+    MAX_PROFILE1_DECODED_SCALAR_CONTENT_CODE_POINTS, SCALAR_DECODE_TRANSFORMATION_VERSION,
 };
 
 pub use plain::{
