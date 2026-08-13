@@ -7,6 +7,7 @@ pub mod cst;
 pub mod layout;
 pub mod lower;
 pub mod lower_typed;
+pub mod lower_typed_fields;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
@@ -75,6 +76,16 @@ pub use lower::{
 pub use lower_typed::{
     bind_profile1_typed_yaml_value, TypedValueBindingError, TypedValueBindingErrorKind,
     TypedYamlValueBinding, TYPED_YAML_VALUE_BINDING_VERSION,
+};
+
+pub use lower_typed_fields::{
+    canonical_typed_mapping_field_limits, partition_profile1_typed_mapping_fields,
+    partition_profile1_typed_mapping_fields_with_policy, TypedMappingField, TypedMappingFieldError,
+    TypedMappingFieldErrorKind, TypedMappingFieldErrorView, TypedMappingFieldLimits,
+    TypedMappingFieldLimitsView, TypedMappingFieldPartition, TypedMappingFieldPartitionView,
+    TypedMappingFieldView, TypedMappingUnknownField, TypedMappingUnknownFieldPolicy,
+    TypedMappingUnknownFieldView, MAX_PROFILE1_TYPED_MAPPING_FIELDS,
+    MAX_PROFILE1_TYPED_MAPPING_KEY_CODE_POINTS, TYPED_MAPPING_FIELD_PARTITION_VERSION,
 };
 
 pub use quoted::{

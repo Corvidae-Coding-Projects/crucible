@@ -207,6 +207,15 @@ Current work establishes and extends:
   coercion; retaining alias-transparent resolved-node, scalar/collection, schema-node, and exact
   source-range identities; rejecting forged record identities and bounds; and proving total
   executable correspondence plus deterministic-output anti-forgery semantics;
+- verified mapping-field partitioning over the canonical YAML DAG, matching only exact decoded
+  string keys, validating every recognized value against its owned schema node without coercion,
+  emitting recognized records in schema order, retaining direct/inherited mapping provenance, and
+  rejecting duplicate, unknown, missing-required, non-string-key, and wrong-kind inputs with typed
+  exact diagnostics; the default policy rejects unknown fields while the explicit compatibility
+  policy preserves each unknown key/value node and source identity losslessly; independent field
+  and aggregate-key-code-point caps are caller-lowerable but absolutely bounded; executable output
+  equals the total pure model, whose public semantics prove strict schema order, required-field
+  coverage, default-reject exclusion of unknown records, and exact inspectable scan/emission;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
