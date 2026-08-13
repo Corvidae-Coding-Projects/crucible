@@ -1912,6 +1912,19 @@ semantic predicate exposes equality with the total pure composition result as we
 semantic contract, so forged or stale topology, scalar, anchor, collection, or redirect evidence
 cannot be laundered into a successful table.
 
+Alias-cycle rejection consumes and owns that exact node table without materializing alias targets.
+It examines alias redirects in presentation order before caller traversal caps, so the first direct
+or indirect ancestor edge reports `AliasCycle` at the exact alias-name byte even when a lowered cap
+would also reject the graph. Every accepted sequence, mapping, and alias edge is publicly proved to
+target a strictly smaller stable CST node identity; this natural-number descent is the graph's
+nonrecursive acyclicity witness. A second iterative pass records one exact semantic depth and
+completed visit state for every node in deterministic CST order, the maximum observed depth, and
+the complete node-index path attaining the first such maximum. The path is retained rather than
+discarded so lowering and diagnostics can reuse checked traversal evidence. Semantic-depth and
+explicit work-stack limits are independently caller-lowerable and report the byte start of the
+first excluded node. The public success predicate binds all of this evidence to the total pure
+cycle-resolution result and rejects forged forward redirects.
+
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
 does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with

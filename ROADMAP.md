@@ -131,6 +131,12 @@ Current work establishes and extends:
   and complete alias redirects without copying targets; enforces independent caller-lowered node,
   collection, redirect, and nested tag limits at exact first-excluded source anchors; and exposes
   the total pure composition result through public anti-laundering proof contracts;
+- verified alias-cycle rejection over the owned semantic node table, with intrinsic direct and
+  indirect cycle diagnostics taking precedence over caller traversal caps at the exact closing
+  alias name; a proof that every accepted sequence, mapping, and alias edge strictly decreases the
+  stable CST node identity; exact per-node semantic depths and completion states; deterministic
+  visit order and deepest-path evidence; independently caller-lowered depth and work-stack limits;
+  total executable correspondence; and a forged-forward-redirect anti-laundering proof fixture;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

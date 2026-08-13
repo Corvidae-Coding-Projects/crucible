@@ -8,6 +8,7 @@ pub mod layout;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
+pub mod resolve_alias_cycle;
 pub mod resolve_anchor;
 pub mod resolve_collection_tag;
 pub mod resolve_float;
@@ -66,6 +67,12 @@ pub use resolve::{
     classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarError,
     CoreScalarErrorKind, CoreScalarLimits, CoreScalarRange, CORE_SCALAR_CLASSIFIER_VERSION,
     MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS,
+};
+
+pub use resolve_alias_cycle::{
+    canonical_alias_cycle_limits, resolve_profile1_alias_cycles, AcyclicSemanticGraphSource,
+    AliasCycleError, AliasCycleErrorKind, AliasCycleLimits, SemanticVisitState,
+    ALIAS_CYCLE_RESOLUTION_VERSION, MAX_PROFILE1_SEMANTIC_DEPTH, MAX_PROFILE1_SEMANTIC_WORK_STACK,
 };
 
 pub use resolve_anchor::{
