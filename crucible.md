@@ -4384,7 +4384,8 @@ Artifact publication and database references must be crash-safe:
 
 1. write to a temporary file in the object-store filesystem,
 2. hash and verify the completed contents,
-3. atomically rename the object into its content-addressed location,
+3. atomically publish the object without replacement into its content-addressed location, using a
+   same-filesystem rename or an equivalent no-clobber primitive,
 4. commit database references in a transaction.
 
 An interrupted write may leave an unreferenced object, but must never leave a committed row
@@ -4460,6 +4461,8 @@ Initial commands:
 
 ```text
 crucible init
+crucible artifact import
+crucible artifact verify
 crucible build
 crucible run
 crucible fuzz
@@ -4490,6 +4493,19 @@ version, exact migration history, and workspace-format metadata. Repeating the c
 same valid version is idempotent. Initialization rejects an occupied or symlinked managed path and
 an existing database whose identity, version, migration history, metadata, or integrity check does
 not match; it does not adopt or overwrite unrelated state.
+
+`crucible artifact import <file> [workspace]` ingests one regular, non-symlink source into the
+workspace object store, emits its canonical algorithm-qualified artifact ID, retains source-path
+provenance, and transactionally records the immutable object after atomic no-clobber publication.
+Duplicate bytes share one object and one artifact row while distinct source paths retain distinct
+provenance rows. The initial local command enforces an explicit 64 MiB per-file in-memory import
+limit; streaming and directory corpus ingestion remain required follow-on paths for larger inputs
+rather than being removed from scope.
+
+`crucible artifact verify <artifact-id> [workspace]` reopens the database row and stored bytes,
+recomputes the project-owned digest, and fails if the canonical identity, size, database record, or
+object contents disagree. Artifact IDs determine only verified lowercase-hex path components under
+`objects/sha256/ab/cd/<full_hash>`; malformed or unsupported IDs never reach path selection.
 
 ```bash
 crucible run crucible.yaml

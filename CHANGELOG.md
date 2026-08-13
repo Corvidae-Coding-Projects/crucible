@@ -14,6 +14,10 @@ begin.
   workspace layout plus an application-identified, versioned, integrity-checked SQLite database;
   initialization is idempotent, refuses incompatible or symlinked state, and is covered through
   compiled-binary process fixtures.
+- Added monotonic workspace schema migration from v1 to v2 plus `crucible artifact import` and
+  `crucible artifact verify`: verified canonical SHA-256 addressing feeds atomic no-clobber object
+  publication, deduplication, source provenance, transactional database references, bounded reads,
+  and post-publication corruption detection.
 - Complete draft implementation specification for the Crucible correctness harness.
 - Verus-first implementation saturation and trusted-boundary accounting requirements.
 - Project-owned, Verus-authored Crucible YAML design and proof obligations.

@@ -5,6 +5,7 @@
 - **Decision owners:** dollspace.gay (approved 2026-08-13)
 - **Related issue:** Phase 0 `crucible init` acceptance slice
 - **Supersedes:** None
+- **Amended by:** ADR-0002 (schema version 2 and the separate artifact host boundary)
 
 ## Context and evidence
 
@@ -16,13 +17,16 @@ pure YAML machinery does not deliver this runnable acceptance outcome.
 ## Decision
 
 Add a `crucible` binary with `crucible init [path]`. It creates the documented `.crucible`
-directory layout and initializes schema version 1 in an application-identified SQLite database.
+directory layout. This decision originally initialized schema version 1 in an
+application-identified SQLite database; ADR-0002 now makes new workspaces version 2 and migrates
+exact version-1 workspaces monotonically.
 The command is idempotent for a valid Crucible workspace and refuses an incompatible or occupied
 state path.
 
 Use `rusqlite` 0.40.2 with default features disabled and bundled SQLite enabled. Keep command
-selection in Verus Rust and isolate host behavior in three registered external bodies: argument
-acquisition, workspace/database initialization, and process completion.
+selection in Verus Rust and isolate initialization behavior in three registered external bodies:
+argument acquisition, workspace/database initialization, and process completion. ADR-0002 adds a
+separately approved fourth boundary for artifact filesystem and SQLite operations.
 
 ## Preserved invariants
 
@@ -44,9 +48,10 @@ acquisition, workspace/database initialization, and process completion.
 
 ## Verus and trusted-boundary impact
 
-Three `external_body` boundaries are approved and registered. Their exact assumptions and
+The three initialization `external_body` boundaries are approved and registered. Their exact assumptions and
 independent checks are recorded in `tcb/ledger.tsv`. `rusqlite`, `libsqlite3-sys`, and bundled
-SQLite are unverified dependencies reachable only through the initialization boundary. A future
+SQLite are unverified dependencies reachable through the initialization and later ADR-0002
+artifact boundaries. A future
 verified filesystem or SQLite model should narrow the boundary; the boundary is reconsidered on
 every Verus, rusqlite, or SQLite upgrade.
 

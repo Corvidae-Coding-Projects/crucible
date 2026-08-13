@@ -10,11 +10,12 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 
 ### Immediate breadth-first acceptance path
 
-Implementation now prioritizes the shortest runnable Phase 0 path: initialize a workspace and
-database, import and integrity-check an artifact, validate and digest a real configuration, and
-round-trip the initial domain records. Further theorem strengthening, exhaustive YAML conformance
-closure, and finer internal submachines follow that operational spine unless a defect blocks it.
-This changes delivery order only; no acceptance criterion or later capability is removed.
+Implementation now prioritizes the shortest runnable Phase 0 path. Workspace initialization,
+database migration, and single-artifact import/integrity verification are operational; production
+configuration validation/digesting and initial domain-record round trips are next. Further theorem
+strengthening, exhaustive YAML conformance closure, and finer internal submachines follow that
+operational spine unless a defect blocks it. This changes delivery order only; no acceptance
+criterion or later capability is removed.
 
 Current work establishes and extends:
 
@@ -28,8 +29,13 @@ Current work establishes and extends:
 - a production `crucible init [path]` command that creates the documented workspace layout and an
   application-identified, explicitly migrated SQLite database; refuses incompatible, occupied, or
   symlinked managed state; verifies database integrity; and is idempotent for a valid workspace;
+- production `crucible artifact import` and `crucible artifact verify` commands backed by verified
+  SHA-256 object addressing, atomic no-clobber publication, deduplication, retained import
+  provenance, transactional SQLite references, and post-publication integrity checking;
 - verified typed identifiers and versioned identity envelopes;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
+- streaming and directory corpus ingestion, object reachability checking, generation barriers, and
+  conservative garbage collection on top of the initial bounded local artifact path;
 - verified structurally valid append-only evidence/provenance transitions, atomic multi-input
   derivations, retry-safe borrowed publication, and versioned evidence envelopes;
 - project-owned Crucible YAML profile-1 byte decoding with exact source spans, typed UTF-8

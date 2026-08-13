@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use vstd::prelude::*;
 
 const APPLICATION_ID: i64 = 0x4352_5543;
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
@@ -86,11 +86,20 @@ fn assert_valid_initialized_workspace(root: &Path) {
         .expect("run integrity check");
     let migrations: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM schema_migrations WHERE version = 1 AND name = 'initialize-workspace'",
+            "SELECT COUNT(*) FROM schema_migrations WHERE
+                (version = 1 AND name = 'initialize-workspace') OR
+                (version = 2 AND name = 'add-artifact-store')",
             [],
             |row| row.get(0),
         )
         .expect("read migration history");
+    let artifact_tables: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name IN ('artifacts', 'artifact_imports')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read artifact tables");
     let format: String = connection
         .query_row(
             "SELECT value FROM workspace_metadata WHERE key = 'format'",
@@ -102,8 +111,97 @@ fn assert_valid_initialized_workspace(root: &Path) {
     assert_eq!(application_id, APPLICATION_ID);
     assert_eq!(user_version, SCHEMA_VERSION);
     assert_eq!(quick_check, "ok");
-    assert_eq!(migrations, 1);
+    assert_eq!(migrations, 2);
+    assert_eq!(artifact_tables, 2);
     assert_eq!(format, "crucible-workspace-v1");
+}
+
+fn create_version_one_workspace(root: &Path) {
+    let state = root.join(".crucible");
+    for relative in [
+        "corpus/seeds",
+        "corpus/interesting",
+        "corpus/coverage",
+        "corpus/regression",
+        "corpus/minimized",
+        "findings",
+        "objects",
+        "runs",
+        "reports",
+    ] {
+        std::fs::create_dir_all(state.join(relative)).expect("create version-one layout");
+    }
+    let database = state.join("database.sqlite");
+    let connection = Connection::open(&database).expect("create version-one database");
+    connection
+        .execute_batch(
+            "PRAGMA application_id = 1129469251;
+             PRAGMA user_version = 1;
+             PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = FULL;
+             CREATE TABLE schema_migrations(version INTEGER PRIMARY KEY CHECK(version > 0), name TEXT NOT NULL UNIQUE CHECK(length(name) > 0), checksum TEXT NOT NULL CHECK(length(checksum) = 71)) STRICT;
+             CREATE TABLE workspace_metadata(key TEXT PRIMARY KEY CHECK(length(key) > 0), value TEXT NOT NULL) STRICT;
+             INSERT INTO schema_migrations(version, name, checksum) VALUES (1, 'initialize-workspace', 'sha256:a6793465a272d41191c763e4460c035f7862da2ede3e84c280c3f2b9a8da8d36');
+             INSERT INTO workspace_metadata(key, value) VALUES ('format', 'crucible-workspace-v1');",
+        )
+        .expect("create version-one schema");
+}
+
+#[test]
+fn init_migrates_an_exact_version_one_workspace_monotonically() {
+    let temporary = TemporaryDirectory::new("migrate-v1");
+    create_version_one_workspace(temporary.path());
+    let database = temporary.path().join(".crucible/database.sqlite");
+
+    let result = run(&["init"], temporary.path());
+
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert_valid_initialized_workspace(temporary.path());
+    let connection = Connection::open(database).expect("open migrated database");
+    assert_eq!(
+        connection
+            .query_row(
+                "SELECT checksum FROM schema_migrations WHERE version = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("read preserved first migration"),
+        "sha256:a6793465a272d41191c763e4460c035f7862da2ede3e84c280c3f2b9a8da8d36"
+    );
+}
+
+#[test]
+fn concurrent_version_one_migration_is_idempotent() {
+    let temporary = TemporaryDirectory::new("concurrent-migrate-v1");
+    create_version_one_workspace(temporary.path());
+    let mut children = Vec::new();
+    for _ in 0..8 {
+        children.push(
+            Command::new(env!("CARGO_BIN_EXE_crucible"))
+                .arg("init")
+                .current_dir(temporary.path())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .expect("start concurrent migration"),
+        );
+    }
+
+    for child in children {
+        let output = child
+            .wait_with_output()
+            .expect("wait for concurrent migration");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    assert_valid_initialized_workspace(temporary.path());
 }
 
 #[test]

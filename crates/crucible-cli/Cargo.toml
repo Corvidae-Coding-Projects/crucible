@@ -12,6 +12,7 @@ name = "crucible"
 path = "src/main.rs"
 
 [dependencies]
+crucible-core = { path = "../crucible-core" }
 rusqlite.workspace = true
 vstd.workspace = true
 
