@@ -11,8 +11,10 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 ### Immediate breadth-first acceptance path
 
 Implementation now prioritizes the shortest runnable Phase 0 path. Workspace initialization,
-database migration, and single-artifact import/integrity verification are operational; production
-configuration validation/digesting and the remaining initial domain-record round trips are next.
+database migration, single-artifact import/integrity verification, and production configuration
+validation/canonicalization are operational. The immediate next milestone is `crucible run`: load an
+accepted configuration, execute one CLI target under bounded controls, capture a raw observation,
+and persist its source, canonical configuration, streams, outcome, and artifact references.
 Further theorem strengthening, exhaustive YAML conformance closure, and finer internal submachines
 follow that operational spine unless a defect blocks it. This changes delivery order only; no
 acceptance criterion or later capability is removed.
@@ -32,6 +34,13 @@ Current work establishes and extends:
 - production `crucible artifact import` and `crucible artifact verify` commands backed by verified
   SHA-256 object addressing, atomic no-clobber publication, deduplication, retained import
   provenance, transactional SQLite references, and post-publication integrity checking;
+- production `crucible config validate` and `crucible config canonicalize` commands backed by the
+  complete version-1 field schema, recursive typed validation without coercion, cross-field
+  execution invariants, deterministic canonical YAML, project-owned SHA-256 identity, exact typed
+  diagnostics, explicitly charged bounded work, Unix descriptor-relative no-follow source
+  admission, and fail-closed behavior on platforms awaiting an equivalent adapter. The current
+  public Verus contract authenticates versions, bounds, charged work, and both digests; exact
+  executable-to-pure field/canonicalization/invariant correspondence remains required by §12.2;
 - verified typed identifiers and versioned identity envelopes;
 - portable raw execution outcomes that retain completion, platform-native termination, and detected
   events as independent facts; enforce caller-lowered event, aggregate extension-metadata, and

@@ -1384,6 +1384,70 @@ Verus specification, and correspondence proofs wherever the pinned Verus toolcha
 them. The canonical lowered representation is the authoritative input to campaign identity,
 not parser-internal objects or host paths.
 
+#### 12.1.1 Effective configuration schema and canonicalization version 1
+
+The initial production configuration bridge consumes exactly one profile-1 YAML document whose
+root is a mapping. Configuration-schema version 1 is the complete field tree shown in the example
+above: `version`; `language.profile`; `project.name`; `target.adapter`, `command`, and `args`;
+every shown `execution`, `oracles`, `inputs`, `engines`, `sanitizers`, `campaign`, `storage`, and
+`verification` field; and no undeclared field. Every shown field is required in schema version 1.
+This strict initial schema avoids silent host-dependent defaults. A later optional field, default,
+deprecation, or compatibility rule requires an independently versioned configuration-schema
+decision; the lossless unknown-field compatibility mechanism remains available to migrations and
+inspection, while the production execution path rejects unknown fields by default.
+
+All mappings are lowered through the compiled typed-field schema and all sequences through their
+declared item schema. No string-to-number, number-to-string, collection-to-scalar, tag-erasing, or
+host-width coercion is permitted. Version 1 accepts only `version: 1`, language profile
+`crucible-yaml-1`, and target adapter `cli`. Project name, target command, campaign duration, and
+storage root are nonempty. Timeout, memory, process, output, and worker limits are positive
+integers representable by `u64`; the campaign seed is a nonnegative `u64`; allowed process exit
+codes are signed 32-bit integers. Duration uses a positive canonical magnitude followed by one of
+`ms`, `s`, `m`, `h`, or `d`. Corpus paths, target arguments, required capabilities, engine modes,
+and native-backend identities retain exact Unicode content and sequence order; duplicate
+capabilities, modes, and backends are invalid. Version 1 engine modes are `managed` and `native`,
+and native backends are `afl++`, `libfuzzer`, and `honggfuzz`. An enabled fuzz engine has at least
+one mode; native mode has at least one native backend; disabled or non-native fuzzing cannot retain
+effective native backends. Address, thread, and memory sanitizers are mutually exclusive. The
+three Verus policy booleans under `verification.verus` must be true for an accepted production
+configuration. These checks are the initial cross-field execution invariants, not permission to
+omit later adapter-, engine-, oracle-, or platform-specific validation.
+
+Canonicalization algorithm version 1 emits one JSON-compatible YAML 1.2 flow document followed by
+one LF. Mapping fields appear in compiled schema order; sequences preserve semantic order; booleans
+are lowercase; Core integers use minimal decimal spelling derived from their arbitrary-width
+semantic magnitude; and every string and mapping key is double-quoted with deterministic YAML
+escapes. Quote, reverse-solidus, backspace, tab, line feed, form feed, and carriage return use their
+JSON escape spellings; other non-ASCII Basic Multilingual Plane code points use lowercase
+`\uXXXX`; supplementary code points use their shortest UTF-8 spelling inside the quoted string.
+Comments, directives, anchors, aliases, merge keys, scalar style, numeric base, mapping presentation
+order, and harmless whitespace do not enter these bytes. Parsing
+and validating the canonical document yields the same effective configuration and exact canonical
+bytes. The effective-configuration digest is lowercase `sha256:` plus the project-owned SHA-256 of
+those bytes. Original source bytes remain a separate artifact with their own digest and diagnostic
+provenance.
+
+The absolute production bridge limits are 16 MiB of source bytes, 1,048,576 admitted typed values,
+16 MiB of canonical bytes, depth 4,096, and 4,194,304 iterative rendering tasks. Callers may lower
+source, typed-value, canonical-byte, depth, and work limits but cannot raise them. Work charges each
+render-task dispatch, each candidate examined during duplicate detection, and each code-point
+comparison needed to resolve an equal-length candidate exactly. Admission is checked before the
+next value, output byte, or charged unit of work; a source or canonical-output error identifies the
+exact first excluded byte, a typed-value error identifies the first excluded YAML node, and a depth
+or work error identifies the first task or comparison that cannot be admitted. Checked arithmetic,
+the work bound, and the independent source/value/output caps prevent alias sharing, large sequences,
+duplicate detection, or canonical escaping from becoming an unbounded allocation or traversal.
+
+`crucible config validate <path>` reads one regular non-symlink file under the source limit,
+validates it without starting a campaign, and writes its `sha256:<lowercase-hex>` effective digest
+plus LF. `crucible config canonicalize <path>` performs the same validation and writes only the
+canonical YAML bytes. Both reject non-UTF-8 paths, symlinks, non-regular files, oversized input,
+malformed YAML, schema/type/version errors, and cross-field errors through stable typed diagnostics;
+neither mutates a workspace or emits a partial canonical document on failure. Source adapters must
+resolve every component through descriptor-relative no-follow operations and validate the opened
+descriptor, or fail closed with an unsupported-platform diagnostic until an equivalent platform
+primitive is implemented; a check-then-open path walk is not an admissible substitute.
+
 Crucible YAML profile 1 must specify rather than inherit ambiguous implementation behavior.
 At minimum it defines:
 

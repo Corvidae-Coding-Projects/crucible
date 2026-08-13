@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
 mod artifact_store;
+mod configuration;
 
 pub use artifact_store::*;
+pub use configuration::*;
 
 #[expect(
     unused_imports,
@@ -127,6 +129,21 @@ define_string_literal!(
     verify_literal,
     verify_literal_spec,
     ['v', 'e', 'r', 'i', 'f', 'y']
+);
+define_string_literal!(
+    config_literal,
+    config_literal_spec,
+    ['c', 'o', 'n', 'f', 'i', 'g']
+);
+define_string_literal!(
+    validate_literal,
+    validate_literal_spec,
+    ['v', 'a', 'l', 'i', 'd', 'a', 't', 'e']
+);
+define_string_literal!(
+    canonicalize_literal,
+    canonicalize_literal_spec,
+    ['c', 'a', 'n', 'o', 'n', 'i', 'c', 'a', 'l', 'i', 'z', 'e']
 );
 define_string_literal!(
     current_directory_literal,
@@ -782,6 +799,8 @@ pub enum CliAction {
     Init(String),
     ArtifactImport(String, String),
     ArtifactVerify(String, String),
+    ConfigValidate(String),
+    ConfigCanonicalize(String),
 }
 
 #[verifier::ext_equal]
@@ -789,6 +808,8 @@ pub enum CliActionView {
     Init(Seq<char>),
     ArtifactImport(Seq<char>, Seq<char>),
     ArtifactVerify(Seq<char>, Seq<char>),
+    ConfigValidate(Seq<char>),
+    ConfigCanonicalize(Seq<char>),
 }
 
 impl View for CliAction {
@@ -802,6 +823,8 @@ impl View for CliAction {
                 root@,
             ),
             CliAction::ArtifactVerify(id, root) => CliActionView::ArtifactVerify(id@, root@),
+            CliAction::ConfigValidate(path) => CliActionView::ConfigValidate(path@),
+            CliAction::ConfigCanonicalize(path) => CliActionView::ConfigCanonicalize(path@),
         }
     }
 }
@@ -828,6 +851,12 @@ pub open spec fn parse_cli_args_spec(args: Seq<Seq<char>>) -> Result<CliActionVi
     } else if args.len() == 4 && args[0] == artifact_literal_spec() && args[1]
         == verify_literal_spec() {
         Ok(CliActionView::ArtifactVerify(args[2], args[3]))
+    } else if args.len() == 3 && args[0] == config_literal_spec() && args[1]
+        == validate_literal_spec() {
+        Ok(CliActionView::ConfigValidate(args[2]))
+    } else if args.len() == 3 && args[0] == config_literal_spec() && args[1]
+        == canonicalize_literal_spec() {
+        Ok(CliActionView::ConfigCanonicalize(args[2]))
     } else {
         Err(CliParseError::UnsupportedArguments)
     }
@@ -854,6 +883,10 @@ pub fn parse_cli_args(args: &[String]) -> (result: Result<CliAction, CliParseErr
         Ok(CliAction::ArtifactVerify(args[2].clone(), current_directory_literal()))
     } else if args.len() == 4 && args[0] == artifact_literal() && args[1] == verify_literal() {
         Ok(CliAction::ArtifactVerify(args[2].clone(), args[3].clone()))
+    } else if args.len() == 3 && args[0] == config_literal() && args[1] == validate_literal() {
+        Ok(CliAction::ConfigValidate(args[2].clone()))
+    } else if args.len() == 3 && args[0] == config_literal() && args[1] == canonicalize_literal() {
+        Ok(CliAction::ConfigCanonicalize(args[2].clone()))
     } else {
         Err(CliParseError::UnsupportedArguments)
     }

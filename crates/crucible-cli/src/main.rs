@@ -2,15 +2,16 @@
 
 use crucible_cli::{
     artifact_imports_table_sql, artifact_migration_checksum, artifact_migration_name,
-    artifact_migration_sql, artifacts_table_sql, database_snapshot_is_exact,
-    database_snapshot_is_exact_v1, decide_workspace_initialization, metadata_table_sql,
-    migration_checksum, migration_table_sql, object_address_for_artifact,
+    artifact_migration_sql, artifacts_table_sql, canonical_configuration_limits,
+    database_snapshot_is_exact, database_snapshot_is_exact_v1, decide_workspace_initialization,
+    metadata_table_sql, migration_checksum, migration_table_sql, object_address_for_artifact,
     object_address_matches_id, parse_cli_args, prepare_artifact_publication,
-    stored_artifact_is_exact, ArtifactStoreError, CliAction, CliParseError, DatabaseSnapshot,
-    InitializationDecision, InitializationError, MigrationRecord, ObjectAddress, PathKind,
-    PreparedArtifactPublication, StoredArtifactSnapshot, WorkspaceMetadata, WorkspaceSnapshot,
-    MAX_CLI_ARGUMENTS, MAX_CLI_ARGUMENT_BYTES, MAX_LOCAL_ARTIFACT_BYTES, WORKSPACE_APPLICATION_ID,
-    WORKSPACE_SCHEMA_VERSION,
+    stored_artifact_is_exact, validate_configuration, ArtifactStoreError, CliAction, CliParseError,
+    ConfigurationError, ConfigurationErrorKind, DatabaseSnapshot, InitializationDecision,
+    InitializationError, MigrationRecord, ObjectAddress, PathKind, PreparedArtifactPublication,
+    StoredArtifactSnapshot, WorkspaceMetadata, WorkspaceSnapshot, MAX_CLI_ARGUMENTS,
+    MAX_CLI_ARGUMENT_BYTES, MAX_CONFIGURATION_SOURCE_BYTES, MAX_LOCAL_ARTIFACT_BYTES,
+    WORKSPACE_APPLICATION_ID, WORKSPACE_SCHEMA_VERSION,
 };
 use crucible_core::{ArtifactId, ArtifactRef};
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
@@ -92,6 +93,15 @@ enum ArtifactCommandError {
     Workspace,
     Publish,
     Integrity,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostConfigError {
+    UnsafeSource,
+    TooLarge,
+    Read,
+    #[cfg(not(unix))]
+    UnsupportedPlatform,
 }
 
 // CRUCIBLE-TCB: CLI-HOST-ARGS-001
@@ -1057,6 +1067,103 @@ fn host_artifact_action(
     }
 }
 
+// CRUCIBLE-TCB: CLI-HOST-CONFIG-001
+#[verifier::external_body]
+fn host_read_configuration(path: &str) -> (result: Result<Vec<u8>, HostConfigError>) {
+    use std::io::Read;
+
+    fn lexical_absolute(path: &Path) -> Result<PathBuf, HostConfigError> {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|_| HostConfigError::UnsafeSource)?.join(path)
+        };
+        let mut normalized = PathBuf::new();
+        for component in candidate.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                    normalized.push(component.as_os_str());
+                },
+                Component::CurDir => {},
+                Component::ParentDir => {
+                    let _ = normalized.pop();
+                },
+            }
+        }
+        if normalized.is_absolute() {
+            Ok(normalized)
+        } else {
+            Err(HostConfigError::UnsafeSource)
+        }
+    }
+
+    let absolute = lexical_absolute(Path::new(path))?;
+    #[cfg(unix)]
+    {
+        use rustix::fs::{FileType, Mode, OFlags};
+
+        let components: Vec<_> = absolute.components().filter_map(
+            |component|
+                match component {
+                    Component::Normal(value) => Some(value),
+                    _ => None,
+                },
+        ).collect();
+        if components.is_empty() {
+            return Err(HostConfigError::UnsafeSource);
+        }
+        let directory_flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::NOFOLLOW
+            | OFlags::CLOEXEC;
+        let mut directory = rustix::fs::open("/", directory_flags, Mode::empty()).map_err(
+            |_| HostConfigError::UnsafeSource,
+        )?;
+        let mut final_file = None;
+        for (index, component) in components.iter().enumerate() {
+            let is_final = index + 1 == components.len();
+            let flags = if is_final {
+                OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::CLOEXEC | OFlags::NONBLOCK
+            } else {
+                directory_flags
+            };
+            let opened = rustix::fs::openat(&directory, *component, flags, Mode::empty()).map_err(
+                |_| HostConfigError::UnsafeSource,
+            )?;
+            let stat = rustix::fs::fstat(&opened).map_err(|_| HostConfigError::UnsafeSource)?;
+            let file_type = FileType::from_raw_mode(stat.st_mode);
+            if is_final {
+                if !file_type.is_file() {
+                    return Err(HostConfigError::UnsafeSource);
+                }
+                let length = u64::try_from(stat.st_size).map_err(|_| HostConfigError::Read)?;
+                if length > MAX_CONFIGURATION_SOURCE_BYTES {
+                    return Err(HostConfigError::TooLarge);
+                }
+                final_file = Some(opened);
+            } else {
+                if !file_type.is_dir() {
+                    return Err(HostConfigError::UnsafeSource);
+                }
+                directory = opened;
+            }
+        }
+        let descriptor = final_file.ok_or(HostConfigError::UnsafeSource)?;
+        let file = std::fs::File::from(descriptor);
+        let mut contents = Vec::new();
+        file.take(MAX_CONFIGURATION_SOURCE_BYTES + 1).read_to_end(&mut contents).map_err(
+            |_| HostConfigError::Read,
+        )?;
+        if contents.len() as u64 > MAX_CONFIGURATION_SOURCE_BYTES {
+            return Err(HostConfigError::TooLarge);
+        }
+        Ok(contents)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = absolute;
+        Err(HostConfigError::UnsupportedPlatform)
+    }
+}
+
 // CRUCIBLE-TCB: CLI-HOST-COMPLETE-001
 #[verifier::external_body]
 fn host_complete(success: bool, message: &[u8]) {
@@ -1348,6 +1455,131 @@ fn complete_artifact_error(error: ArtifactCommandError) {
     }
 }
 
+fn append_bytes(output: &mut Vec<u8>, bytes: &[u8]) {
+    let mut index = 0;
+    while index < bytes.len()
+        invariant
+            index <= bytes.len(),
+        decreases bytes.len() - index,
+    {
+        output.push(bytes[index]);
+        index += 1;
+    }
+}
+
+fn append_decimal_u64(output: &mut Vec<u8>, mut value: u64) {
+    if value == 0 {
+        output.push(b'0');
+        return;
+    }
+    let mut reversed = Vec::new();
+    while value > 0
+        decreases value,
+    {
+        reversed.push(b'0' + (value % 10) as u8);
+        value /= 10;
+    }
+    let mut index = reversed.len();
+    while index > 0
+        invariant
+            index <= reversed.len(),
+        decreases index,
+    {
+        index -= 1;
+        output.push(reversed[index]);
+    }
+}
+
+fn configuration_error_label(kind: ConfigurationErrorKind) -> (label: Vec<u8>) {
+    let literal: &[u8] = match kind {
+        ConfigurationErrorKind::SourceByteLimitExceeded => b"SourceByteLimitExceeded",
+        ConfigurationErrorKind::YamlSyntax => b"YamlSyntax",
+        ConfigurationErrorKind::ExpectedSingleDocument => b"ExpectedSingleDocument",
+        ConfigurationErrorKind::ExpectedRootMapping => b"ExpectedRootMapping",
+        ConfigurationErrorKind::UnknownField => b"UnknownField",
+        ConfigurationErrorKind::MissingRequiredField => b"MissingRequiredField",
+        ConfigurationErrorKind::WrongValueKind => b"WrongValueKind",
+        ConfigurationErrorKind::UnsupportedSchemaVersion => b"UnsupportedSchemaVersion",
+        ConfigurationErrorKind::InvalidLanguageProfile => b"InvalidLanguageProfile",
+        ConfigurationErrorKind::InvalidTargetAdapter => b"InvalidTargetAdapter",
+        ConfigurationErrorKind::InvalidFieldValue => b"InvalidFieldValue",
+        ConfigurationErrorKind::IntegerOutOfRange => b"IntegerOutOfRange",
+        ConfigurationErrorKind::DuplicateSequenceValue => b"DuplicateSequenceValue",
+        ConfigurationErrorKind::CrossFieldInvariant => b"CrossFieldInvariant",
+        ConfigurationErrorKind::TypedNodeLimitExceeded => b"TypedNodeLimitExceeded",
+        ConfigurationErrorKind::CanonicalByteLimitExceeded => b"CanonicalByteLimitExceeded",
+        ConfigurationErrorKind::DepthLimitExceeded => b"DepthLimitExceeded",
+        ConfigurationErrorKind::WorkLimitExceeded => b"WorkLimitExceeded",
+        ConfigurationErrorKind::HashInputTooLong => b"HashInputTooLong",
+        ConfigurationErrorKind::InternalInvariantViolation => b"InternalInvariantViolation",
+        _ => b"UnknownConfigurationError",
+    };
+    vstd::slice::slice_to_vec(literal)
+}
+
+fn configuration_error_output(error: &ConfigurationError) -> (output: Vec<u8>) {
+    let mut output = vstd::slice::slice_to_vec(b"crucible config: ");
+    let label = configuration_error_label(error.kind());
+    append_bytes(&mut output, label.as_slice());
+    append_bytes(&mut output, b" at byte ");
+    append_decimal_u64(&mut output, error.byte_offset());
+    output.push(b'\n');
+    output
+}
+
+fn configuration_digest_output(digest: crucible_core::Sha256Digest) -> (output: Vec<u8>) {
+    let mut output = vstd::slice::slice_to_vec(b"sha256:");
+    let hex = digest.to_hex();
+    let bytes = hex.as_str().as_bytes_vec();
+    append_bytes(&mut output, bytes.as_slice());
+    output.push(b'\n');
+    output
+}
+
+fn complete_configuration_error(error: ConfigurationError) {
+    let output = configuration_error_output(&error);
+    host_complete(false, output.as_slice());
+}
+
+fn run_configuration(path: &str, canonicalize: bool) {
+    let contents = match host_read_configuration(path) {
+        Ok(value) => value,
+        Err(HostConfigError::UnsafeSource) => {
+            host_complete(false, b"crucible config: unsafe configuration source\n");
+            return;
+        },
+        Err(HostConfigError::TooLarge) => {
+            host_complete(false, b"crucible config: SourceByteLimitExceeded at byte 16777216\n");
+            return;
+        },
+        Err(HostConfigError::Read) => {
+            host_complete(false, b"crucible config: could not read configuration\n");
+            return;
+        },
+        #[cfg(not(unix))]
+        Err(HostConfigError::UnsupportedPlatform) => {
+            host_complete(false, b"crucible config: configuration platform unsupported\n");
+            return;
+        },
+    };
+    let validated = match validate_configuration(
+        contents.as_slice(),
+        canonical_configuration_limits(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_configuration_error(error);
+            return;
+        },
+    };
+    if canonicalize {
+        host_complete(true, validated.canonical_bytes());
+    } else {
+        let output = configuration_digest_output(validated.digest());
+        host_complete(true, output.as_slice());
+    }
+}
+
 fn main() {
     let arguments = match host_cli_args() {
         Ok(arguments) => arguments,
@@ -1358,7 +1590,7 @@ fn main() {
         Err(HostArgumentError::TooMany) => {
             host_complete(
                 false,
-                b"usage: crucible init [path]\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n",
+                b"usage: crucible init [path]\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n       crucible config validate <file>\n       crucible config canonicalize <file>\n",
             );
             return;
         },
@@ -1372,7 +1604,7 @@ fn main() {
         Err(CliParseError::UnsupportedArguments) => {
             host_complete(
                 false,
-                b"usage: crucible init [path]\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n",
+                b"usage: crucible init [path]\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n       crucible config validate <file>\n       crucible config canonicalize <file>\n",
             );
             return;
         },
@@ -1412,6 +1644,8 @@ fn main() {
             },
             Err(error) => complete_artifact_error(error),
         },
+        CliAction::ConfigValidate(path) => run_configuration(path.as_str(), false),
+        CliAction::ConfigCanonicalize(path) => run_configuration(path.as_str(), true),
     }
 }
 

@@ -13,8 +13,13 @@ path = "src/main.rs"
 
 [dependencies]
 crucible-core = { path = "../crucible-core" }
+crucible-yaml = { path = "../crucible-yaml" }
 rusqlite.workspace = true
+rustix.workspace = true
 vstd.workspace = true
+
+[dev-dependencies]
+serde_json = "1.0.143"
 
 [package.metadata.verus]
 verify = true
