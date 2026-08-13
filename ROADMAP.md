@@ -125,6 +125,12 @@ Current work establishes and extends:
   before parent-node completion, document-boundary reset, forward/cross-document rejection,
   independent caller-lowered declaration and binding limits, exact source records, authenticated
   CST ownership, and total executable-to-pure correspondence;
+- verified aggregate semantic node-table composition that freshly authenticates and owns the exact
+  topology, scalar, and anchor/alias sources; assigns every CST node one exact scalar, sequence,
+  mapping, or alias slot in CST order; retains collection tags, topology/property/edge intervals,
+  and complete alias redirects without copying targets; enforces independent caller-lowered node,
+  collection, redirect, and nested tag limits at exact first-excluded source anchors; and exposes
+  the total pure composition result through public anti-laundering proof contracts;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

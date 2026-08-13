@@ -1896,6 +1896,22 @@ child-before-parent completion order. Missing-name detection precedes a caller-l
 limit at the same alias token, while an earlier source event still retains ordinary first-error
 precedence. Cycle detection remains a distinct graph-composition check over these exact bindings.
 
+Semantic node-table composition is a separate verified aggregate transformation. It re-runs and
+owns the exact topology, scalar-table, and anchor/alias results produced from the authenticated raw
+inputs instead of accepting detached same-length aggregates from a caller. It emits exactly one
+slot for every CST node in increasing CST-node order: scalar and zero-width empty slots reference
+their exact resolved scalar record, sequence and mapping slots reference their exact resolved
+collection record, and alias slots reference the selected target node identity plus a complete
+immutable alias-redirect record. Every slot retains the CST token and byte ranges, property-token
+indices, and topology edge interval, while every redirect retains the document, alias token,
+selected anchor declaration and node, and exact Unicode-name atom and byte ranges. Alias targets
+remain shared node identities and are never materialized as copied host values. Node, collection,
+and alias-redirect caps are independently caller-lowerable, nested collection-tag limits retain
+their own diagnostics, and each failure names the exact first excluded source anchor. The public
+semantic predicate exposes equality with the total pure composition result as well as the CST
+semantic contract, so forged or stale topology, scalar, anchor, collection, or redirect evidence
+cannot be laundered into a successful table.
+
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
 does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with
