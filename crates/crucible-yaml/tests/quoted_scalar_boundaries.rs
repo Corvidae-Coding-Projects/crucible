@@ -103,6 +103,16 @@ fn single_and_double_quoted_scalars_have_exact_raw_ranges_and_styles() {
 }
 
 #[test]
+fn quotes_after_tag_and_anchor_properties_remain_scalar_starts() {
+    let bytes = b"!!int \"42\"\n&name 'value'\n!local \"custom\"\n";
+    let (_, _, _, quoted) = scan(bytes);
+    assert_eq!(quoted.scalars().len(), 3);
+    assert_eq!(quoted.scalars()[0].byte_start(), 6);
+    assert_eq!(quoted.scalars()[1].style(), QuotedScalarStyle::Single);
+    assert_eq!(quoted.scalars()[2].style(), QuotedScalarStyle::Double);
+}
+
+#[test]
 fn empty_multibyte_and_every_profile_escape_form_are_bounded_losslessly() {
     let (_, _, _, empty) = scan(b"[\"\", '']\n");
     assert_eq!(empty.scalars().len(), 2);

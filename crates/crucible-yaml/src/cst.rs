@@ -786,7 +786,10 @@ impl CstDocument {
         self.suffix_token_end
     }
 
-    pub fn root_node_index(&self) -> u64 {
+    pub fn root_node_index(&self) -> (index: u64)
+        ensures
+            index == self@.root_node_index,
+    {
         self.root_node_index
     }
 

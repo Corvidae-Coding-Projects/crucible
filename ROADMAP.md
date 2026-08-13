@@ -96,6 +96,11 @@ Current work establishes and extends:
   the style-specific decoded provenance without fabricating content for zero-width empty nodes,
   returning collections separately, authenticating every selected producer, and proving total
   executable-to-pure correspondence for graph-composer consumption;
+- verified scalar-value composition from those authenticated records, including implicit YAML
+  1.2.2 Core null/boolean/arbitrary-width integer/exact finite-float/infinity/NaN/string values;
+  quoted/block string behavior; explicit `!!null`, `!!bool`, `!!int`, `!!float`, and `!!str`
+  spelling checks; scalar rejection of `!!seq`/`!!map`; non-specific `!`; losslessly retained local
+  and global custom tags; exact nested-limit diagnostics; and anti-forgery node-index binding;
 - verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
   primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;

@@ -980,6 +980,7 @@ struct QuotedContextView {
     block_parent_indentation: u64,
     block_content_indentation: u64,
     block_line_active: bool,
+    property_active: bool,
     after_node: bool,
 }
 
@@ -995,6 +996,7 @@ struct QuotedContext {
     block_parent_indentation: u64,
     block_content_indentation: u64,
     block_line_active: bool,
+    property_active: bool,
     after_node: bool,
 }
 
@@ -1013,6 +1015,7 @@ impl View for QuotedContext {
             block_parent_indentation: self.block_parent_indentation,
             block_content_indentation: self.block_content_indentation,
             block_line_active: self.block_line_active,
+            property_active: self.property_active,
             after_node: self.after_node,
         }
     }
@@ -1030,6 +1033,7 @@ closed spec fn initial_quoted_context_spec() -> QuotedContextView {
         block_parent_indentation: 0,
         block_content_indentation: 0,
         block_line_active: false,
+        property_active: false,
         after_node: false,
     }
 }
@@ -1049,6 +1053,7 @@ fn initial_quoted_context() -> (context: QuotedContext)
         block_parent_indentation: 0,
         block_content_indentation: 0,
         block_line_active: false,
+        property_active: false,
         after_node: false,
     }
 }
@@ -1159,8 +1164,8 @@ closed spec fn quote_can_start_spec(
     start_atom_index: u64,
     context: QuotedContextView,
 ) -> bool {
-    !context.plain_active && !context.plain_pending_line && context.block_mode == 0
-        && start_atom_index < atoms.len() && (start_atom_index == 0 || {
+    !context.plain_active && !context.plain_pending_line && !context.property_active
+        && context.block_mode == 0 && start_atom_index < atoms.len() && (start_atom_index == 0 || {
         let previous = atoms[start_atom_index as int - 1];
         previous.kind == LexicalAtomKind::LineFeed || previous.kind == LexicalAtomKind::Space
             || previous.kind == LexicalAtomKind::Tab || previous.kind == LexicalAtomKind::Indicator(
@@ -1179,6 +1184,7 @@ closed spec fn context_after_quoted_scalar_spec(context: QuotedContextView) -> Q
         plain_pending_line: false,
         block_mode: 0,
         block_line_active: false,
+        property_active: false,
         at_line_start: false,
         after_node: true,
         ..context
@@ -1194,6 +1200,7 @@ fn context_after_quoted_scalar(context: QuotedContext) -> (next: QuotedContext)
     next.plain_pending_line = false;
     next.block_mode = 0;
     next.block_line_active = false;
+    next.property_active = false;
     next.at_line_start = false;
     next.after_node = true;
     next
@@ -1218,6 +1225,11 @@ closed spec fn candidate_is_quote_spec(candidate: StructuralLexemeView) -> bool 
     quote_style_for_candidate_spec(candidate).is_some()
 }
 
+closed spec fn candidate_is_property_start_spec(candidate: StructuralLexemeView) -> bool {
+    candidate.kind == StructuralCandidateRole::Indicator(YamlIndicator::Anchor) || candidate.kind
+        == StructuralCandidateRole::Indicator(YamlIndicator::Tag)
+}
+
 closed spec fn advance_quoted_context_spec(
     atoms: Seq<LexicalAtomView>,
     candidate: StructuralLexemeView,
@@ -1234,6 +1246,7 @@ closed spec fn advance_quoted_context_spec(
                 context.block_mode
             },
             block_line_active: false,
+            property_active: false,
             ..context
         }
     } else if candidate_is_indentation_spec(candidate) {
@@ -1250,6 +1263,19 @@ closed spec fn advance_quoted_context_spec(
         QuotedContextView { at_line_start: false, ..context }
     } else if context.block_mode == 2 && context.block_line_active {
         QuotedContextView { at_line_start: false, ..context }
+    } else if context.property_active {
+        if candidate.kind == StructuralCandidateRole::Separation {
+            QuotedContextView { property_active: false, at_line_start: false, ..context }
+        } else if candidate.kind == StructuralCandidateRole::Comment {
+            QuotedContextView {
+                property_active: false,
+                after_node: true,
+                at_line_start: false,
+                ..context
+            }
+        } else {
+            QuotedContextView { at_line_start: false, ..context }
+        }
     } else if context.plain_active {
         if candidate.kind == StructuralCandidateRole::Comment {
             QuotedContextView {
@@ -1310,6 +1336,13 @@ closed spec fn advance_quoted_context_spec(
             block_line_active: false,
             at_line_start: false,
             after_node: true,
+            ..context
+        }
+    } else if candidate_is_property_start_spec(candidate) {
+        QuotedContextView {
+            property_active: true,
+            at_line_start: false,
+            after_node: false,
             ..context
         }
     } else if candidate_is_flow_start_spec(candidate) {
@@ -1381,6 +1414,7 @@ fn advance_quoted_context(
             next.block_mode = 2;
         }
         next.block_line_active = false;
+        next.property_active = false;
         return next;
     }
     if role == StructuralCandidateRole::Indentation {
@@ -1389,6 +1423,16 @@ fn advance_quoted_context(
         return next;
     }
     if next.block_mode == 1 || (next.block_mode == 2 && next.block_line_active) {
+        next.at_line_start = false;
+        return next;
+    }
+    if next.property_active {
+        if role == StructuralCandidateRole::Separation {
+            next.property_active = false;
+        } else if role == StructuralCandidateRole::Comment {
+            next.property_active = false;
+            next.after_node = true;
+        }
         next.at_line_start = false;
         return next;
     }
@@ -1432,6 +1476,10 @@ fn advance_quoted_context(
         next.block_content_indentation = 0;
         next.block_line_active = false;
         next.after_node = true;
+    } else if role == StructuralCandidateRole::Indicator(YamlIndicator::Anchor) || role
+        == StructuralCandidateRole::Indicator(YamlIndicator::Tag) {
+        next.property_active = true;
+        next.after_node = false;
     } else if role == StructuralCandidateRole::FlowSequenceStart || role
         == StructuralCandidateRole::FlowMappingStart {
         if next.flow_depth < MAX_PROFILE1_LEXICAL_ATOMS {
@@ -2344,7 +2392,8 @@ fn quote_can_start(
             context@,
         ),
 {
-    if context.plain_active || context.plain_pending_line || context.block_mode != 0 {
+    if context.plain_active || context.plain_pending_line || context.property_active
+        || context.block_mode != 0 {
         return false;
     }
     if start_atom_index == 0 {

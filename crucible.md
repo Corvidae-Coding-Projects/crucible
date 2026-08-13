@@ -1810,6 +1810,12 @@ exact first excluded provenance record before copying it. Scalar decoding does n
 normalization; code-point identity is preserved unless an explicit future language-profile version
 says otherwise.
 
+The provisional quoted-scalar context also carries tag- and anchor-property payload state. Property
+punctuation and payload candidates therefore cannot become plain content before a following quoted
+node, while the required separation clears that state and permits the quote delimiter to start the
+node. The same state remains subordinate to authenticated plain- and block-scalar regions, so a
+tag- or anchor-like spelling inside scalar content never escapes into presentation structure.
+
 The CST-scalar dispatch submachine authenticates the atom, completed-token, and CST identities,
 then binds a scalar result to the exact CST node and completed scalar token before invoking the
 verified style-specific decoder. Zero-width empty nodes produce an explicit empty-style scalar
@@ -1818,6 +1824,17 @@ nodes remain outside this scalar producer and return no scalar record; the graph
 them through the independently authenticated alias bindings and collection-entry tables. The
 dispatch result is therefore a lossless graph-composer input, not a second parser or a reduced
 semantic graph.
+
+Scalar-value composition combines that authenticated presentation with the independently resolved
+tag property. Untagged plain and empty nodes follow the YAML 1.2.2 Core rules; untagged quoted and
+block nodes and the explicit non-specific `!` tag resolve as strings. Explicit standard scalar
+tags require both scalar-kind compatibility and a spelling accepted for that exact tag, while
+`!!seq` and `!!map` are rejected on scalar nodes. Well-formed unknown local and global tags retain
+their exact resolved tag provenance alongside the decoded scalar content. Integer and float values
+are produced only by the existing verified arbitrary-precision converters, and every nested
+decoded-content, tag, magnitude, coefficient, or exponent limit is preserved as an exact typed
+source diagnostic. The public result retains the CST node index, explicit tag record, full decoded
+presentation provenance, canonical semantic tag, and canonical semantic value.
 
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
