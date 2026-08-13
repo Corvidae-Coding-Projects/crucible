@@ -1706,8 +1706,8 @@ future-minor warning. A major version other than one is rejected at the version 
 directives are retained and produce stable warnings rather than errors. Primary `!` and secondary
 `!!` handles have their YAML defaults, named handles require a declaration, and explicit TAG
 directives may override the two defaults for only that document. Expanded tag URI validity and
-percent decoding are resolution work, but the parser retains the exact declaration and property
-tokens needed to perform it.
+exact percent-escape preservation are resolution work, but the parser retains the exact declaration
+and property tokens needed to perform them.
 
 A non-alias node admits at most one anchor property and at most one tag property, in either order,
 with the separation and indentation required by its context. A repeated property is a typed parse
@@ -1812,12 +1812,13 @@ says otherwise.
 
 Tag resolution is document-scoped. The primary `!` and secondary `!!` handles begin with their YAML
 defaults and may be overridden by that document's `%TAG` directives; named handles must have an
-exact declaration in the same document. Verbatim tags bypass handle expansion. Tag suffix and
-prefix percent escapes are decoded exactly once as bytes, malformed escapes retain their lexer
-diagnostic, decoded byte sequences must be shortest-form UTF-8, and URI spelling is validated
-before a global tag identity is admitted. A local tag remains a distinct local identity rather
-than being confused with a global URI. Directive state, local tag identity, and anchor lookup reset
-at every document boundary.
+exact declaration in the same document. Verbatim tags bypass handle expansion. In accordance with
+YAML 1.2.2 production 39, percent escapes in tag prefixes, suffixes, and verbatim payloads are
+retained and compared exactly as presented rather than decoded; malformed escape triples retain
+their lexer diagnostic, and escaped and unescaped spellings never collapse into one identity. URI
+spelling is validated before a global tag identity is admitted. A local tag remains a distinct
+local identity rather than being confused with a global URI. Directive state, local tag identity,
+and anchor lookup reset at every document boundary.
 
 An alias names the most recent preceding anchor property with the same exact Unicode name in its
 document. Duplicate anchor names are therefore permitted and replace only subsequent lookup;

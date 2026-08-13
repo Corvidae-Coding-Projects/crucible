@@ -11,6 +11,7 @@ pub mod resolve;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_special_float;
+pub mod resolve_tag;
 pub mod scalar_decode;
 pub mod structural;
 pub mod token;
@@ -74,6 +75,12 @@ pub use resolve_float::{
 pub use resolve_special_float::{
     convert_core_special_float, CoreSpecialFloat, CoreSpecialFloatError, CoreSpecialFloatErrorKind,
     CoreSpecialFloatLimits, CORE_SPECIAL_FLOAT_CONVERSION_VERSION,
+};
+
+pub use resolve_tag::{
+    resolve_profile1_node_tag_property, ResolvedTagCodePoint, ResolvedTagKind, ResolvedTagOrigin,
+    ResolvedTagProperty, TagResolutionError, TagResolutionErrorKind, TagResolutionLimits,
+    MAX_PROFILE1_RESOLVED_TAG_CODE_POINTS, TAG_RESOLUTION_VERSION,
 };
 
 pub use scalar_decode::{

@@ -560,7 +560,10 @@ impl CstNode {
         self.token_end
     }
 
-    pub fn byte_start(&self) -> u64 {
+    pub fn byte_start(&self) -> (result: u64)
+        ensures
+            result == self@.byte_start,
+    {
         self.byte_start
     }
 
@@ -572,7 +575,10 @@ impl CstNode {
         self.anchor_property_token
     }
 
-    pub fn tag_property_token(&self) -> Option<u64> {
+    pub fn tag_property_token(&self) -> (result: Option<u64>)
+        ensures
+            result == self@.tag_property_token,
+    {
         self.tag_property_token
     }
 
@@ -688,7 +694,10 @@ impl CstDocument {
         self.token_end
     }
 
-    pub fn byte_start(&self) -> u64 {
+    pub fn byte_start(&self) -> (result: u64)
+        ensures
+            result == self@.byte_start,
+    {
         self.byte_start
     }
 
@@ -704,11 +713,17 @@ impl CstDocument {
         self.prefix_token_end
     }
 
-    pub fn directive_start(&self) -> u64 {
+    pub fn directive_start(&self) -> (result: u64)
+        ensures
+            result == self@.directive_start,
+    {
         self.directive_start
     }
 
-    pub fn directive_end(&self) -> u64 {
+    pub fn directive_end(&self) -> (result: u64)
+        ensures
+            result == self@.directive_end,
+    {
         self.directive_end
     }
 
@@ -720,11 +735,17 @@ impl CstDocument {
         self.explicit_start_token_end
     }
 
-    pub fn root_token_start(&self) -> u64 {
+    pub fn root_token_start(&self) -> (result: u64)
+        ensures
+            result == self@.root_token_start,
+    {
         self.root_token_start
     }
 
-    pub fn root_token_end(&self) -> u64 {
+    pub fn root_token_end(&self) -> (result: u64)
+        ensures
+            result == self@.root_token_end,
+    {
         self.root_token_end
     }
 
@@ -827,7 +848,7 @@ pub open spec fn cst_syntax_owner_views_spec(values: Seq<Option<CstSyntaxOwner>>
     )
 }
 
-proof fn lemma_cst_node_view_at(values: Seq<CstNode>, index: int)
+pub proof fn lemma_cst_node_view_at(values: Seq<CstNode>, index: int)
     requires
         0 <= index < values.len(),
     ensures
@@ -1040,23 +1061,38 @@ impl View for CstSource {
 }
 
 impl CstSource {
-    pub fn profile_version(&self) -> u16 {
+    pub fn profile_version(&self) -> (result: u16)
+        ensures
+            result == self@.profile_version,
+    {
         self.profile_version
     }
 
-    pub fn transformation_version(&self) -> u16 {
+    pub fn transformation_version(&self) -> (result: u16)
+        ensures
+            result == self@.transformation_version,
+    {
         self.transformation_version
     }
 
-    pub fn source_len_bytes(&self) -> u64 {
+    pub fn source_len_bytes(&self) -> (result: u64)
+        ensures
+            result == self@.source_len_bytes,
+    {
         self.source_len_bytes
     }
 
-    pub fn input_token_transformation_version(&self) -> u16 {
+    pub fn input_token_transformation_version(&self) -> (result: u16)
+        ensures
+            result == self@.input_token_transformation_version,
+    {
         self.input_token_transformation_version
     }
 
-    pub fn input_token_count(&self) -> u64 {
+    pub fn input_token_count(&self) -> (result: u64)
+        ensures
+            result == self@.input_token_count,
+    {
         self.input_token_count
     }
 
@@ -1068,11 +1104,17 @@ impl CstSource {
         self.maximum_depth
     }
 
-    pub fn documents(&self) -> &[CstDocument] {
+    pub fn documents(&self) -> (result: &[CstDocument])
+        ensures
+            cst_document_views_spec(result@) == self@.documents,
+    {
         self.documents.as_slice()
     }
 
-    pub fn nodes(&self) -> &[CstNode] {
+    pub fn nodes(&self) -> (result: &[CstNode])
+        ensures
+            cst_node_views_spec(result@) == self@.nodes,
+    {
         self.nodes.as_slice()
     }
 

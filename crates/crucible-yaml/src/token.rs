@@ -579,6 +579,13 @@ impl CompletedTokenSource {
         self.transformation_version
     }
 
+    pub fn input_transformation_version(&self) -> (version: u16)
+        ensures
+            version == self@.input_transformation_version,
+    {
+        self.input_transformation_version
+    }
+
     pub fn source_len_bytes(&self) -> (length: u64)
         ensures
             length == self@.source_len_bytes,

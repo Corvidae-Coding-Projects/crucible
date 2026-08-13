@@ -91,6 +91,11 @@ Current work establishes and extends:
   scalar-content representation, including direct Unicode, preserved internal space/tab content,
   multiline flow folding, exact atom/byte provenance, caller-lowered first-excluded output
   diagnostics, input authentication, and total executable-to-pure correspondence;
+- verified document-scoped explicit tag-property resolution with default and `%TAG`-overridden
+  primary, secondary, and named handles; verbatim and local identities; exact YAML 1.2.2
+  percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;
+  document-boundary reset; caller-lowered first-excluded diagnostics; authenticated CST/token
+  inputs; and total executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;
