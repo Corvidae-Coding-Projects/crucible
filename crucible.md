@@ -1829,6 +1829,16 @@ or indirect alias cycle at the alias edge that first closes the active resolutio
 acyclic subgraphs remain shared semantic identities. Resolution and all later traversals use
 explicit stacks and color/state tables rather than host recursion.
 
+The anchor/alias binding submachine scans each authenticated document's root token interval in
+presentation order and emits separate immutable declaration and alias-binding tables. Every record
+retains its document, CST node, completed token, exact name atom range, and byte range; an alias
+also retains the exact declaration and target node selected by most-recent-preceding shadowing.
+This representation deliberately permits a collection target's CST node index to follow a
+descendant alias node index, because visibility is fixed by property-token position rather than
+child-before-parent completion order. Missing-name detection precedes a caller-lowered alias-record
+limit at the same alias token, while an earlier source event still retains ordinary first-error
+precedence. Cycle detection remains a distinct graph-composition check over these exact bindings.
+
 Profile 1 supports the YAML merge-key draft deliberately as a named compatibility extension because
 merge behavior is part of Crucible's configuration-language contract even though YAML 1.2.2 Core
 does not define it. Only an untagged plain mapping key spelled exactly `<<`, or the same scalar with

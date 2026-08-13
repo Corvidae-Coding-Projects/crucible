@@ -231,15 +231,24 @@ impl View for CstSyntaxOwner {
 }
 
 impl CstSyntaxOwner {
-    pub fn token_index(&self) -> u64 {
+    pub fn token_index(&self) -> (result: u64)
+        ensures
+            result == self@.token_index,
+    {
         self.token_index
     }
 
-    pub fn kind(&self) -> CstSyntaxOwnerKind {
+    pub fn kind(&self) -> (result: CstSyntaxOwnerKind)
+        ensures
+            result == self@.kind,
+    {
         self.kind
     }
 
-    pub fn record_index(&self) -> u64 {
+    pub fn record_index(&self) -> (result: u64)
+        ensures
+            result == self@.record_index,
+    {
         self.record_index
     }
 }
@@ -571,7 +580,10 @@ impl CstNode {
         self.byte_end
     }
 
-    pub fn anchor_property_token(&self) -> Option<u64> {
+    pub fn anchor_property_token(&self) -> (result: Option<u64>)
+        ensures
+            result == self@.anchor_property_token,
+    {
         self.anchor_property_token
     }
 
@@ -582,7 +594,10 @@ impl CstNode {
         self.tag_property_token
     }
 
-    pub fn scalar_or_alias_token(&self) -> Option<u64> {
+    pub fn scalar_or_alias_token(&self) -> (result: Option<u64>)
+        ensures
+            result == self@.scalar_or_alias_token,
+    {
         self.scalar_or_alias_token
     }
 
@@ -999,7 +1014,7 @@ pub proof fn lemma_cst_warning_view_at(values: Seq<CstWarning>, index: int)
     reveal(cst_warning_views_spec);
 }
 
-proof fn lemma_cst_syntax_owner_view_at(values: Seq<Option<CstSyntaxOwner>>, index: int)
+pub proof fn lemma_cst_syntax_owner_view_at(values: Seq<Option<CstSyntaxOwner>>, index: int)
     requires
         0 <= index < values.len(),
     ensures
@@ -1130,7 +1145,10 @@ impl CstSource {
         self.warnings.as_slice()
     }
 
-    pub fn syntax_owners(&self) -> &[Option<CstSyntaxOwner>] {
+    pub fn syntax_owners(&self) -> (result: &[Option<CstSyntaxOwner>])
+        ensures
+            cst_syntax_owner_views_spec(result@) == self@.syntax_owners,
+    {
         self.syntax_owners.as_slice()
     }
 }

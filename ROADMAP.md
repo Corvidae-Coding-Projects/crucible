@@ -96,6 +96,11 @@ Current work establishes and extends:
   percent-escape preservation; absolute global-tag URI admission; per-code-point provenance;
   document-boundary reset; caller-lowered first-excluded diagnostics; authenticated CST/token
   inputs; and total executable-to-pure correspondence;
+- verified document-scoped anchor/alias binding in presentation-token order, including exact
+  Unicode-name comparison, duplicate-anchor shadowing, collection anchors visible to descendants
+  before parent-node completion, document-boundary reset, forward/cross-document rejection,
+  independent caller-lowered declaration and binding limits, exact source records, authenticated
+  CST ownership, and total executable-to-pure correspondence;
 - verified trusted-boundary scanning, ledger/approval reconciliation, and code CI.
 
 Exit requires every Phase 0 implementation and acceptance criterion in the design specification;

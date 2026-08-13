@@ -8,6 +8,7 @@ pub mod layout;
 pub mod plain;
 pub mod quoted;
 pub mod resolve;
+pub mod resolve_anchor;
 pub mod resolve_float;
 pub mod resolve_integer;
 pub mod resolve_special_float;
@@ -59,6 +60,12 @@ pub use resolve::{
     classify_core_plain_scalar, CoreIntegerBase, CorePlainScalarClass, CoreScalarError,
     CoreScalarErrorKind, CoreScalarLimits, CoreScalarRange, CORE_SCALAR_CLASSIFIER_VERSION,
     MAX_PROFILE1_RESOLVED_SCALAR_CODE_POINTS,
+};
+
+pub use resolve_anchor::{
+    resolve_profile1_anchor_aliases, AliasBinding, AnchorAliasError, AnchorAliasErrorKind,
+    AnchorAliasLimits, AnchorAliasSource, AnchorDeclaration, ANCHOR_ALIAS_RESOLUTION_VERSION,
+    MAX_PROFILE1_ALIAS_BINDINGS, MAX_PROFILE1_ANCHOR_DECLARATIONS,
 };
 
 pub use resolve_integer::{
