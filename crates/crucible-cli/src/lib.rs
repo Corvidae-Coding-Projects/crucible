@@ -2,9 +2,11 @@
 
 mod artifact_store;
 mod configuration;
+mod local_run;
 
 pub use artifact_store::*;
 pub use configuration::*;
+pub use local_run::*;
 
 #[expect(
     unused_imports,
@@ -17,7 +19,7 @@ verus! {
 
 pub const WORKSPACE_APPLICATION_ID: i64 = 0x4352_5543;
 
-pub const WORKSPACE_SCHEMA_VERSION: i64 = 2;
+pub const WORKSPACE_SCHEMA_VERSION: i64 = 3;
 
 pub const MAX_CLI_ARGUMENTS: usize = 4;
 
@@ -108,6 +110,26 @@ define_byte_literal!(
     artifact_migration_checksum_spec,
     b"sha256:cc2f9596d293417355a5cfc08e3ecd508bf2fca45c6e6ecacd302e507535e326"
 );
+define_byte_literal!(
+    run_migration_sql,
+    run_migration_sql_spec,
+    b"CREATE TABLE id_sequences(name TEXT PRIMARY KEY CHECK(length(name) > 0), next_value INTEGER NOT NULL CHECK(next_value > 0)) STRICT;\nCREATE TABLE target_builds(id TEXT PRIMARY KEY CHECK(length(id) > 0), target_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, manifest_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, identity_digest TEXT NOT NULL CHECK(length(identity_digest) = 71)) STRICT;\nCREATE TABLE capability_manifests(artifact_id TEXT PRIMARY KEY REFERENCES artifacts(id) ON DELETE RESTRICT, backend TEXT NOT NULL CHECK(length(backend) > 0), platform TEXT NOT NULL CHECK(length(platform) > 0)) STRICT;\nCREATE TABLE runs(id TEXT PRIMARY KEY CHECK(length(id) > 0), configuration_source_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, effective_configuration_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, configuration_digest TEXT NOT NULL CHECK(length(configuration_digest) = 71), target_build_id TEXT REFERENCES target_builds(id) ON DELETE RESTRICT, capability_manifest_artifact_id TEXT NOT NULL REFERENCES capability_manifests(artifact_id) ON DELETE RESTRICT, seed TEXT NOT NULL CHECK(length(seed) > 0)) STRICT;\nCREATE TABLE run_attempts(id TEXT PRIMARY KEY CHECK(length(id) > 0), run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE RESTRICT, ordinal INTEGER NOT NULL CHECK(ordinal > 0), status TEXT NOT NULL CHECK(status IN ('reserved','target_prepared','observed','harness_failure')), UNIQUE(run_id, ordinal)) STRICT;\nCREATE TABLE run_effective_controls(run_id TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE RESTRICT, timeout_ms TEXT NOT NULL CHECK(length(timeout_ms) > 0), memory_bytes TEXT NOT NULL CHECK(length(memory_bytes) > 0), max_processes TEXT NOT NULL CHECK(length(max_processes) > 0), max_stream_bytes TEXT NOT NULL CHECK(length(max_stream_bytes) > 0), network_policy TEXT NOT NULL CHECK(network_policy IN ('none','unrestricted-host')), isolation_backend TEXT NOT NULL CHECK(isolation_backend = 'linux-bubblewrap-prlimit-v1'), output_capture_status TEXT NOT NULL CHECK(output_capture_status = 'drain-and-discard')) STRICT;\nCREATE TABLE observations(id TEXT PRIMARY KEY CHECK(length(id) > 0), attempt_id TEXT NOT NULL UNIQUE REFERENCES run_attempts(id) ON DELETE RESTRICT, observation_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, stdout_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, stderr_artifact_id TEXT NOT NULL REFERENCES artifacts(id) ON DELETE RESTRICT, completion_tag INTEGER NOT NULL CHECK(completion_tag > 0), termination_tag INTEGER NOT NULL CHECK(termination_tag > 0)) STRICT;\nCREATE TABLE harness_failures(attempt_id TEXT PRIMARY KEY REFERENCES run_attempts(id) ON DELETE RESTRICT, kind TEXT NOT NULL CHECK(length(kind) > 0), detail_artifact_id TEXT REFERENCES artifacts(id) ON DELETE RESTRICT) STRICT;\nPRAGMA user_version = 3;"
+);
+define_byte_literal!(
+    run_migration_name,
+    run_migration_name_spec,
+    b"add-local-run-evidence"
+);
+define_byte_literal!(
+    run_migration_checksum,
+    run_migration_checksum_spec,
+    b"sha256:1b51cfb89d23f8af6dc67a7c149e3455f888e2f74c280873213c083d9693a21b"
+);
+define_byte_literal!(
+    run_schema_digest,
+    run_schema_digest_spec,
+    b"sha256:4800eb0d8872dc940eaed3bc590a26605db2e089b5aa1c356c4c70d2c7dda05e"
+);
 define_byte_literal!(metadata_key, metadata_key_spec, b"format");
 define_byte_literal!(
     metadata_value,
@@ -115,6 +137,16 @@ define_byte_literal!(
     b"crucible-workspace-v1"
 );
 define_string_literal!(init_literal, init_literal_spec, ['i', 'n', 'i', 't']);
+define_string_literal!(run_literal, run_literal_spec, ['r', 'u', 'n']);
+define_string_literal!(
+    internal_local_supervisor_literal,
+    internal_local_supervisor_literal_spec,
+    [
+        '_', '_', 'c', 'r', 'u', 'c', 'i', 'b', 'l', 'e', '-', 'i', 'n', 't', 'e', 'r', 'n', 'a',
+        'l', '-', 'l', 'o', 'c', 'a', 'l', '-', 's', 'u', 'p', 'e', 'r', 'v', 'i', 's', 'o', 'r',
+        '-', 'v', '1'
+    ]
+);
 define_string_literal!(
     artifact_literal,
     artifact_literal_spec,
@@ -252,6 +284,7 @@ pub struct DatabaseSnapshot {
     pub artifacts_table_sql: Vec<u8>,
     pub artifact_imports_table_kind: Vec<u8>,
     pub artifact_imports_table_sql: Vec<u8>,
+    pub run_schema_digest: Vec<u8>,
     pub migration_row_count: u64,
     pub migrations: Vec<MigrationRecord>,
     pub metadata_row_count: u64,
@@ -274,6 +307,7 @@ pub struct DatabaseSnapshotView {
     pub artifacts_table_sql: Seq<u8>,
     pub artifact_imports_table_kind: Seq<u8>,
     pub artifact_imports_table_sql: Seq<u8>,
+    pub run_schema_digest: Seq<u8>,
     pub migration_row_count: u64,
     pub migrations: Seq<MigrationRecordView>,
     pub metadata_row_count: u64,
@@ -299,6 +333,7 @@ impl View for DatabaseSnapshot {
             artifacts_table_sql: self.artifacts_table_sql@,
             artifact_imports_table_kind: self.artifact_imports_table_kind@,
             artifact_imports_table_sql: self.artifact_imports_table_sql@,
+            run_schema_digest: self.run_schema_digest@,
             migration_row_count: self.migration_row_count,
             migrations: self.migrations.deep_view(),
             metadata_row_count: self.metadata_row_count,
@@ -388,6 +423,7 @@ impl View for WorkspaceSnapshot {
 pub enum InitializationDecision {
     Create,
     MigrateV1,
+    MigrateV2,
     Reuse,
 }
 
@@ -425,8 +461,8 @@ pub open spec fn database_snapshot_is_exact_v1_spec(snapshot: DatabaseSnapshotVi
         && snapshot.schema_object_count == 2 && snapshot.artifacts_table_kind == Seq::<u8>::empty()
         && snapshot.artifacts_table_sql == Seq::<u8>::empty()
         && snapshot.artifact_imports_table_kind == Seq::<u8>::empty()
-        && snapshot.artifact_imports_table_sql == Seq::<u8>::empty() && snapshot.migration_row_count
-        == 1 && snapshot.migrations == seq![
+        && snapshot.artifact_imports_table_sql == Seq::<u8>::empty() && snapshot.run_schema_digest
+        == Seq::<u8>::empty() && snapshot.migration_row_count == 1 && snapshot.migrations == seq![
         MigrationRecordView {
             version: 1,
             name: migration_name_spec(),
@@ -435,13 +471,14 @@ pub open spec fn database_snapshot_is_exact_v1_spec(snapshot: DatabaseSnapshotVi
     ]
 }
 
-pub open spec fn database_snapshot_is_exact_spec(snapshot: DatabaseSnapshotView) -> bool {
-    database_snapshot_has_common_identity_spec(snapshot) && snapshot.schema_version
-        == WORKSPACE_SCHEMA_VERSION && snapshot.schema_object_count == 4
-        && snapshot.artifacts_table_kind == table_kind_spec() && snapshot.artifacts_table_sql
-        == artifacts_table_sql_spec() && snapshot.artifact_imports_table_kind == table_kind_spec()
+pub open spec fn database_snapshot_is_exact_v2_spec(snapshot: DatabaseSnapshotView) -> bool {
+    database_snapshot_has_common_identity_spec(snapshot) && snapshot.schema_version == 2
+        && snapshot.schema_object_count == 4 && snapshot.artifacts_table_kind == table_kind_spec()
+        && snapshot.artifacts_table_sql == artifacts_table_sql_spec()
+        && snapshot.artifact_imports_table_kind == table_kind_spec()
         && snapshot.artifact_imports_table_sql == artifact_imports_table_sql_spec()
-        && snapshot.migration_row_count == 2 && snapshot.migrations == seq![
+        && snapshot.run_schema_digest == Seq::<u8>::empty() && snapshot.migration_row_count == 2
+        && snapshot.migrations == seq![
         MigrationRecordView {
             version: 1,
             name: migration_name_spec(),
@@ -451,6 +488,32 @@ pub open spec fn database_snapshot_is_exact_spec(snapshot: DatabaseSnapshotView)
             version: 2,
             name: artifact_migration_name_spec(),
             checksum: artifact_migration_checksum_spec(),
+        },
+    ]
+}
+
+pub open spec fn database_snapshot_is_exact_spec(snapshot: DatabaseSnapshotView) -> bool {
+    database_snapshot_has_common_identity_spec(snapshot) && snapshot.schema_version
+        == WORKSPACE_SCHEMA_VERSION && snapshot.schema_object_count == 12
+        && snapshot.artifacts_table_kind == table_kind_spec() && snapshot.artifacts_table_sql
+        == artifacts_table_sql_spec() && snapshot.artifact_imports_table_kind == table_kind_spec()
+        && snapshot.artifact_imports_table_sql == artifact_imports_table_sql_spec()
+        && snapshot.run_schema_digest == run_schema_digest_spec() && snapshot.migration_row_count
+        == 3 && snapshot.migrations == seq![
+        MigrationRecordView {
+            version: 1,
+            name: migration_name_spec(),
+            checksum: migration_checksum_spec(),
+        },
+        MigrationRecordView {
+            version: 2,
+            name: artifact_migration_name_spec(),
+            checksum: artifact_migration_checksum_spec(),
+        },
+        MigrationRecordView {
+            version: 3,
+            name: run_migration_name_spec(),
+            checksum: run_migration_checksum_spec(),
         },
     ]
 }
@@ -546,8 +609,8 @@ pub fn database_snapshot_is_exact_v1(snapshot: &DatabaseSnapshot) -> (exact: boo
         || snapshot.schema_object_count != 2 || !snapshot.artifacts_table_kind.is_empty()
         || !snapshot.artifacts_table_sql.is_empty()
         || !snapshot.artifact_imports_table_kind.is_empty()
-        || !snapshot.artifact_imports_table_sql.is_empty() || snapshot.migration_row_count != 1
-        || snapshot.migrations.len() != 1 {
+        || !snapshot.artifact_imports_table_sql.is_empty() || !snapshot.run_schema_digest.is_empty()
+        || snapshot.migration_row_count != 1 || snapshot.migrations.len() != 1 {
         assert(!database_snapshot_is_exact_v1_spec(snapshot@)) by {
             if database_snapshot_is_exact_v1_spec(snapshot@) {
                 assert(database_snapshot_has_common_identity_spec(snapshot@));
@@ -592,29 +655,31 @@ pub fn database_snapshot_is_exact_v1(snapshot: &DatabaseSnapshot) -> (exact: boo
     assert(snapshot.artifacts_table_sql@ == Seq::<u8>::empty());
     assert(snapshot.artifact_imports_table_kind@ == Seq::<u8>::empty());
     assert(snapshot.artifact_imports_table_sql@ == Seq::<u8>::empty());
+    assert(snapshot.run_schema_digest@ == Seq::<u8>::empty());
     assert(database_snapshot_is_exact_v1_spec(snapshot@));
     true
 }
 
-pub fn database_snapshot_is_exact(snapshot: &DatabaseSnapshot) -> (exact: bool)
+pub fn database_snapshot_is_exact_v2(snapshot: &DatabaseSnapshot) -> (exact: bool)
     ensures
-        exact == database_snapshot_is_exact_spec(snapshot@),
+        exact == database_snapshot_is_exact_v2_spec(snapshot@),
 {
-    reveal(database_snapshot_is_exact_spec);
+    reveal(database_snapshot_is_exact_v2_spec);
     reveal(database_snapshot_has_common_identity_spec);
     let table = table_kind();
     let artifacts_sql = artifacts_table_sql();
     let imports_sql = artifact_imports_table_sql();
-    if !database_snapshot_has_common_identity(snapshot) || snapshot.schema_version
-        != WORKSPACE_SCHEMA_VERSION || snapshot.schema_object_count != 4 || !bytes_equal(
+    if !database_snapshot_has_common_identity(snapshot) || snapshot.schema_version != 2
+        || snapshot.schema_object_count != 4 || !bytes_equal(
         snapshot.artifacts_table_kind.as_slice(),
         table.as_slice(),
     ) || !bytes_equal(snapshot.artifacts_table_sql.as_slice(), artifacts_sql.as_slice())
         || !bytes_equal(snapshot.artifact_imports_table_kind.as_slice(), table.as_slice())
         || !bytes_equal(snapshot.artifact_imports_table_sql.as_slice(), imports_sql.as_slice())
-        || snapshot.migration_row_count != 2 || snapshot.migrations.len() != 2 {
-        assert(!database_snapshot_is_exact_spec(snapshot@)) by {
-            if database_snapshot_is_exact_spec(snapshot@) {
+        || !snapshot.run_schema_digest.is_empty() || snapshot.migration_row_count != 2
+        || snapshot.migrations.len() != 2 {
+        assert(!database_snapshot_is_exact_v2_spec(snapshot@)) by {
+            if database_snapshot_is_exact_v2_spec(snapshot@) {
                 assert(database_snapshot_has_common_identity_spec(snapshot@));
                 assert(snapshot.migrations.deep_view().len() == 2);
                 assert(snapshot.migrations.len() == snapshot.migrations.deep_view().len());
@@ -639,8 +704,8 @@ pub fn database_snapshot_is_exact(snapshot: &DatabaseSnapshot) -> (exact: bool)
         second_checksum.as_slice(),
     );
     if !first_matches || !second_matches {
-        assert(!database_snapshot_is_exact_spec(snapshot@)) by {
-            if database_snapshot_is_exact_spec(snapshot@) {
+        assert(!database_snapshot_is_exact_v2_spec(snapshot@)) by {
+            if database_snapshot_is_exact_v2_spec(snapshot@) {
                 assert(snapshot.migrations.deep_view()[0] == snapshot.migrations[0]@);
                 assert(snapshot.migrations.deep_view()[1] == snapshot.migrations[1]@);
                 assert(migration_record_matches_spec(
@@ -671,6 +736,110 @@ pub fn database_snapshot_is_exact(snapshot: &DatabaseSnapshot) -> (exact: bool)
             version: 2,
             name: artifact_migration_name_spec(),
             checksum: artifact_migration_checksum_spec(),
+        },
+    ]);
+    assert(snapshot.run_schema_digest@ == Seq::<u8>::empty());
+    true
+}
+
+pub fn database_snapshot_is_exact(snapshot: &DatabaseSnapshot) -> (exact: bool)
+    ensures
+        exact == database_snapshot_is_exact_spec(snapshot@),
+{
+    reveal(database_snapshot_is_exact_spec);
+    reveal(database_snapshot_has_common_identity_spec);
+    let table = table_kind();
+    let artifacts_sql = artifacts_table_sql();
+    let imports_sql = artifact_imports_table_sql();
+    let expected_run_schema = run_schema_digest();
+    if !database_snapshot_has_common_identity(snapshot) || snapshot.schema_version
+        != WORKSPACE_SCHEMA_VERSION || snapshot.schema_object_count != 12 || !bytes_equal(
+        snapshot.artifacts_table_kind.as_slice(),
+        table.as_slice(),
+    ) || !bytes_equal(snapshot.artifacts_table_sql.as_slice(), artifacts_sql.as_slice())
+        || !bytes_equal(snapshot.artifact_imports_table_kind.as_slice(), table.as_slice())
+        || !bytes_equal(snapshot.artifact_imports_table_sql.as_slice(), imports_sql.as_slice())
+        || !bytes_equal(snapshot.run_schema_digest.as_slice(), expected_run_schema.as_slice())
+        || snapshot.migration_row_count != 3 || snapshot.migrations.len() != 3 {
+        assert(!database_snapshot_is_exact_spec(snapshot@)) by {
+            if database_snapshot_is_exact_spec(snapshot@) {
+                assert(database_snapshot_has_common_identity_spec(snapshot@));
+                assert(snapshot.migrations.deep_view().len() == 3);
+                assert(snapshot.migrations.len() == snapshot.migrations.deep_view().len());
+            }
+        };
+        return false;
+    }
+    let first_name = migration_name();
+    let first_checksum = migration_checksum();
+    let second_name = artifact_migration_name();
+    let second_checksum = artifact_migration_checksum();
+    let third_name = run_migration_name();
+    let third_checksum = run_migration_checksum();
+    let first_matches = migration_record_matches(
+        &snapshot.migrations[0],
+        1,
+        first_name.as_slice(),
+        first_checksum.as_slice(),
+    );
+    let second_matches = migration_record_matches(
+        &snapshot.migrations[1],
+        2,
+        second_name.as_slice(),
+        second_checksum.as_slice(),
+    );
+    let third_matches = migration_record_matches(
+        &snapshot.migrations[2],
+        3,
+        third_name.as_slice(),
+        third_checksum.as_slice(),
+    );
+    if !first_matches || !second_matches || !third_matches {
+        assert(!database_snapshot_is_exact_spec(snapshot@)) by {
+            if database_snapshot_is_exact_spec(snapshot@) {
+                assert(snapshot.migrations.deep_view()[0] == snapshot.migrations[0]@);
+                assert(snapshot.migrations.deep_view()[1] == snapshot.migrations[1]@);
+                assert(snapshot.migrations.deep_view()[2] == snapshot.migrations[2]@);
+                assert(migration_record_matches_spec(
+                    snapshot.migrations[0]@,
+                    1,
+                    migration_name_spec(),
+                    migration_checksum_spec(),
+                ));
+                assert(migration_record_matches_spec(
+                    snapshot.migrations[1]@,
+                    2,
+                    artifact_migration_name_spec(),
+                    artifact_migration_checksum_spec(),
+                ));
+                assert(migration_record_matches_spec(
+                    snapshot.migrations[2]@,
+                    3,
+                    run_migration_name_spec(),
+                    run_migration_checksum_spec(),
+                ));
+            }
+        };
+        return false;
+    }
+    assert(snapshot.migrations.deep_view()[0] == snapshot.migrations[0]@);
+    assert(snapshot.migrations.deep_view()[1] == snapshot.migrations[1]@);
+    assert(snapshot.migrations.deep_view()[2] == snapshot.migrations[2]@);
+    assert(snapshot.migrations.deep_view() =~= seq![
+        MigrationRecordView {
+            version: 1,
+            name: migration_name_spec(),
+            checksum: migration_checksum_spec(),
+        },
+        MigrationRecordView {
+            version: 2,
+            name: artifact_migration_name_spec(),
+            checksum: artifact_migration_checksum_spec(),
+        },
+        MigrationRecordView {
+            version: 3,
+            name: run_migration_name_spec(),
+            checksum: run_migration_checksum_spec(),
         },
     ]);
     true
@@ -735,6 +904,8 @@ pub open spec fn decide_workspace_initialization_spec(snapshot: WorkspaceSnapsho
                 Ok(InitializationDecision::Reuse)
             } else if database_snapshot_is_exact_v1_spec(database) {
                 Ok(InitializationDecision::MigrateV1)
+            } else if database_snapshot_is_exact_v2_spec(database) {
+                Ok(InitializationDecision::MigrateV2)
             } else {
                 Err(InitializationError::IncompatibleDatabase)
             },
@@ -763,6 +934,8 @@ pub fn decide_workspace_initialization(snapshot: &WorkspaceSnapshot) -> (decisio
                 Ok(InitializationDecision::Reuse)
             } else if database_snapshot_is_exact_v1(database) {
                 Ok(InitializationDecision::MigrateV1)
+            } else if database_snapshot_is_exact_v2(database) {
+                Ok(InitializationDecision::MigrateV2)
             } else {
                 Err(InitializationError::IncompatibleDatabase)
             },
@@ -797,6 +970,8 @@ pub proof fn lemma_database_profiles_are_disjoint(snapshot: DatabaseSnapshot)
 #[derive(Debug, PartialEq, Eq)]
 pub enum CliAction {
     Init(String),
+    Run(String),
+    InternalLocalSupervisor,
     ArtifactImport(String, String),
     ArtifactVerify(String, String),
     ConfigValidate(String),
@@ -806,6 +981,8 @@ pub enum CliAction {
 #[verifier::ext_equal]
 pub enum CliActionView {
     Init(Seq<char>),
+    Run(Seq<char>),
+    InternalLocalSupervisor,
     ArtifactImport(Seq<char>, Seq<char>),
     ArtifactVerify(Seq<char>, Seq<char>),
     ConfigValidate(Seq<char>),
@@ -818,6 +995,8 @@ impl View for CliAction {
     open spec fn view(&self) -> CliActionView {
         match self {
             CliAction::Init(path) => CliActionView::Init(path@),
+            CliAction::Run(path) => CliActionView::Run(path@),
+            CliAction::InternalLocalSupervisor => CliActionView::InternalLocalSupervisor,
             CliAction::ArtifactImport(source, root) => CliActionView::ArtifactImport(
                 source@,
                 root@,
@@ -837,8 +1016,12 @@ pub enum CliParseError {
 pub open spec fn parse_cli_args_spec(args: Seq<Seq<char>>) -> Result<CliActionView, CliParseError> {
     if args.len() == 1 && args[0] == init_literal_spec() {
         Ok(CliActionView::Init(current_directory_literal_spec()))
+    } else if args.len() == 1 && args[0] == internal_local_supervisor_literal_spec() {
+        Ok(CliActionView::InternalLocalSupervisor)
     } else if args.len() == 2 && args[0] == init_literal_spec() {
         Ok(CliActionView::Init(args[1]))
+    } else if args.len() == 2 && args[0] == run_literal_spec() {
+        Ok(CliActionView::Run(args[1]))
     } else if args.len() == 3 && args[0] == artifact_literal_spec() && args[1]
         == import_literal_spec() {
         Ok(CliActionView::ArtifactImport(args[2], current_directory_literal_spec()))
@@ -873,8 +1056,12 @@ pub fn parse_cli_args(args: &[String]) -> (result: Result<CliAction, CliParseErr
     let init = init_literal();
     if args.len() == 1 && args[0] == init {
         Ok(CliAction::Init(current_directory_literal()))
+    } else if args.len() == 1 && args[0] == internal_local_supervisor_literal() {
+        Ok(CliAction::InternalLocalSupervisor)
     } else if args.len() == 2 && args[0] == init {
         Ok(CliAction::Init(args[1].clone()))
+    } else if args.len() == 2 && args[0] == run_literal() {
+        Ok(CliAction::Run(args[1].clone()))
     } else if args.len() == 3 && args[0] == artifact_literal() && args[1] == import_literal() {
         Ok(CliAction::ArtifactImport(args[2].clone(), current_directory_literal()))
     } else if args.len() == 4 && args[0] == artifact_literal() && args[1] == import_literal() {

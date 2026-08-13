@@ -1,7 +1,7 @@
 use crucible_cli::{
-    database_snapshot_is_exact, database_snapshot_is_exact_v1, decide_workspace_initialization,
-    DatabaseSnapshot, InitializationDecision, InitializationError, MigrationRecord, PathKind,
-    WorkspaceMetadata, WorkspaceSnapshot,
+    database_snapshot_is_exact, database_snapshot_is_exact_v1, database_snapshot_is_exact_v2,
+    decide_workspace_initialization, DatabaseSnapshot, InitializationDecision, InitializationError,
+    MigrationRecord, PathKind, WorkspaceMetadata, WorkspaceSnapshot,
 };
 #[expect(
     unused_imports,
@@ -12,11 +12,11 @@ use vstd::prelude::*;
 fn exact_database() -> DatabaseSnapshot {
     DatabaseSnapshot {
         application_id: 0x4352_5543,
-        schema_version: 2,
+        schema_version: 3,
         journal_mode: b"wal".to_vec(),
         synchronous: 2,
         quick_check: b"ok".to_vec(),
-        schema_object_count: 4,
+        schema_object_count: 12,
         migrations_table_kind: b"table".to_vec(),
         migrations_table_sql: crucible_cli::migration_table_sql(),
         metadata_table_kind: b"table".to_vec(),
@@ -25,7 +25,8 @@ fn exact_database() -> DatabaseSnapshot {
         artifacts_table_sql: crucible_cli::artifacts_table_sql(),
         artifact_imports_table_kind: b"table".to_vec(),
         artifact_imports_table_sql: crucible_cli::artifact_imports_table_sql(),
-        migration_row_count: 2,
+        run_schema_digest: crucible_cli::run_schema_digest(),
+        migration_row_count: 3,
         migrations: vec![
             MigrationRecord {
                 version: 1,
@@ -37,6 +38,11 @@ fn exact_database() -> DatabaseSnapshot {
                 name: b"add-artifact-store".to_vec(),
                 checksum: crucible_cli::artifact_migration_checksum(),
             },
+            MigrationRecord {
+                version: 3,
+                name: b"add-local-run-evidence".to_vec(),
+                checksum: crucible_cli::run_migration_checksum(),
+            },
         ],
         metadata_row_count: 1,
         metadata: Some(WorkspaceMetadata {
@@ -46,8 +52,18 @@ fn exact_database() -> DatabaseSnapshot {
     }
 }
 
-fn exact_version_one_database() -> DatabaseSnapshot {
+fn exact_version_two_database() -> DatabaseSnapshot {
     let mut database = exact_database();
+    database.schema_version = 2;
+    database.schema_object_count = 4;
+    database.run_schema_digest.clear();
+    database.migration_row_count = 2;
+    database.migrations.pop();
+    database
+}
+
+fn exact_version_one_database() -> DatabaseSnapshot {
+    let mut database = exact_version_two_database();
     database.schema_version = 1;
     database.schema_object_count = 2;
     database.artifacts_table_kind.clear();
@@ -112,6 +128,15 @@ fn exact_policy_distinguishes_create_reuse_and_occupied_state() {
         Ok(InitializationDecision::MigrateV1)
     );
 
+    let version_two = exact_workspace(Some(exact_version_two_database()));
+    assert!(database_snapshot_is_exact_v2(
+        version_two.database.as_ref().expect("version-two database")
+    ));
+    assert_eq!(
+        decide_workspace_initialization(&version_two),
+        Ok(InitializationDecision::MigrateV2)
+    );
+
     let mut occupied = exact_workspace(None);
     occupied.state_entry_count = 1;
     occupied.database_kind = PathKind::Missing;
@@ -127,9 +152,9 @@ fn exact_policy_rejects_database_laundering() {
     assert!(database_snapshot_is_exact(&exact));
 
     let mut extra_migration = exact_database();
-    extra_migration.migration_row_count = 3;
+    extra_migration.migration_row_count = 4;
     extra_migration.migrations.push(MigrationRecord {
-        version: 3,
+        version: 4,
         name: b"foreign".to_vec(),
         checksum: b"foreign".to_vec(),
     });
@@ -144,7 +169,7 @@ fn exact_policy_rejects_database_laundering() {
     assert!(!database_snapshot_is_exact(&extra_metadata));
 
     let mut foreign_schema = exact_database();
-    foreign_schema.schema_object_count = 3;
+    foreign_schema.schema_object_count = 13;
     assert!(!database_snapshot_is_exact(&foreign_schema));
 
     let mut forged_view = exact_database();
@@ -159,6 +184,17 @@ fn artifact_migration_checksum_authenticates_the_exact_script() {
     let expected = format!("sha256:{}", digest.to_hex());
     assert_eq!(
         String::from_utf8(crucible_cli::artifact_migration_checksum()).expect("checksum is UTF-8"),
+        expected
+    );
+}
+
+#[test]
+fn run_migration_checksum_authenticates_the_exact_script() {
+    let script = crucible_cli::run_migration_sql();
+    let digest = crucible_core::sha256(&script).expect("migration script is bounded");
+    let expected = format!("sha256:{}", digest.to_hex());
+    assert_eq!(
+        String::from_utf8(crucible_cli::run_migration_checksum()).expect("checksum is UTF-8"),
         expected
     );
 }

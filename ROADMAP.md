@@ -10,14 +10,15 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 
 ### Immediate breadth-first acceptance path
 
-Implementation now prioritizes the shortest runnable Phase 0 path. Workspace initialization,
-database migration, single-artifact import/integrity verification, and production configuration
-validation/canonicalization are operational. The immediate next milestone is `crucible run`: load an
-accepted configuration, execute one CLI target under bounded controls, capture a raw observation,
-and persist its source, canonical configuration, streams, outcome, and artifact references.
-Further theorem strengthening, exhaustive YAML conformance closure, and finer internal submachines
-follow that operational spine unless a defect blocks it. This changes delivery order only; no
-acceptance criterion or later capability is removed.
+Implementation now prioritizes the shortest runnable Phase 0-through-MVP path. Workspace
+initialization, database migration, single-artifact import/integrity verification, production
+configuration validation/canonicalization, and the first Linux `crucible run` path are operational.
+The immediate next milestone is `crucible inspect`: recover and render the persisted configuration,
+target, controls, streams, raw outcome, observation, and harness-failure evidence for a selected run.
+Hard verdicts, findings, replay, corpus mutation, minimization, and evidence bundles then extend that
+same vertical path. Further theorem strengthening, exhaustive YAML conformance closure, and finer
+internal submachines follow the operational spine unless a defect blocks it. This changes delivery
+order only; no acceptance criterion or later capability is removed.
 
 Current work establishes and extends:
 
@@ -41,6 +42,16 @@ Current work establishes and extends:
   admission, and fail-closed behavior on platforms awaiting an equivalent adapter. The current
   public Verus contract authenticates versions, bounds, charged work, and both digests; exact
   executable-to-pure field/canonicalization/invariant correspondence remains required by §12.2;
+- a first production `crucible run <configuration>` Linux adapter that projects the validated
+  execution configuration into an explicit capability plan; invokes one local CLI target with
+  direct arguments through bubblewrap and prlimit; provides a private working directory, cleared
+  environment, no target-visible host control mount or procfs, network isolation by default,
+  wall-time/address-space/process/file-size controls, bounded concurrent stdout/stderr
+  drain-and-discard capture, and process-group cleanup; and
+  persists the source and canonical configurations, effective controls, capability and target-build
+  manifests, exact stream accounting, portable raw observation, and disjoint typed harness failure
+  through immutable content-addressed artifacts and schema-version-3 SQLite transitions. Other
+  platforms, input-delivery modes, cancellation paths, and target adapters remain required breadth;
 - verified typed identifiers and versioned identity envelopes;
 - portable raw execution outcomes that retain completion, platform-native termination, and detected
   events as independent facts; enforce caller-lowered event, aggregate extension-metadata, and
@@ -51,8 +62,9 @@ Current work establishes and extends:
   counters, typed coverage-provider identity, namespace-versioned state/schedule/fault artifacts,
   and versioned extensions under independent caller-lowered limits, with full-field canonical
   round trips and retained rejection bytes. The pure exact byte-to-value correspondence proof
-  remains depth work without reducing the required codec contract; SQLite observation persistence,
-  live bounded capture, execution controls, and target adapters remain on the breadth path;
+  remains depth work without reducing the required codec contract; the first Linux CLI adapter now
+  supplies live bounded capture, effective controls, and SQLite observation persistence, while the
+  remaining input modes and platform/target adapters stay on the breadth path;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - streaming and directory corpus ingestion, object reachability checking, generation barriers, and
   conservative garbage collection on top of the initial bounded local artifact path;

@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use vstd::prelude::*;
 
 const APPLICATION_ID: i64 = 0x4352_5543;
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
@@ -91,7 +91,8 @@ fn assert_valid_initialized_workspace(root: &Path) {
         .query_row(
             "SELECT COUNT(*) FROM schema_migrations WHERE
                 (version = 1 AND name = 'initialize-workspace') OR
-                (version = 2 AND name = 'add-artifact-store')",
+                (version = 2 AND name = 'add-artifact-store') OR
+                (version = 3 AND name = 'add-local-run-evidence')",
             [],
             |row| row.get(0),
         )
@@ -114,7 +115,7 @@ fn assert_valid_initialized_workspace(root: &Path) {
     assert_eq!(application_id, APPLICATION_ID);
     assert_eq!(user_version, SCHEMA_VERSION);
     assert_eq!(quick_check, "ok");
-    assert_eq!(migrations, 2);
+    assert_eq!(migrations, 3);
     assert_eq!(artifact_tables, 2);
     assert_eq!(format, "crucible-workspace-v1");
 }

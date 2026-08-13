@@ -386,6 +386,179 @@ impl ConfigurationError {
     }
 }
 
+pub open spec fn configuration_text_sequence_views_spec(values: Seq<Vec<u32>>) -> Seq<Seq<u32>> {
+    Seq::new(values.len(), |index: int| values[index]@)
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EffectiveExecutionConfiguration {
+    project_name: Vec<u32>,
+    command: Vec<u32>,
+    arguments: Vec<Vec<u32>>,
+    timeout_ms: u64,
+    memory_mb: u64,
+    max_processes: u64,
+    max_output_mb: u64,
+    network_enabled: bool,
+    required_capabilities: Vec<Vec<u32>>,
+    allowed_exit_codes: Vec<i64>,
+    timeout_is_failure: bool,
+    corpus: Vec<Vec<u32>>,
+    campaign_seed: u64,
+    storage_root: Vec<u32>,
+}
+
+#[verifier::ext_equal]
+pub struct EffectiveExecutionConfigurationView {
+    pub project_name: Seq<u32>,
+    pub command: Seq<u32>,
+    pub arguments: Seq<Seq<u32>>,
+    pub timeout_ms: u64,
+    pub memory_mb: u64,
+    pub max_processes: u64,
+    pub max_output_mb: u64,
+    pub network_enabled: bool,
+    pub required_capabilities: Seq<Seq<u32>>,
+    pub allowed_exit_codes: Seq<i64>,
+    pub timeout_is_failure: bool,
+    pub corpus: Seq<Seq<u32>>,
+    pub campaign_seed: u64,
+    pub storage_root: Seq<u32>,
+}
+
+impl View for EffectiveExecutionConfiguration {
+    type V = EffectiveExecutionConfigurationView;
+
+    closed spec fn view(&self) -> EffectiveExecutionConfigurationView {
+        EffectiveExecutionConfigurationView {
+            project_name: self.project_name@,
+            command: self.command@,
+            arguments: configuration_text_sequence_views_spec(self.arguments@),
+            timeout_ms: self.timeout_ms,
+            memory_mb: self.memory_mb,
+            max_processes: self.max_processes,
+            max_output_mb: self.max_output_mb,
+            network_enabled: self.network_enabled,
+            required_capabilities: configuration_text_sequence_views_spec(
+                self.required_capabilities@,
+            ),
+            allowed_exit_codes: self.allowed_exit_codes@,
+            timeout_is_failure: self.timeout_is_failure,
+            corpus: configuration_text_sequence_views_spec(self.corpus@),
+            campaign_seed: self.campaign_seed,
+            storage_root: self.storage_root@,
+        }
+    }
+}
+
+pub open spec fn effective_execution_configuration_well_formed_spec(
+    execution: EffectiveExecutionConfigurationView,
+) -> bool {
+    execution.project_name.len() > 0 && execution.command.len() > 0 && execution.timeout_ms > 0
+        && execution.memory_mb > 0 && execution.max_processes > 0 && execution.max_output_mb > 0
+        && execution.storage_root.len() > 0
+}
+
+impl EffectiveExecutionConfiguration {
+    pub fn project_name(&self) -> (value: &[u32])
+        ensures
+            value@ == self@.project_name,
+    {
+        self.project_name.as_slice()
+    }
+
+    pub fn target_command(&self) -> (value: &[u32])
+        ensures
+            value@ == self@.command,
+    {
+        self.command.as_slice()
+    }
+
+    pub fn target_arguments(&self) -> (value: &[Vec<u32>])
+        ensures
+            configuration_text_sequence_views_spec(value@) == self@.arguments,
+    {
+        self.arguments.as_slice()
+    }
+
+    pub fn timeout_ms(&self) -> (value: u64)
+        ensures
+            value == self@.timeout_ms,
+    {
+        self.timeout_ms
+    }
+
+    pub fn memory_mb(&self) -> (value: u64)
+        ensures
+            value == self@.memory_mb,
+    {
+        self.memory_mb
+    }
+
+    pub fn max_processes(&self) -> (value: u64)
+        ensures
+            value == self@.max_processes,
+    {
+        self.max_processes
+    }
+
+    pub fn max_output_mb(&self) -> (value: u64)
+        ensures
+            value == self@.max_output_mb,
+    {
+        self.max_output_mb
+    }
+
+    pub fn network_enabled(&self) -> (value: bool)
+        ensures
+            value == self@.network_enabled,
+    {
+        self.network_enabled
+    }
+
+    pub fn required_capabilities(&self) -> (value: &[Vec<u32>])
+        ensures
+            configuration_text_sequence_views_spec(value@) == self@.required_capabilities,
+    {
+        self.required_capabilities.as_slice()
+    }
+
+    pub fn allowed_exit_codes(&self) -> (value: &[i64])
+        ensures
+            value@ == self@.allowed_exit_codes,
+    {
+        self.allowed_exit_codes.as_slice()
+    }
+
+    pub fn timeout_is_failure(&self) -> (value: bool)
+        ensures
+            value == self@.timeout_is_failure,
+    {
+        self.timeout_is_failure
+    }
+
+    pub fn corpus(&self) -> (value: &[Vec<u32>])
+        ensures
+            configuration_text_sequence_views_spec(value@) == self@.corpus,
+    {
+        self.corpus.as_slice()
+    }
+
+    pub fn campaign_seed(&self) -> (value: u64)
+        ensures
+            value == self@.campaign_seed,
+    {
+        self.campaign_seed
+    }
+
+    pub fn storage_root(&self) -> (value: &[u32])
+        ensures
+            value@ == self@.storage_root,
+    {
+        self.storage_root.as_slice()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ValidatedConfiguration {
     schema_version: u16,
@@ -395,6 +568,7 @@ pub struct ValidatedConfiguration {
     digest: Sha256Digest,
     typed_node_count: u64,
     work_count: u64,
+    execution: EffectiveExecutionConfiguration,
 }
 
 #[verifier::ext_equal]
@@ -406,6 +580,7 @@ pub struct ValidatedConfigurationView {
     pub digest: Seq<u8>,
     pub typed_node_count: u64,
     pub work_count: u64,
+    pub execution: EffectiveExecutionConfigurationView,
 }
 
 impl View for ValidatedConfiguration {
@@ -420,6 +595,7 @@ impl View for ValidatedConfiguration {
             digest: self.digest@,
             typed_node_count: self.typed_node_count,
             work_count: self.work_count,
+            execution: self.execution@,
         }
     }
 }
@@ -431,6 +607,7 @@ impl ValidatedConfiguration {
         digest: Sha256Digest,
         typed_node_count: u64,
         work_count: u64,
+        execution: EffectiveExecutionConfiguration,
     ) -> (configuration: Self)
         ensures
             configuration@ == (ValidatedConfigurationView {
@@ -441,6 +618,7 @@ impl ValidatedConfiguration {
                 digest: digest@,
                 typed_node_count,
                 work_count,
+                execution: execution@,
             }),
     {
         Self {
@@ -451,6 +629,7 @@ impl ValidatedConfiguration {
             digest,
             typed_node_count,
             work_count,
+            execution,
         }
     }
 
@@ -502,6 +681,13 @@ impl ValidatedConfiguration {
     {
         self.work_count
     }
+
+    pub fn execution(&self) -> (value: &EffectiveExecutionConfiguration)
+        ensures
+            value@ == self@.execution,
+    {
+        &self.execution
+    }
 }
 
 /// Integrity and resource facts currently proved about an accepted configuration.
@@ -531,6 +717,7 @@ pub open spec fn validated_configuration_integrity_spec(
         && crucible_core::artifact::sha256_input_supported(valid.canonical_bytes.len() as nat)
         && valid.source_digest == crucible_core::artifact::sha256_spec(input) && valid.digest
         == crucible_core::artifact::sha256_spec(valid.canonical_bytes)
+        && effective_execution_configuration_well_formed_spec(valid.execution)
 }
 
 pub proof fn lemma_validated_configuration_obeys_absolute_limits(
@@ -559,11 +746,12 @@ fn render_effective_configuration(
     max_canonical_bytes: u64,
     max_depth: u64,
     max_work: u64,
-) -> (result: Result<(Vec<u8>, u64, u64), ConfigurationError>)
+) -> (result: Result<(Vec<u8>, u64, u64, EffectiveExecutionConfiguration), ConfigurationError>)
     ensures
         match result {
-            Ok((bytes, typed_nodes, work)) => bytes@.len() <= max_canonical_bytes && typed_nodes
-                <= max_typed_nodes && work <= max_work,
+            Ok((bytes, typed_nodes, work, execution)) => bytes@.len() <= max_canonical_bytes
+                && typed_nodes <= max_typed_nodes && work <= max_work
+                && effective_execution_configuration_well_formed_spec(execution@),
             Err(_) => true,
         },
 {
@@ -916,7 +1104,7 @@ fn render_effective_configuration(
                                 }
                             },
                             ResolvedScalarValue::Integer(integer) => {
-                                match observe_integer(field_id, integer, anchor) {
+                                match observe_integer(&mut state, field_id, integer, anchor) {
                                     Ok(()) => {},
                                     Err(error) => return Err(error),
                                 }
@@ -995,7 +1183,14 @@ fn render_effective_configuration(
     if output.len() as u64 > max_canonical_bytes || state.typed_node_count > max_typed_nodes {
         return Err(ConfigurationError::at(ConfigurationErrorKind::InternalInvariantViolation, 0));
     }
-    Ok((output, state.typed_node_count, work))
+    if state.project_name.is_empty() || state.command.is_empty() || state.timeout_ms == 0
+        || state.memory_mb == 0 || state.max_processes == 0 || state.max_output_mb == 0
+        || state.storage_root.is_empty() {
+        return Err(ConfigurationError::at(ConfigurationErrorKind::InternalInvariantViolation, 0));
+    }
+    let typed_node_count = state.typed_node_count;
+    let execution = state.into_execution();
+    Ok((output, typed_node_count, work, execution))
 }
 
 pub fn validate_configuration(input: &[u8], limits: ConfigurationLimits) -> (result: Result<
@@ -1064,7 +1259,7 @@ pub fn validate_configuration(input: &[u8], limits: ConfigurationLimits) -> (res
         );
     }
     let schema = configuration_schema()?;
-    let (canonical_bytes, typed_node_count, work_count) = render_effective_configuration(
+    let (canonical_bytes, typed_node_count, work_count, execution) = render_effective_configuration(
         &graph,
         &schema,
         root_node_index,
@@ -1097,6 +1292,7 @@ pub fn validate_configuration(input: &[u8], limits: ConfigurationLimits) -> (res
         digest,
         typed_node_count,
         work_count,
+        execution,
     );
     proof {
         reveal(validated_configuration_integrity_spec);
@@ -1127,6 +1323,19 @@ impl RenderTask {
 #[derive(Debug)]
 struct RenderState {
     typed_node_count: u64,
+    project_name: Vec<u32>,
+    command: Vec<u32>,
+    arguments: Vec<Vec<u32>>,
+    timeout_ms: u64,
+    memory_mb: u64,
+    max_processes: u64,
+    max_output_mb: u64,
+    network_enabled: bool,
+    allowed_exit_codes: Vec<i64>,
+    timeout_is_failure: bool,
+    corpus: Vec<Vec<u32>>,
+    campaign_seed: u64,
+    storage_root: Vec<u32>,
     fuzz_enabled: Option<bool>,
     fuzz_anchor: u64,
     has_mode: bool,
@@ -1144,6 +1353,19 @@ impl RenderState {
     fn new() -> Self {
         Self {
             typed_node_count: 0,
+            project_name: Vec::new(),
+            command: Vec::new(),
+            arguments: Vec::new(),
+            timeout_ms: 0,
+            memory_mb: 0,
+            max_processes: 0,
+            max_output_mb: 0,
+            network_enabled: false,
+            allowed_exit_codes: Vec::new(),
+            timeout_is_failure: false,
+            corpus: Vec::new(),
+            campaign_seed: 0,
+            storage_root: Vec::new(),
             fuzz_enabled: None,
             fuzz_anchor: 0,
             has_mode: false,
@@ -1164,6 +1386,36 @@ impl RenderState {
             37 => self.modes_anchor = byte_offset,
             38 => self.backends_anchor = byte_offset,
             _ => {},
+        }
+    }
+
+    fn into_execution(self) -> (execution: EffectiveExecutionConfiguration)
+        requires
+            self.project_name@.len() > 0,
+            self.command@.len() > 0,
+            self.timeout_ms > 0,
+            self.memory_mb > 0,
+            self.max_processes > 0,
+            self.max_output_mb > 0,
+            self.storage_root@.len() > 0,
+        ensures
+            effective_execution_configuration_well_formed_spec(execution@),
+    {
+        EffectiveExecutionConfiguration {
+            project_name: self.project_name,
+            command: self.command,
+            arguments: self.arguments,
+            timeout_ms: self.timeout_ms,
+            memory_mb: self.memory_mb,
+            max_processes: self.max_processes,
+            max_output_mb: self.max_output_mb,
+            network_enabled: self.network_enabled,
+            required_capabilities: self.capabilities,
+            allowed_exit_codes: self.allowed_exit_codes,
+            timeout_is_failure: self.timeout_is_failure,
+            corpus: self.corpus,
+            campaign_seed: self.campaign_seed,
+            storage_root: self.storage_root,
         }
     }
 }
@@ -1294,7 +1546,7 @@ fn integer_as_u64(integer: &crucible_yaml::CoreInteger) -> (value: Option<u64>) 
     Some(value)
 }
 
-fn signed_exit_code_is_valid(integer: &crucible_yaml::CoreInteger) -> (valid: bool) {
+fn signed_exit_code_value(integer: &crucible_yaml::CoreInteger) -> (value: Option<i64>) {
     let limbs = integer.limbs();
     let mut magnitude = 0u64;
     let mut index = limbs.len();
@@ -1304,21 +1556,21 @@ fn signed_exit_code_is_valid(integer: &crucible_yaml::CoreInteger) -> (valid: bo
         decreases index,
     {
         index -= 1;
-        magnitude =
-        match magnitude.checked_mul(crucible_yaml::CORE_INTEGER_MAGNITUDE_RADIX as u64) {
-            Some(next) => next,
-            None => return false,
-        };
-        magnitude =
-        match magnitude.checked_add(limbs[index] as u64) {
-            Some(next) => next,
-            None => return false,
-        };
+        magnitude = magnitude.checked_mul(crucible_yaml::CORE_INTEGER_MAGNITUDE_RADIX as u64)?;
+        magnitude = magnitude.checked_add(limbs[index] as u64)?;
     }
     if integer.negative() {
-        magnitude <= 2_147_483_648
+        if magnitude <= 2_147_483_648 {
+            Some(-(magnitude as i64))
+        } else {
+            None
+        }
     } else {
-        magnitude <= 2_147_483_647
+        if magnitude <= 2_147_483_647 {
+            Some(magnitude as i64)
+        } else {
+            None
+        }
     }
 }
 
@@ -1363,16 +1615,28 @@ fn observe_string(
                 ConfigurationError::at(ConfigurationErrorKind::InvalidLanguageProfile, byte_offset),
             );
         },
-        14 | 16 | 48 => if points.is_empty() {
-            return Err(
-                ConfigurationError::at(ConfigurationErrorKind::InvalidFieldValue, byte_offset),
-            );
+        14 => {
+            if points.is_empty() {
+                return Err(
+                    ConfigurationError::at(ConfigurationErrorKind::InvalidFieldValue, byte_offset),
+                );
+            }
+            state.project_name = vstd::slice::slice_to_vec(points);
         },
         15 => if !points_equal_ascii(points, b"cli") {
             return Err(
                 ConfigurationError::at(ConfigurationErrorKind::InvalidTargetAdapter, byte_offset),
             );
         },
+        16 => {
+            if points.is_empty() {
+                return Err(
+                    ConfigurationError::at(ConfigurationErrorKind::InvalidFieldValue, byte_offset),
+                );
+            }
+            state.command = vstd::slice::slice_to_vec(points);
+        },
+        17 => state.arguments.push(vstd::slice::slice_to_vec(points)),
         23 => {
             if points_are_duplicate(
                 state.capabilities.as_slice(),
@@ -1390,6 +1654,7 @@ fn observe_string(
             }
             state.capabilities.push(vstd::slice::slice_to_vec(points));
         },
+        27 => state.corpus.push(vstd::slice::slice_to_vec(points)),
         37 => {
             if !points_equal_ascii(points, b"managed") && !points_equal_ascii(points, b"native") {
                 return Err(
@@ -1439,12 +1704,21 @@ fn observe_string(
                 ConfigurationError::at(ConfigurationErrorKind::InvalidFieldValue, byte_offset),
             );
         },
+        48 => {
+            if points.is_empty() {
+                return Err(
+                    ConfigurationError::at(ConfigurationErrorKind::InvalidFieldValue, byte_offset),
+                );
+            }
+            state.storage_root = vstd::slice::slice_to_vec(points);
+        },
         _ => {},
     }
     Ok(())
 }
 
 fn observe_integer(
+    state: &mut RenderState,
     field_id: u64,
     integer: &crucible_yaml::CoreInteger,
     byte_offset: u64,
@@ -1460,22 +1734,30 @@ fn observe_integer(
             ),
         },
         18 | 19 | 20 | 21 | 46 => match integer_as_u64(integer) {
-            Some(value) if value > 0 => {},
+            Some(value) if value > 0 => match field_id {
+                18 => state.timeout_ms = value,
+                19 => state.memory_mb = value,
+                20 => state.max_processes = value,
+                21 => state.max_output_mb = value,
+                _ => {},
+            },
             _ => return Err(
                 ConfigurationError::at(ConfigurationErrorKind::IntegerOutOfRange, byte_offset),
             ),
         },
         25 => {
-            if !signed_exit_code_is_valid(integer) {
-                return Err(
+            match signed_exit_code_value(integer) {
+                Some(value) => state.allowed_exit_codes.push(value),
+                None => return Err(
                     ConfigurationError::at(ConfigurationErrorKind::IntegerOutOfRange, byte_offset),
-                );
+                ),
             }
         },
-        47 if integer_as_u64(integer).is_none() => {
-            return Err(
+        47 => match integer_as_u64(integer) {
+            Some(value) => state.campaign_seed = value,
+            None => return Err(
                 ConfigurationError::at(ConfigurationErrorKind::IntegerOutOfRange, byte_offset),
-            );
+            ),
         },
         _ => {},
     }
@@ -1489,6 +1771,8 @@ fn observe_boolean(
     byte_offset: u64,
 ) -> (result: Result<(), ConfigurationError>) {
     match field_id {
+        22 => state.network_enabled = value,
+        26 => state.timeout_is_failure = value,
         36 => state.fuzz_enabled = Some(value),
         40 | 42 | 43 => if value {
             if state.exclusive_sanitizer_count > 0 {

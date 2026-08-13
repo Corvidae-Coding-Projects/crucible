@@ -897,7 +897,18 @@ impl RawObservationLimits {
         max_extension_namespace_code_points: u64,
         max_extension_media_type_code_points: u64,
         max_extension_payload_bytes_per_record: u64,
-    ) -> (limits: Self) {
+    ) -> (limits: Self)
+        ensures
+            limits@ == (RawObservationLimitsView {
+                outcome_limits: outcome_limits@,
+                max_identity_code_points,
+                max_resource_extensions,
+                max_extensions,
+                max_extension_namespace_code_points,
+                max_extension_media_type_code_points,
+                max_extension_payload_bytes_per_record,
+            }),
+    {
         Self {
             outcome_limits,
             max_identity_code_points,
@@ -938,7 +949,28 @@ impl RawObservationLimits {
     }
 }
 
-pub fn canonical_raw_observation_limits() -> (limits: RawObservationLimits) {
+pub fn canonical_raw_observation_limits() -> (limits: RawObservationLimits)
+    ensures
+        limits@ == (RawObservationLimitsView {
+            outcome_limits: RawExecutionOutcomeLimitsView {
+                max_events: crate::execution::MAX_RAW_EXECUTION_EVENTS,
+                max_extension_namespace_code_points:
+                    MAX_RAW_EXECUTION_EXTENSION_NAMESPACE_CODE_POINTS,
+                max_extension_media_type_code_points:
+                    MAX_RAW_EXECUTION_EXTENSION_MEDIA_TYPE_CODE_POINTS,
+                max_extension_payload_bytes_per_record:
+                    MAX_RAW_EXECUTION_EXTENSION_PAYLOAD_BYTES_PER_RECORD,
+            },
+            max_identity_code_points: MAX_RAW_OBSERVATION_IDENTITY_CODE_POINTS,
+            max_resource_extensions: MAX_RAW_OBSERVATION_RESOURCE_EXTENSIONS,
+            max_extensions: MAX_RAW_OBSERVATION_EXTENSIONS,
+            max_extension_namespace_code_points: MAX_RAW_EXECUTION_EXTENSION_NAMESPACE_CODE_POINTS,
+            max_extension_media_type_code_points:
+                MAX_RAW_EXECUTION_EXTENSION_MEDIA_TYPE_CODE_POINTS,
+            max_extension_payload_bytes_per_record:
+                MAX_RAW_EXECUTION_EXTENSION_PAYLOAD_BYTES_PER_RECORD,
+        }),
+{
     RawObservationLimits::new(
         crate::execution::canonical_raw_execution_outcome_limits(),
         MAX_RAW_OBSERVATION_IDENTITY_CODE_POINTS,

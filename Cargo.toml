@@ -16,7 +16,7 @@ rust-version = "1.97.1"
 
 [workspace.dependencies]
 rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"] }
-rustix = { version = "1.1.4", features = ["fs"] }
+rustix = { version = "1.1.4", features = ["fs", "process"] }
 vstd = { git = "https://github.com/verus-lang/verus.git", rev = "92f466f247f45128c630d1c843fd6e27d2115587" }
 
 [workspace.lints.rust]

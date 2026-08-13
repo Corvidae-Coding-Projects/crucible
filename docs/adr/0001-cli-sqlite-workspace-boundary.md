@@ -5,7 +5,8 @@
 - **Decision owners:** dollspace.gay (approved 2026-08-13)
 - **Related issue:** Phase 0 `crucible init` acceptance slice
 - **Supersedes:** None
-- **Amended by:** ADR-0002 (schema version 2 and the separate artifact host boundary)
+- **Amended by:** ADR-0002 (schema version 2 and the separate artifact host boundary), ADR-0004
+  (schema version 3 and immutable run evidence)
 
 ## Context and evidence
 

@@ -36,5 +36,5 @@ proof fn version_one_and_current_database_profiles_are_disjoint(snapshot: Databa
 } // verus!
 #[test]
 fn proof_contract_is_compiled() {
-    assert_eq!(crucible_cli::WORKSPACE_SCHEMA_VERSION, 2);
+    assert_eq!(crucible_cli::WORKSPACE_SCHEMA_VERSION, 3);
 }

@@ -388,7 +388,7 @@ fn main() {
                     return;
                 },
             };
-            if summary.registered != 13 || summary.external_body_entries != 13
+            if summary.registered != 16 || summary.external_body_entries != 16
                 || summary.external_entries != 0 || summary.external_type_specification_entries != 0
                 || summary.assume_specification_entries != 0 || summary.assume_entries != 0
                 || summary.admit_entries != 0 || summary.axiom_entries != 0
@@ -402,7 +402,7 @@ fn main() {
                 return;
             }
             let report =
-                b"{\"schema\":1,\"status\":\"success\",\"trusted_boundary_entries\":13,\"external_body_entries\":13,\"external_entries\":0,\"external_type_specification_entries\":0,\"assume_specification_entries\":0,\"assume_entries\":0,\"assumption_entries\":0,\"admit_entries\":0,\"axiom_entries\":0,\"unsafe_entries\":0,\"foreign_entries\":0,\"included_source_entries\":0,\"unregistered\":0,\"unapproved_growth\":0,\"binding\":\"exact ledger metadata plus source path, occurrence line, byte count, and line count\"}\n";
+                b"{\"schema\":1,\"status\":\"success\",\"trusted_boundary_entries\":16,\"external_body_entries\":16,\"external_entries\":0,\"external_type_specification_entries\":0,\"assume_specification_entries\":0,\"assume_entries\":0,\"assumption_entries\":0,\"admit_entries\":0,\"axiom_entries\":0,\"unsafe_entries\":0,\"foreign_entries\":0,\"included_source_entries\":0,\"unregistered\":0,\"unapproved_growth\":0,\"binding\":\"exact ledger metadata plus source path, occurrence line, byte count, and line count\"}\n";
             if !host_write_report(ReportKind::TrustedBoundary, report) {
                 host_complete(
                     false,

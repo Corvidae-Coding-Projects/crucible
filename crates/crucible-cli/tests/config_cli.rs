@@ -168,7 +168,10 @@ fn configuration_reader_uses_no_follow_admission_or_fails_closed() {
         .split(concat!("// CRUCIBLE-", "TCB: CLI-HOST-CONFIG-001"))
         .nth(1)
         .unwrap()
-        .split(concat!("// CRUCIBLE-", "TCB: CLI-HOST-COMPLETE-001"))
+        .split(concat!(
+            "// CRUCIBLE-",
+            "TCB: CLI-HOST-LOCAL-SUPERVISOR-001"
+        ))
         .next()
         .unwrap();
 
