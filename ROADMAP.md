@@ -12,10 +12,10 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 
 Implementation now prioritizes the shortest runnable Phase 0 path. Workspace initialization,
 database migration, and single-artifact import/integrity verification are operational; production
-configuration validation/digesting and initial domain-record round trips are next. Further theorem
-strengthening, exhaustive YAML conformance closure, and finer internal submachines follow that
-operational spine unless a defect blocks it. This changes delivery order only; no acceptance
-criterion or later capability is removed.
+configuration validation/digesting and the remaining initial domain-record round trips are next.
+Further theorem strengthening, exhaustive YAML conformance closure, and finer internal submachines
+follow that operational spine unless a defect blocks it. This changes delivery order only; no
+acceptance criterion or later capability is removed.
 
 Current work establishes and extends:
 
@@ -33,6 +33,12 @@ Current work establishes and extends:
   SHA-256 object addressing, atomic no-clobber publication, deduplication, retained import
   provenance, transactional SQLite references, and post-publication integrity checking;
 - verified typed identifiers and versioned identity envelopes;
+- portable raw execution outcomes that retain completion, platform-native termination, and detected
+  events as independent facts; enforce caller-lowered event, aggregate extension-metadata, and
+  per-record payload limits; expose exact stable tags and semantic-validation proofs; and round-trip
+  through a bounded canonical version-1 byte codec with typed malformed-input diagnostics and exact
+  rejection-byte preservation. `RawObservation`, stream/resource records, persistence, execution
+  controls, and target adapters remain on the breadth path;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - streaming and directory corpus ingestion, object reachability checking, generation barriers, and
   conservative garbage collection on top of the initial bounded local artifact path;

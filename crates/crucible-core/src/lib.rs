@@ -13,11 +13,30 @@ let run: RunId = target;
 use vstd::prelude::*;
 
 pub mod artifact;
+pub mod execution;
+pub mod execution_codec;
 pub mod provenance;
 
 pub use artifact::{
     parse_artifact_id, sha256, ArtifactIdParseError, ArtifactIdentityError, ArtifactRef,
     ContentDigest, DigestAlgorithm, DigestDecodeError, HashError, Sha256Digest,
+};
+pub use execution::{
+    canonical_raw_execution_outcome_limits, validate_raw_execution_outcome, CompletionDisposition,
+    HarnessTerminationReason, LogicalProcessId, LogicalProcessIdError, RawExecutionEvent,
+    RawExecutionOutcome, RawExecutionOutcomeError, RawExecutionOutcomeErrorKind,
+    RawExecutionOutcomeLimits, RawExecutionOutcomeLimitsView, RawExecutionOutcomeLocation,
+    RawExecutionOutcomeRejection, ResetCause, ResourceKind, TerminationRecord,
+    ValidatedRawExecutionOutcome, VersionedExtensionRef, MAX_RAW_EXECUTION_EVENTS,
+    MAX_RAW_EXECUTION_EXTENSION_MEDIA_TYPE_CODE_POINTS,
+    MAX_RAW_EXECUTION_EXTENSION_NAMESPACE_CODE_POINTS,
+    MAX_RAW_EXECUTION_EXTENSION_PAYLOAD_BYTES_PER_RECORD, RAW_EXECUTION_OUTCOME_SCHEMA_VERSION,
+};
+pub use execution_codec::{
+    canonical_raw_execution_outcome_codec_limits, decode_raw_execution_outcome,
+    encode_raw_execution_outcome, RawExecutionOutcomeCodecError, RawExecutionOutcomeCodecErrorKind,
+    RawExecutionOutcomeCodecLimits, RawExecutionOutcomeCodecRejection,
+    MAX_RAW_EXECUTION_OUTCOME_ENCODED_BYTES,
 };
 pub use provenance::{
     ActorIdentity, ActorKind, EvidenceEnvelope, EvidenceEnvelopeError, EvidenceField,

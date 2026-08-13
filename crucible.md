@@ -744,6 +744,32 @@ pub enum RawExecutionEvent {
 }
 ```
 
+Raw execution outcomes use canonical binary serialization version 1. The byte order is big-endian
+and the wire shape is exact: four-byte ASCII magic `CRXO`; a `u16` schema version; a stable `u16`
+completion tag; a `u64` event count; a one-byte termination option; the optional termination; then
+the declared events in recorded order. Every enum uses its documented stable numeric tag. Signed
+integers use their fixed-width two's-complement bit pattern, booleans and options accept only zero
+or one, and strings are length-prefixed UTF-8. Extension records serialize the complete namespace,
+schema version, artifact size, algorithm-qualified artifact ID, and optional media type.
+
+Version-1 decoding is total over bytes and configured limits. It checks the absolute/caller-lowered
+encoded-byte and event-count caps before constructing nested records; checks every declared length
+against both remaining input and its applicable cap before allocation; rejects truncation, trailing
+bytes, unknown tags, invalid boolean/option spellings, invalid UTF-8, oversized strings, unsupported
+schema versions, and semantic-invalid decoded outcomes with distinct typed errors; and retains the
+exact original bytes on every rejection. Future schema versions are therefore preserved as opaque
+bounded bytes rather than relabeled as a current Rust value. Version-1 encoding is capped at 128
+MiB. Decoding an encoding produced for a validated representable outcome must return the exact same
+outcome.
+
+Outcome validation has independent, caller-lowerable absolute limits for 1,048,576 events,
+1,048,576 aggregate extension-namespace code points, 1,048,576 aggregate inline media-type code
+points, and a 1 TiB out-of-line extension payload per record. Event count has cheap preflight
+precedence. Payload size is not summed across records because identical content-addressed artifacts
+may be referenced repeatedly; execution controls may lower the per-record policy. Namespace and
+media-type budgets are aggregate because their bytes are inline. Exact limit, first-excluded, and
+multi-defect precedence are part of the public diagnostic contract.
+
 Failure to prepare the sandbox, spawn the target, capture required evidence, or persist the
 observation is a typed harness error, not a target outcome.
 
