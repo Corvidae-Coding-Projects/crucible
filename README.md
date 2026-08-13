@@ -63,6 +63,7 @@ explicit Verus verification targets rather than delegated to an external YAML pa
 | Architecture and complete product scope | Draft specification available |
 | Repository governance and contribution process | Established |
 | Verus toolchain and workspace | Phase 0.1 implemented: pinned, digest-bound, and proof-checked |
+| CLI and workspace persistence | `crucible init [path]` creates the documented workspace and a versioned, application-identified SQLite database; artifact import and the remaining migrations are next |
 | Typed core identifiers | 16 distinct Verus types with versioned envelope round trips |
 | Content-addressed artifact identity | Verified SHA-256, complete canonical codec, typed algorithm dispatch, checksum-pinned NIST vectors, and integrity checks; object store pending |
 | Evidence and provenance graph | Verified structural admission, append-only/idempotent transitions, borrowed retries, normative edge direction, and atomic multi-input derivations; persistence pending |

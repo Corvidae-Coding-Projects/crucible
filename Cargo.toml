@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/crucible-core", "crates/crucible-xtask", "crates/crucible-yaml"]
+members = [
+    "crates/crucible-cli",
+    "crates/crucible-core",
+    "crates/crucible-xtask",
+    "crates/crucible-yaml",
+]
 resolver = "2"
 
 [workspace.package]
@@ -10,6 +15,7 @@ repository = "https://github.com/Corvidae-Coding-Projects/crucible"
 rust-version = "1.97.1"
 
 [workspace.dependencies]
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"] }
 vstd = { git = "https://github.com/verus-lang/verus.git", rev = "92f466f247f45128c630d1c843fd6e27d2115587" }
 
 [workspace.lints.rust]

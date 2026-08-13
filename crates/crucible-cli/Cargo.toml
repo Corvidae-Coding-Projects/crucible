@@ -1,0 +1,22 @@
+[package]
+name = "crucible-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "crucible"
+path = "src/main.rs"
+
+[dependencies]
+rusqlite.workspace = true
+vstd.workspace = true
+
+[package.metadata.verus]
+verify = true
+
+[lints]
+workspace = true

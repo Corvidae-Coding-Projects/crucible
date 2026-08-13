@@ -47,8 +47,8 @@ fn public_xtask_interfaces_run_end_to_end() {
     let audit_report =
         std::fs::read_to_string(workspace_root().join("target/crucible/reports/tcb-audit.json"))
             .expect("TCB report");
-    assert!(audit_report.contains("\"trusted_boundary_entries\":7"));
-    assert!(audit_report.contains("\"external_body_entries\":7"));
+    assert!(audit_report.contains("\"trusted_boundary_entries\":10"));
+    assert!(audit_report.contains("\"external_body_entries\":10"));
     assert!(audit_report.contains("\"assumption_entries\":0"));
     assert!(audit_report.contains("\"axiom_entries\":0"));
     assert!(audit_report.contains("\"unsafe_entries\":0"));

@@ -4483,6 +4483,14 @@ Examples:
 crucible init
 ```
 
+`crucible init [path]` creates the documented `.crucible` directory layout beneath the selected
+path (the current directory by default) and initializes the embedded database through monotonic,
+versioned migrations. The database carries a Crucible application ID, an independent SQLite schema
+version, exact migration history, and workspace-format metadata. Repeating the command against the
+same valid version is idempotent. Initialization rejects an occupied or symlinked managed path and
+an existing database whose identity, version, migration history, metadata, or integrity check does
+not match; it does not adopt or overwrite unrelated state.
+
 ```bash
 crucible run crucible.yaml
 ```

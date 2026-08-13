@@ -10,6 +10,10 @@ begin.
 
 ### Added
 
+- Added the first production `crucible` binary and `crucible init [path]`, creating the documented
+  workspace layout plus an application-identified, versioned, integrity-checked SQLite database;
+  initialization is idempotent, refuses incompatible or symlinked state, and is covered through
+  compiled-binary process fixtures.
 - Complete draft implementation specification for the Crucible correctness harness.
 - Verus-first implementation saturation and trusted-boundary accounting requirements.
 - Project-owned, Verus-authored Crucible YAML design and proof obligations.

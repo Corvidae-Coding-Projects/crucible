@@ -8,6 +8,14 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 
 ## Current milestone: Phase 0 implementation foundation
 
+### Immediate breadth-first acceptance path
+
+Implementation now prioritizes the shortest runnable Phase 0 path: initialize a workspace and
+database, import and integrity-check an artifact, validate and digest a real configuration, and
+round-trip the initial domain records. Further theorem strengthening, exhaustive YAML conformance
+closure, and finer internal submachines follow that operational spine unless a defect blocks it.
+This changes delivery order only; no acceptance criterion or later capability is removed.
+
 Current work establishes and extends:
 
 - public project governance and contribution processes;
@@ -17,6 +25,9 @@ Current work establishes and extends:
 - evidence, provenance, scenario, build, plugin, proof, and capability identities;
 - implementation-ready acceptance criteria;
 - the pinned Verus/Rust/Z3/verusfmt workspace and reproducible proof command;
+- a production `crucible init [path]` command that creates the documented workspace layout and an
+  application-identified, explicitly migrated SQLite database; refuses incompatible, occupied, or
+  symlinked managed state; verifies database integrity; and is idempotent for a valid workspace;
 - verified typed identifiers and versioned identity envelopes;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
 - verified structurally valid append-only evidence/provenance transitions, atomic multi-input
