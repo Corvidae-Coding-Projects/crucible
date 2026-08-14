@@ -207,7 +207,7 @@ fn timeout_terminates_the_process_tree_and_is_persisted_as_a_target_fact() {
     let workspace = TemporaryWorkspace::new();
     let target = workspace.write_target(
         "timeout.sh",
-        b"#!/bin/sh\n/bin/sh -c 'sleep 30' crucible-timeout-descendant &\nwait\n",
+        b"#!/bin/sh\n/bin/sh -c 'while :; do :; done' crucible-timeout-descendant &\nwait\n",
     );
     let configuration = workspace.write_configuration(&target, "[]", 100, 1);
     let output = workspace.run(&configuration);
