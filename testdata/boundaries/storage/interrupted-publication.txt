@@ -1,0 +1,3 @@
+verified-object-present
+database-reference-absent
+lease-status-active

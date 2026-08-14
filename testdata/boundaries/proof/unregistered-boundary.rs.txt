@@ -1,0 +1,2 @@
+#[verifier::external_body]
+fn intentionally_unregistered_boundary() {}

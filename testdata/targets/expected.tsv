@@ -1,0 +1,12 @@
+fixture	defect	witness
+crash/target.sh	crash	native-signal
+hang/target.sh	timeout	timeout
+arithmetic/target.sh	integer-overflow	oracle-exit
+memory/target.sh	memory-bug	native-signal
+concurrency/race.sh	race	schedule-witness-exit
+concurrency/deadlock.sh	deadlock	timeout
+state/target.sh	state-machine-invariant	oracle-exit
+serializer/target.sh	serialization-mismatch	oracle-exit
+leak/target.sh	resource-leak	oracle-exit
+logic/target.sh	incorrect-result	oracle-exit
+fault-recovery/target.sh	recovery-failure	oracle-exit

@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
       EVIDENCE_ROOT: target/crucible/evidence/${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
@@ -151,8 +153,20 @@ jobs:
           cargo fmt --all -- --check
           cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Rediscover the regression corpus
+        run: cargo test -p crucible-cli --test harness_selftest -- --test-threads=1
+
+      - name: Run the bounded short fuzz campaign
+        run: cargo test -p crucible-cli --test build_fuzz_cli -- --test-threads=1
+
+      - name: Run core property tests
+        run: cargo test -p crucible-core --locked -- --test-threads=1
+
+      - name: Run Crucible YAML parser and boundary fixtures
+        run: cargo test -p crucible-yaml --locked -- --test-threads=1
+
       - name: Run all executable and documentation tests
-        run: cargo test --all --locked
+        run: cargo test --all --locked -- --test-threads=1
 
       - name: Validate machine-readable reports
         shell: bash

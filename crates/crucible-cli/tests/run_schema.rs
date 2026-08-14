@@ -9,8 +9,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
 
 #[test]
-fn workspace_schema_three_installs_the_versioned_run_evidence_tables() {
-    assert_eq!(WORKSPACE_SCHEMA_VERSION, 3);
+fn workspace_schema_four_preserves_the_versioned_run_evidence_tables() {
+    assert_eq!(WORKSPACE_SCHEMA_VERSION, 4);
     assert_eq!(run_migration_name(), b"add-local-run-evidence");
     assert!(run_migration_checksum().starts_with(b"sha256:"));
     let migration = String::from_utf8(run_migration_sql()).expect("migration SQL is UTF-8");
@@ -49,7 +49,7 @@ fn workspace_schema_three_installs_the_versioned_run_evidence_tables() {
         connection
             .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
             .expect("user version"),
-        3,
+        4,
     );
     assert_eq!(
         connection

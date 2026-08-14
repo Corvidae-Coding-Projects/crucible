@@ -1,8 +1,8 @@
 # Roadmap
 
-Crucible's complete scope and phase acceptance criteria live in the
-[design specification](crucible.md). This document summarizes delivery groups and the current
-repository milestone; it does not replace or narrow the specification.
+Crucible's complete scope and phase acceptance criteria live in the slices listed by the
+[design specification index](crucible.md). This document summarizes delivery groups and the
+current repository milestone; it does not replace or narrow the specification.
 
 No dates are promised until implementation velocity and Verus/toolchain constraints are measured.
 
@@ -10,15 +10,18 @@ No dates are promised until implementation velocity and Verus/toolchain constrai
 
 ### Immediate breadth-first acceptance path
 
-Implementation now prioritizes the shortest runnable Phase 0-through-MVP path. Workspace
-initialization, database migration, single-artifact import/integrity verification, production
-configuration validation/canonicalization, and the first Linux `crucible run` path are operational.
-The immediate next milestone is `crucible inspect`: recover and render the persisted configuration,
-target, controls, streams, raw outcome, observation, and harness-failure evidence for a selected run.
-Hard verdicts, findings, replay, corpus mutation, minimization, and evidence bundles then extend that
-same vertical path. Further theorem strengthening, exhaustive YAML conformance closure, and finer
-internal submachines follow the operational spine unless a defect blocks it. This changes delivery
-order only; no acceptance criterion or later capability is removed.
+Implementation prioritizes the shortest runnable Phase 0-through-MVP path. The §§71–80 control-plane
+slice is accepted: scheduler policy, schema-version-4 domain persistence, bounded publication and
+collection, the documented CLI grammar, hard process-exit findings, inspection, replay sampling,
+portable reports, structured logs, self-test corpora, and three CI depths now surround the first
+Linux execution adapter. Its coherent acceptance units and exact evidence locations are recorded in
+[the §§71–80 work-slice ledger](docs/work-slices/scheduling-storage-cli-reporting.md).
+
+The next milestone proceeds from that accepted control plane into the remaining engine and adapter
+phases in normative dependency order. Further theorem strengthening, exhaustive YAML conformance,
+streaming corpus ingestion, native fuzzers, minimization reducers, additional platforms, and richer
+scenario execution remain governed by their owning specification sections. Delivery order changes
+do not remove an acceptance criterion or later capability.
 
 Current work establishes and extends:
 
@@ -35,6 +38,8 @@ Current work establishes and extends:
 - production `crucible artifact import` and `crucible artifact verify` commands backed by verified
   SHA-256 object addressing, atomic no-clobber publication, deduplication, retained import
   provenance, transactional SQLite references, and post-publication integrity checking;
+- production `crucible artifact check` and `crucible artifact gc` commands backed by bounded
+  integrity scans, generation/lease barriers, and conservative preservation of normative roots;
 - production `crucible config validate` and `crucible config canonicalize` commands backed by the
   complete version-1 field schema, recursive typed validation without coercion, cross-field
   execution invariants, deterministic canonical YAML, project-owned SHA-256 identity, exact typed
@@ -50,7 +55,7 @@ Current work establishes and extends:
   drain-and-discard capture, and process-group cleanup; and
   persists the source and canonical configurations, effective controls, capability and target-build
   manifests, exact stream accounting, portable raw observation, and disjoint typed harness failure
-  through immutable content-addressed artifacts and schema-version-3 SQLite transitions. Other
+  through immutable content-addressed artifacts and schema-version-4 SQLite transitions. Other
   platforms, input-delivery modes, cancellation paths, and target adapters remain required breadth;
 - verified typed identifiers and versioned identity envelopes;
 - portable raw execution outcomes that retain completion, platform-native termination, and detected
@@ -66,8 +71,8 @@ Current work establishes and extends:
   supplies live bounded capture, effective controls, and SQLite observation persistence, while the
   remaining input modes and platform/target adapters stay on the breadth path;
 - project-owned verified SHA-256, canonical artifact-ID parsing, and typed algorithm dispatch;
-- streaming and directory corpus ingestion, object reachability checking, generation barriers, and
-  conservative garbage collection on top of the initial bounded local artifact path;
+- object reachability checking, generation barriers, and conservative garbage collection on top of
+  the bounded local artifact path; streaming and directory corpus ingestion remain later breadth;
 - verified structurally valid append-only evidence/provenance transitions, atomic multi-input
   derivations, retry-safe borrowed publication, and versioned evidence envelopes;
 - project-owned Crucible YAML profile-1 byte decoding with exact source spans, typed UTF-8

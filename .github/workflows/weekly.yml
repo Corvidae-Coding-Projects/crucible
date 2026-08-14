@@ -1,0 +1,116 @@
+name: Weekly exploration and conformance
+
+on:
+  schedule:
+    - cron: '29 4 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: weekly-exploration-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  exploration:
+    name: Symbolic, concurrency, extended campaign, and soak
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal
+      - name: Install Linux isolation tools
+        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+      - name: Exhaust the bounded symbolic scheduler state space
+        run: >-
+          cargo test -p crucible-core --test scheduler
+          weekly_symbolic -- --test-threads=1
+      - name: Explore publication and collection concurrency schedules
+        run: >-
+          cargo test -p crucible-core --test storage_policy
+          weekly_concurrency -- --test-threads=1
+      - name: Run the extended seeded fuzz campaign
+        run: >-
+          cargo test -p crucible-cli --test build_fuzz_cli
+          extended_campaign -- --ignored --exact --test-threads=1
+      - name: Soak known-defect rediscovery sequentially
+        run: |
+          for pass in 1 2 3; do
+            echo "soak pass $pass"
+            cargo test -p crucible-cli --test harness_selftest -- --test-threads=1
+          done
+      - name: Run a scenario topology campaign
+        run: >-
+          cargo test -p crucible-cli --test storage_schema
+          scenario_topology -- --exact --test-threads=1
+
+  capability-matrix:
+    name: Platform and architecture capability conformance
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Check the complete host workspace
+        run: cargo check --workspace --all-targets --locked
+      - name: Check the architecture-neutral core for aarch64-unknown-linux-gnu
+        if: runner.os == 'Linux'
+        run: |
+          rustup target add aarch64-unknown-linux-gnu --toolchain 1.97.1-x86_64-unknown-linux-gnu
+          cargo check -p crucible-core --target aarch64-unknown-linux-gnu --locked
+
+  cold-proof-and-tcb:
+    name: Cold proof refresh and trusted-boundary reduction audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository without build caches
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal --component rustfmt
+      - name: Install digest-checked Verus toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_root="$RUNNER_TEMP/crucible-tools"
+          mkdir -p "$tool_root/verus" "$tool_root/verusfmt"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/verus.zip" \
+            https://github.com/verus-lang/verus/releases/download/release/0.2026.08.09.92f466f/verus-0.2026.08.09.92f466f-x86-linux.zip
+          printf '%s  %s\n' \
+            2f5a41c553f424aacdd732339e9d125563716a0b003c27730f75d6f81a282cef \
+            "$RUNNER_TEMP/verus.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/verus.zip" -d "$tool_root/verus"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/verusfmt.tar.xz" \
+            https://github.com/verus-lang/verusfmt/releases/download/v0.7.2/verusfmt-x86_64-unknown-linux-gnu.tar.xz
+          printf '%s  %s\n' \
+            c5e0a8e07337055b2469d2878ddcc589da1f4be91348bb1917ce122ea46d4015 \
+            "$RUNNER_TEMP/verusfmt.tar.xz" | sha256sum --check --strict
+          tar -xJf "$RUNNER_TEMP/verusfmt.tar.xz" -C "$tool_root/verusfmt" --strip-components=1
+          printf '%s\n' "$tool_root/verus/verus-x86-linux" >> "$GITHUB_PATH"
+          printf '%s\n' "$tool_root/verusfmt" >> "$GITHUB_PATH"
+      - name: Reproduce every proof from a cold checkout
+        run: cargo xtask verify --all
+      - name: Audit trusted-boundary reduction opportunities and reject growth
+        run: cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth

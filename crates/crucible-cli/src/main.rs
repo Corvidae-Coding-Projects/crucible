@@ -3,25 +3,38 @@
 use crucible_cli::{
     admit_run_store_transition, artifact_imports_table_sql, artifact_migration_checksum,
     artifact_migration_name, artifact_migration_sql, artifacts_table_sql,
-    build_local_raw_observation, canonical_configuration_limits,
-    canonical_local_capability_probe_report, classify_raw_local_execution,
-    database_snapshot_is_exact, database_snapshot_is_exact_v1, database_snapshot_is_exact_v2,
-    decide_workspace_initialization, encode_local_target_arguments, local_capability_manifest,
-    metadata_table_sql, migration_checksum, migration_table_sql, object_address_for_artifact,
+    authenticate_artifact_contents, authenticate_artifact_preview, build_local_raw_observation,
+    canonical_configuration_limits, canonical_local_capability_probe_report,
+    classify_raw_local_execution, database_snapshot_is_exact, database_snapshot_is_exact_v1,
+    database_snapshot_is_exact_v2, database_snapshot_is_exact_v3, decide_workspace_initialization,
+    domain_migration_checksum, domain_migration_name, domain_migration_sql,
+    encode_local_target_arguments, evaluate_process_exit_oracle,
+    inspection_observation_codec_limits, local_capability_manifest, metadata_table_sql,
+    migration_checksum, migration_table_sql, object_address_for_artifact,
     object_address_matches_id, parse_cli_args, prepare_artifact_publication,
-    prepare_local_execution, run_migration_checksum, run_migration_name, run_migration_sql,
-    stored_artifact_is_exact, target_build_manifest, validate_configuration,
-    validate_local_capability_probe, ArtifactStoreError, CapturedOutput, CliAction, CliParseError,
-    ConfigurationError, ConfigurationErrorKind, DatabaseSnapshot, InitializationDecision,
-    InitializationError, LocalExecutionClassificationError, LocalExecutionPlan, LocalNetworkPolicy,
-    LocalRunPlanError, LocalRuntimeIdentity, LocalTermination, MigrationRecord, ObjectAddress,
-    PathKind, PreparedArtifactPublication, RawLocalExecution, ReservedRun, RunAttemptStatus,
+    prepare_local_execution, render_run_inspection_report, run_migration_checksum,
+    run_migration_name, run_migration_sql, stored_artifact_is_exact, target_build_manifest,
+    validate_configuration, validate_local_capability_probe, validate_run_inspection,
+    ArtifactStoreError, CapturedOutput, CliAction, CliParseError, ConfigurationError,
+    ConfigurationErrorKind, DatabaseSnapshot, InitializationDecision, InitializationError,
+    InspectionArtifactError, InspectionControls, InspectionHarnessFailure, InspectionObservation,
+    InspectionPreviews, InspectionReportError, InspectionStatus, InspectionTarget,
+    InspectionValidationError, LocalExecutionClassificationError, LocalExecutionPlan,
+    LocalNetworkPolicy, LocalOracleVerdict, LocalRunPlanError, LocalRuntimeIdentity,
+    LocalTermination, MigrationRecord, ObjectAddress, PathKind, PreparedArtifactPublication,
+    RawLocalExecution, ReportFormat, ReservedRun, RunAttemptStatus, RunInspectionSnapshot,
     RunStoreTransition, StoredArtifactSnapshot, WorkspaceMetadata, WorkspaceSnapshot,
     MAX_CLI_ARGUMENTS, MAX_CLI_ARGUMENT_BYTES, MAX_CONFIGURATION_SOURCE_BYTES,
-    MAX_LOCAL_ARGUMENT_WIRE_BYTES, MAX_LOCAL_ARTIFACT_BYTES, MAX_LOCAL_CONTROL_STATUS_BYTES,
-    MAX_LOCAL_RUNTIME_IDENTITY_TEXT_BYTES, WORKSPACE_APPLICATION_ID, WORKSPACE_SCHEMA_VERSION,
+    MAX_INSPECTION_OBSERVATION_BYTES, MAX_LOCAL_ARGUMENT_WIRE_BYTES, MAX_LOCAL_ARTIFACT_BYTES,
+    MAX_LOCAL_CONTROL_STATUS_BYTES, MAX_LOCAL_RUNTIME_IDENTITY_TEXT_BYTES,
+    WORKSPACE_APPLICATION_ID, WORKSPACE_SCHEMA_VERSION,
 };
-use crucible_core::{encode_raw_observation, ArtifactId, ArtifactRef, ContentDigest};
+use crucible_core::{
+    decode_raw_observation, derive_replay_seeds, encode_raw_observation, ArtifactId, ArtifactRef,
+    ContentDigest, PersistenceRetentionPolicy, MAX_GC_CANDIDATES, MAX_PERSISTENCE_BATCH_BYTES,
+    MAX_PERSISTENCE_BATCH_ITEMS,
+};
+use rusqlite::limits::Limit;
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use std::path::{Component, Path, PathBuf};
 use vstd::prelude::*;
@@ -49,6 +62,7 @@ enum HostWorkspaceAction {
     Publish,
     MigrateV1,
     MigrateV2,
+    MigrateV3,
 }
 
 #[derive(Debug)]
@@ -105,6 +119,92 @@ enum ArtifactCommandError {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostStorageAction {
+    Check,
+    Collect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostStorageError {
+    UnsafeWorkspace,
+    Integrity,
+    WorkLimit,
+    ActiveLease,
+    Persistence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct StorageMaintenanceReport {
+    verified: u64,
+    orphaned: u64,
+    temporary: u64,
+    collected: u64,
+    preserved: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostInspectionError {
+    Workspace,
+    NotFound,
+    InvalidEvidence,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InspectionCommandError {
+    Workspace,
+    NotFound,
+    InvalidEvidence,
+    ArtifactIntegrity,
+    Observation,
+    Report,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostDomainReadAction {
+    Findings,
+    Report,
+    Capabilities,
+    Proof,
+    Tcb,
+    Plugins,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostDomainReadError {
+    Workspace,
+    NotFound,
+    InvalidEvidence,
+    OutputLimit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostFindingAction {
+    Replay,
+    Minimize,
+    RegisterPatch,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostFindingError {
+    Workspace,
+    NotFound,
+    Integrity,
+    Execution,
+    NoMinimizableInput,
+    Persist,
+    VerificationInconclusive,
+    OutputLimit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HostLogAction {
+    Initialize,
+    Event,
+}
+
+const MAX_DOMAIN_REPORT_BYTES: usize = 1_048_576;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HostConfigError {
     UnsafeSource,
     TooLarge,
@@ -154,8 +254,10 @@ enum HostLocalRunOutcome {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HostRunStoreAction {
+    RecordBuild,
     Reserve,
     AttachTarget,
+    AggregateSuccess,
     RecordObservation,
     RecordHarnessFailure,
 }
@@ -648,9 +750,20 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
         let run_checksum = String::from_utf8(run_migration_checksum()).map_err(
             |_| HostWorkspaceError::Publish,
         )?;
+        let domain_sql = String::from_utf8(domain_migration_sql()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
+        let domain_name = String::from_utf8(domain_migration_name()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
+        let domain_checksum = String::from_utf8(domain_migration_checksum()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
         let transaction = connection.transaction().map_err(|_| HostWorkspaceError::Publish)?;
         transaction.execute_batch(
-            &format!("{migrations_sql};{metadata_sql};{artifacts_sql};{imports_sql};{run_sql}"),
+            &format!(
+                "{migrations_sql};{metadata_sql};{artifacts_sql};{imports_sql};{run_sql};{domain_sql}"
+            ),
         ).map_err(|_| HostWorkspaceError::Publish)?;
         transaction.execute(
             "INSERT INTO schema_migrations(version, name, checksum) VALUES (?1, ?2, ?3)",
@@ -663,6 +776,10 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
         transaction.execute(
             "INSERT INTO schema_migrations(version, name, checksum) VALUES (?1, ?2, ?3)",
             params![3, run_name, run_checksum],
+        ).map_err(|_| HostWorkspaceError::Publish)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, name, checksum) VALUES (?1, ?2, ?3)",
+            params![4, domain_name, domain_checksum],
         ).map_err(|_| HostWorkspaceError::Publish)?;
         transaction.execute(
             "INSERT INTO workspace_metadata(key, value) VALUES (?1, ?2)",
@@ -728,6 +845,15 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
         let run_checksum = String::from_utf8(run_migration_checksum()).map_err(
             |_| HostWorkspaceError::Publish,
         )?;
+        let domain_sql = String::from_utf8(domain_migration_sql()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
+        let domain_name = String::from_utf8(domain_migration_name()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
+        let domain_checksum = String::from_utf8(domain_migration_checksum()).map_err(
+            |_| HostWorkspaceError::Publish,
+        )?;
         let transaction = connection.transaction_with_behavior(
             rusqlite::TransactionBehavior::Immediate,
         ).map_err(|_| HostWorkspaceError::Publish)?;
@@ -741,7 +867,8 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
             connection.close().map_err(|_| HostWorkspaceError::Publish)?;
             return Ok(false);
         }
-        if current_version != expected_version || (expected_version != 1 && expected_version != 2) {
+        if current_version != expected_version || (expected_version != 1 && expected_version != 2
+            && expected_version != 3) {
             return Err(HostWorkspaceError::Publish);
         }
         if current_version == 1 {
@@ -751,10 +878,17 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
                 params![name, checksum],
             ).map_err(|_| HostWorkspaceError::Publish)?;
         }
-        transaction.execute_batch(&run_sql).map_err(|_| HostWorkspaceError::Publish)?;
+        if current_version <= 2 {
+            transaction.execute_batch(&run_sql).map_err(|_| HostWorkspaceError::Publish)?;
+            transaction.execute(
+                "INSERT INTO schema_migrations(version, name, checksum) VALUES (3, ?1, ?2)",
+                params![run_name, run_checksum],
+            ).map_err(|_| HostWorkspaceError::Publish)?;
+        }
+        transaction.execute_batch(&domain_sql).map_err(|_| HostWorkspaceError::Publish)?;
         transaction.execute(
-            "INSERT INTO schema_migrations(version, name, checksum) VALUES (3, ?1, ?2)",
-            params![run_name, run_checksum],
+            "INSERT INTO schema_migrations(version, name, checksum) VALUES (4, ?1, ?2)",
+            params![domain_name, domain_checksum],
         ).map_err(|_| HostWorkspaceError::Publish)?;
         transaction.commit().map_err(|_| HostWorkspaceError::Publish)?;
         connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").map_err(
@@ -824,10 +958,13 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
                 },
             }
         },
-        HostWorkspaceAction::MigrateV1 | HostWorkspaceAction::MigrateV2 => {
+        HostWorkspaceAction::MigrateV1
+        | HostWorkspaceAction::MigrateV2
+        | HostWorkspaceAction::MigrateV3 => {
             let expected_version = match action {
                 HostWorkspaceAction::MigrateV1 => 1,
                 HostWorkspaceAction::MigrateV2 => 2,
+                HostWorkspaceAction::MigrateV3 => 3,
                 HostWorkspaceAction::Inspect | HostWorkspaceAction::Publish => {
                     return Err(HostWorkspaceError::Publish);
                 },
@@ -842,6 +979,9 @@ fn host_workspace_action(root: &str, action: HostWorkspaceAction) -> (result: Re
                     database,
                 ) => {},
                 Some(database) if expected_version == 2 && database_snapshot_is_exact_v2(
+                    database,
+                ) => {},
+                Some(database) if expected_version == 3 && database_snapshot_is_exact_v3(
                     database,
                 ) => {},
                 _ => return Ok(HostWorkspaceOutcome::Raced),
@@ -1144,8 +1284,6 @@ fn host_artifact_action(
                 return Err(HostArtifactError::Publish);
             }
             artifact.verify(contents).map_err(|_| HostArtifactError::Publish)?;
-            publish_object(&root, address, contents)?;
-
             let database = root.join(".crucible/database.sqlite");
             let mut connection = Connection::open(&database).map_err(
                 |_| HostArtifactError::Workspace,
@@ -1156,8 +1294,76 @@ fn host_artifact_action(
             connection.execute_batch(
                 "PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;",
             ).map_err(|_| HostArtifactError::Workspace)?;
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(
+                |_| HostArtifactError::Publish,
+            )?.as_secs();
+            let now = i64::try_from(now).map_err(|_| HostArtifactError::Publish)?;
+            let lease_id =
+                format!(
+                "lease-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(
+                    |_| HostArtifactError::Publish,
+                )?.as_nanos(),
+            );
+            let owner_identity = format!("artifact-publication:{}", artifact.id.as_str());
+            let lease_transaction = connection.transaction_with_behavior(
+                rusqlite::TransactionBehavior::Immediate,
+            ).map_err(|_| HostArtifactError::Publish)?;
+            lease_transaction.execute(
+                "INSERT INTO storage_generations(id, status, created_epoch)
+                 SELECT COALESCE((SELECT MAX(id) FROM storage_generations), 0) + 1, 'open', ?1
+                 WHERE NOT EXISTS(SELECT 1 FROM storage_generations WHERE status = 'open')",
+                [now],
+            ).map_err(|_| HostArtifactError::Publish)?;
+            let generation_id: i64 = lease_transaction.query_row(
+                "SELECT id FROM storage_generations WHERE status = 'open' ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            ).map_err(|_| HostArtifactError::Publish)?;
+            lease_transaction.execute(
+                "INSERT INTO storage_leases(
+                    id, generation_id, artifact_id, owner_identity, status, expires_epoch
+                 ) VALUES (?1, ?2, NULL, ?3, 'active', ?4)",
+                params![lease_id, generation_id, owner_identity, now.saturating_add(300)],
+            ).map_err(|_| HostArtifactError::Publish)?;
+            lease_transaction.commit().map_err(|_| HostArtifactError::Publish)?;
+
+            publish_object(&root, address, contents)?;
+
             let transaction = connection.transaction_with_behavior(
                 rusqlite::TransactionBehavior::Immediate,
+            ).map_err(|_| HostArtifactError::Publish)?;
+            let active_lease: i64 = transaction.query_row(
+                "SELECT COUNT(*) FROM storage_leases
+                 WHERE id = ?1 AND generation_id = ?2 AND owner_identity = ?3 AND status = 'active'",
+                params![lease_id, generation_id, owner_identity],
+                |row| row.get(0),
+            ).map_err(|_| HostArtifactError::Publish)?;
+            if active_lease != 1 {
+                return Err(HostArtifactError::Publish);
+            }
+            let item_count = if subject.is_empty() {
+                1_u64
+            } else {
+                2_u64
+            };
+            let encoded_bytes = (artifact.id.as_str().len() as u64).checked_add(
+                address.object_name.len() as u64,
+            ).and_then(|value| value.checked_add(subject.len() as u64)).and_then(
+                |value| value.checked_add(32),
+            ).ok_or(HostArtifactError::Publish)?;
+            if item_count > MAX_PERSISTENCE_BATCH_ITEMS || encoded_bytes
+                > MAX_PERSISTENCE_BATCH_BYTES {
+                return Err(HostArtifactError::Publish);
+            }
+            let batch_id = format!("batch-{lease_id}");
+            transaction.execute(
+                "INSERT INTO persistence_batches(
+                    id, campaign_id, retention_policy, status, item_count,
+                    encoded_bytes, generation_id
+                 ) VALUES (?1, NULL, 'retain-every-run', 'open', ?2, ?3, ?4)",
+                params![batch_id, item_count as i64, encoded_bytes as i64, generation_id],
             ).map_err(|_| HostArtifactError::Publish)?;
             transaction.execute(
                 "INSERT INTO artifacts(id, algorithm, digest, size_bytes, media_type)
@@ -1182,6 +1388,21 @@ fn host_artifact_action(
                     params![artifact.id.as_str(), subject.as_bytes()],
                 ).map_err(|_| HostArtifactError::Publish)?;
             }
+            transaction.execute(
+                "UPDATE persistence_batches SET status = 'committing'
+                 WHERE id = ?1 AND status = 'open'",
+                [batch_id.as_str()],
+            ).map_err(|_| HostArtifactError::Publish)?;
+            transaction.execute(
+                "UPDATE storage_leases SET artifact_id = ?1, status = 'released'
+                 WHERE id = ?2 AND status = 'active'",
+                params![artifact.id.as_str(), lease_id],
+            ).map_err(|_| HostArtifactError::Publish)?;
+            transaction.execute(
+                "UPDATE persistence_batches SET status = 'committed'
+                 WHERE id = ?1 AND status = 'committing'",
+                [batch_id.as_str()],
+            ).map_err(|_| HostArtifactError::Publish)?;
             transaction.commit().map_err(|_| HostArtifactError::Publish)?;
             connection.close().map_err(|_| HostArtifactError::Publish)?;
             Ok(HostArtifactOutcome::Published)
@@ -1271,6 +1492,344 @@ fn host_artifact_action(
             )
         },
     }
+}
+
+// CRUCIBLE-TCB: CLI-HOST-STORAGE-001
+#[verifier::external_body]
+fn host_storage_maintenance(root: &str, action: HostStorageAction) -> (result: Result<
+    StorageMaintenanceReport,
+    HostStorageError,
+>) {
+    use std::io::Read;
+
+    struct ObjectEntry {
+        path: PathBuf,
+        artifact_id: Option<String>,
+    }
+
+    fn lexical_absolute(path: &Path) -> Result<PathBuf, HostStorageError> {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|_| HostStorageError::UnsafeWorkspace)?.join(path)
+        };
+        let mut normalized = PathBuf::new();
+        for component in candidate.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                    normalized.push(component.as_os_str());
+                },
+                Component::CurDir => {},
+                Component::ParentDir => {
+                    if !normalized.pop() {
+                        return Err(HostStorageError::UnsafeWorkspace);
+                    }
+                },
+            }
+        }
+        if normalized.is_absolute() {
+            Ok(normalized)
+        } else {
+            Err(HostStorageError::UnsafeWorkspace)
+        }
+    }
+
+    fn require_directory(path: &Path) -> Result<(), HostStorageError> {
+        let metadata = std::fs::symlink_metadata(path).map_err(
+            |_| HostStorageError::UnsafeWorkspace,
+        )?;
+        if metadata.file_type().is_symlink() || !metadata.is_dir() {
+            Err(HostStorageError::UnsafeWorkspace)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn safe_workspace(root: &Path) -> Result<PathBuf, HostStorageError> {
+        let absolute = lexical_absolute(root)?;
+        let mut cursor = PathBuf::new();
+        for component in absolute.components() {
+            cursor.push(component.as_os_str());
+            if matches!(component, Component::Prefix(_) | Component::RootDir) {
+                continue;
+            }
+            require_directory(&cursor)?;
+        }
+        let canonical = std::fs::canonicalize(&absolute).map_err(
+            |_| HostStorageError::UnsafeWorkspace,
+        )?;
+        #[cfg(unix)]
+        if canonical != absolute {
+            return Err(HostStorageError::UnsafeWorkspace);
+        }
+        require_directory(&canonical.join(".crucible"))?;
+        require_directory(&canonical.join(".crucible/objects"))?;
+        let database = canonical.join(".crucible/database.sqlite");
+        let metadata = std::fs::symlink_metadata(database).map_err(
+            |_| HostStorageError::UnsafeWorkspace,
+        )?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(HostStorageError::UnsafeWorkspace);
+        }
+        Ok(canonical)
+    }
+
+    fn lowercase_hex(value: &str, length: usize) -> bool {
+        value.len() == length && value.bytes().all(
+            |byte| byte.is_ascii_digit() || (byte.is_ascii_lowercase() && byte <= b'f'),
+        )
+    }
+
+    fn increment_work(work: &mut usize) -> Result<(), HostStorageError> {
+        *work = work.checked_add(1).ok_or(HostStorageError::WorkLimit)?;
+        if *work > MAX_GC_CANDIDATES {
+            Err(HostStorageError::WorkLimit)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn scan_objects(root: &Path) -> Result<Vec<ObjectEntry>, HostStorageError> {
+        let algorithm = root.join(".crucible/objects/sha256");
+        match std::fs::symlink_metadata(&algorithm) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(_) => return Err(HostStorageError::UnsafeWorkspace),
+            Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+                return Err(HostStorageError::UnsafeWorkspace);
+            },
+            Ok(_) => {},
+        }
+        let mut work = 0usize;
+        let mut objects = Vec::new();
+        for first_entry in std::fs::read_dir(&algorithm).map_err(|_| HostStorageError::Integrity)? {
+            increment_work(&mut work)?;
+            let first_entry = first_entry.map_err(|_| HostStorageError::Integrity)?;
+            let first_name = first_entry.file_name().into_string().map_err(
+                |_| HostStorageError::Integrity,
+            )?;
+            let first_type = first_entry.file_type().map_err(|_| HostStorageError::Integrity)?;
+            if first_type.is_symlink() || !first_type.is_dir() || !lowercase_hex(&first_name, 2) {
+                return Err(HostStorageError::Integrity);
+            }
+            for second_entry in std::fs::read_dir(first_entry.path()).map_err(
+                |_| HostStorageError::Integrity,
+            )? {
+                increment_work(&mut work)?;
+                let second_entry = second_entry.map_err(|_| HostStorageError::Integrity)?;
+                let second_name = second_entry.file_name().into_string().map_err(
+                    |_| HostStorageError::Integrity,
+                )?;
+                let second_type = second_entry.file_type().map_err(
+                    |_| HostStorageError::Integrity,
+                )?;
+                if second_type.is_symlink() || !second_type.is_dir() || !lowercase_hex(
+                    &second_name,
+                    2,
+                ) {
+                    return Err(HostStorageError::Integrity);
+                }
+                for object_entry in std::fs::read_dir(second_entry.path()).map_err(
+                    |_| HostStorageError::Integrity,
+                )? {
+                    increment_work(&mut work)?;
+                    let object_entry = object_entry.map_err(|_| HostStorageError::Integrity)?;
+                    let name = object_entry.file_name().into_string().map_err(
+                        |_| HostStorageError::Integrity,
+                    )?;
+                    let file_type = object_entry.file_type().map_err(
+                        |_| HostStorageError::Integrity,
+                    )?;
+                    if file_type.is_symlink() || !file_type.is_file() {
+                        return Err(HostStorageError::Integrity);
+                    }
+                    let artifact_id = if lowercase_hex(&name, 64) && name.starts_with(&first_name)
+                        && name[2..].starts_with(&second_name) {
+                        Some(format!("sha256:{name}"))
+                    } else if name.starts_with('.') && name.contains(".tmp-") {
+                        None
+                    } else {
+                        return Err(HostStorageError::Integrity);
+                    };
+                    objects.push(ObjectEntry { path: object_entry.path(), artifact_id });
+                }
+            }
+        }
+        Ok(objects)
+    }
+
+    fn read_bounded(path: &Path) -> Result<Vec<u8>, HostStorageError> {
+        let metadata = std::fs::symlink_metadata(path).map_err(|_| HostStorageError::Integrity)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len()
+            > MAX_LOCAL_ARTIFACT_BYTES {
+            return Err(HostStorageError::Integrity);
+        }
+        let file = std::fs::File::open(path).map_err(|_| HostStorageError::Integrity)?;
+        let mut bytes = Vec::new();
+        file.take(MAX_LOCAL_ARTIFACT_BYTES + 1).read_to_end(&mut bytes).map_err(
+            |_| HostStorageError::Integrity,
+        )?;
+        if bytes.len() as u64 > MAX_LOCAL_ARTIFACT_BYTES {
+            Err(HostStorageError::Integrity)
+        } else {
+            Ok(bytes)
+        }
+    }
+
+    let root = safe_workspace(Path::new(root))?;
+    let mut connection = Connection::open(root.join(".crucible/database.sqlite")).map_err(
+        |_| HostStorageError::UnsafeWorkspace,
+    )?;
+    connection.busy_timeout(std::time::Duration::from_secs(5)).map_err(
+        |_| HostStorageError::Persistence,
+    )?;
+    connection.set_limit(Limit::SQLITE_LIMIT_LENGTH, 1_048_576).map_err(
+        |_| HostStorageError::Persistence,
+    )?;
+    connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;").map_err(
+        |_| HostStorageError::Persistence,
+    )?;
+    let application_id: i64 = connection.query_row(
+        "PRAGMA application_id",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| HostStorageError::UnsafeWorkspace)?;
+    let schema_version: i64 = connection.query_row(
+        "PRAGMA user_version",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| HostStorageError::UnsafeWorkspace)?;
+    let quick_check: String = connection.query_row(
+        "PRAGMA quick_check",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| HostStorageError::Integrity)?;
+    if application_id != WORKSPACE_APPLICATION_ID || schema_version != WORKSPACE_SCHEMA_VERSION {
+        return Err(HostStorageError::UnsafeWorkspace);
+    }
+    if quick_check != "ok" {
+        return Err(HostStorageError::Integrity);
+    }
+    let transaction = connection.transaction_with_behavior(
+        rusqlite::TransactionBehavior::Immediate,
+    ).map_err(|_| HostStorageError::Persistence)?;
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(
+        |_| HostStorageError::Persistence,
+    )?.as_secs();
+    let now = i64::try_from(now).map_err(|_| HostStorageError::Persistence)?;
+    transaction.execute(
+        "UPDATE storage_leases SET status = 'released'
+         WHERE status = 'active' AND expires_epoch <= ?1",
+        [now],
+    ).map_err(|_| HostStorageError::Persistence)?;
+    let active_leases: i64 = transaction.query_row(
+        "SELECT COUNT(*) FROM storage_leases WHERE status = 'active'",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| HostStorageError::Persistence)?;
+    if active_leases != 0 {
+        return Err(HostStorageError::ActiveLease);
+    }
+    let mut database_artifacts = Vec::new();
+    {
+        let mut statement = transaction.prepare(
+            "SELECT id, algorithm, digest, size_bytes, media_type FROM artifacts ORDER BY id",
+        ).map_err(|_| HostStorageError::Persistence)?;
+        let mut rows = statement.query([]).map_err(|_| HostStorageError::Persistence)?;
+        while let Some(row) = rows.next().map_err(|_| HostStorageError::Persistence)? {
+            if database_artifacts.len() == MAX_GC_CANDIDATES {
+                return Err(HostStorageError::WorkLimit);
+            }
+            let id: String = row.get(0).map_err(|_| HostStorageError::Integrity)?;
+            let algorithm: String = row.get(1).map_err(|_| HostStorageError::Integrity)?;
+            let digest: String = row.get(2).map_err(|_| HostStorageError::Integrity)?;
+            let size: i64 = row.get(3).map_err(|_| HostStorageError::Integrity)?;
+            let media_type: Option<String> = row.get(4).map_err(|_| HostStorageError::Integrity)?;
+            if algorithm != "sha256" || !lowercase_hex(&digest, 64) || id
+                != format!("sha256:{digest}") || size < 0 || media_type.is_some() {
+                return Err(HostStorageError::Integrity);
+            }
+            database_artifacts.push((id, size as u64));
+        }
+    }
+
+    let objects = scan_objects(&root)?;
+    let mut orphaned = 0u64;
+    let mut temporary = 0u64;
+    for object in objects.iter() {
+        match &object.artifact_id {
+            Some(id) => {
+                let bytes = read_bounded(&object.path)?;
+                let computed = ContentDigest::from_bytes(bytes.as_slice()).map_err(
+                    |_| HostStorageError::Integrity,
+                )?.into_artifact_id();
+                if computed.as_str() != id {
+                    return Err(HostStorageError::Integrity);
+                }
+                match database_artifacts.iter().find(|(referenced_id, _)| referenced_id == id) {
+                    Some((_, size)) if *size == bytes.len() as u64 => {},
+                    Some(_) => return Err(HostStorageError::Integrity),
+                    None => orphaned += 1,
+                }
+            },
+            None => temporary += 1,
+        }
+    }
+    if !database_artifacts.iter().all(
+        |database_entry|
+            objects.iter().any(|object| object.artifact_id.as_ref() == Some(&database_entry.0)),
+    ) {
+        return Err(HostStorageError::Integrity);
+    }
+    let mut collected = 0u64;
+    if action == HostStorageAction::Collect {
+        transaction.execute(
+            "INSERT INTO storage_generations(id, status, created_epoch)
+             SELECT COALESCE((SELECT MAX(id) FROM storage_generations), 0) + 1, 'open', ?1
+             WHERE NOT EXISTS(SELECT 1 FROM storage_generations WHERE status = 'open')",
+            [now],
+        ).map_err(|_| HostStorageError::Persistence)?;
+        let generation_id: i64 = transaction.query_row(
+            "SELECT id FROM storage_generations WHERE status = 'open' ORDER BY id DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| HostStorageError::Persistence)?;
+        transaction.execute(
+            "UPDATE storage_generations SET status = 'collecting'
+             WHERE id = ?1 AND status = 'open'",
+            [generation_id],
+        ).map_err(|_| HostStorageError::Persistence)?;
+        for object in objects.iter() {
+            let should_collect = match &object.artifact_id {
+                Some(id) => !database_artifacts.iter().any(
+                    |(referenced_id, _)| referenced_id == id,
+                ),
+                None => true,
+            };
+            if should_collect {
+                std::fs::remove_file(&object.path).map_err(|_| HostStorageError::Persistence)?;
+                collected += 1;
+            }
+        }
+        transaction.execute(
+            "UPDATE storage_generations SET status = 'collected' WHERE id = ?1",
+            [generation_id],
+        ).map_err(|_| HostStorageError::Persistence)?;
+        transaction.execute(
+            "INSERT INTO storage_generations(id, status, created_epoch)
+             VALUES (?1, 'open', ?2)",
+            params![generation_id.checked_add(1).ok_or(HostStorageError::Persistence)?, now],
+        ).map_err(|_| HostStorageError::Persistence)?;
+    }
+    transaction.commit().map_err(|_| HostStorageError::Persistence)?;
+    Ok(
+        StorageMaintenanceReport {
+            verified: database_artifacts.len() as u64,
+            orphaned,
+            temporary,
+            collected,
+            preserved: database_artifacts.len() as u64,
+        },
+    )
 }
 
 // CRUCIBLE-TCB: CLI-HOST-CONFIG-001
@@ -1449,8 +2008,8 @@ fn host_internal_local_supervisor()
         let mut transport = Vec::new();
         if std::io::stdin().take(MAX_LOCAL_ARGUMENT_WIRE_BYTES + 33).read_to_end(
             &mut transport,
-        ).is_err() || transport.len() < 32
-            || transport.len() as u64 > MAX_LOCAL_ARGUMENT_WIRE_BYTES + 32 {
+        ).is_err() || transport.len() < 32 || transport.len() as u64 > MAX_LOCAL_ARGUMENT_WIRE_BYTES
+            + 32 {
             fail(b"supervisor-arguments-invalid\n");
         }
         let nonce: [u8; 32] = match transport[0..32].try_into() {
@@ -1716,11 +2275,10 @@ fn host_local_run_action(
             target_termination: Option<LocalTermination>,
         }
 
-        fn capture_supervisor_stream<R: Read>(
-            mut stream: R,
-            limit: u64,
-            nonce: [u8; 32],
-        ) -> Result<CapturedSupervisorStream, HostLocalRunError> {
+        fn capture_supervisor_stream<R: Read>(mut stream: R, limit: u64, nonce: [u8; 32]) -> Result<
+            CapturedSupervisorStream,
+            HostLocalRunError,
+        > {
             fn record(nonce: &[u8; 32], tag: u8, payload: &[u8]) -> Vec<u8> {
                 let magic = b"\0CRUCIBLE-SUPERVISOR-V1\0";
                 let mut value = Vec::with_capacity(magic.len() + nonce.len() + 1 + payload.len());
@@ -1734,9 +2292,7 @@ fn host_local_run_action(
             let header = record(&nonce, 0, &[]);
             let header_len = header.len() - 1;
             let retain_cap = usize::try_from(
-                limit.checked_add(160).ok_or(
-                    HostLocalRunError::Capture,
-                )?,
+                limit.checked_add(160).ok_or(HostLocalRunError::Capture)?,
             ).map_err(|_| HostLocalRunError::Capture)?;
             let mut raw_retained = Vec::new();
             let mut overlap = Vec::new();
@@ -1750,35 +2306,39 @@ fn host_local_run_action(
                     break;
                 }
                 let keep = retain_cap.saturating_sub(raw_retained.len()).min(count);
-                raw_retained.extend_from_slice(&chunk[..keep]);
+                let mut retained_index = 0usize;
+                while retained_index < keep {
+                    raw_retained.push(chunk[retained_index]);
+                    retained_index += 1;
+                }
 
                 let overlap_len = overlap.len();
                 let mut scan = overlap;
-                scan.extend_from_slice(&chunk[..count]);
+                let mut chunk_index = 0usize;
+                while chunk_index < count {
+                    scan.push(chunk[chunk_index]);
+                    chunk_index += 1;
+                }
                 let scan_base = total.checked_sub(overlap_len as u64).ok_or(
                     HostLocalRunError::Capture,
                 )?;
                 let mut index = 0_usize;
-                while index.checked_add(header_len + 1).is_some_and(
-                    |end| end <= scan.len(),
-                ) {
-                    if scan[index..].starts_with(&header[..header_len]) {
+                while index.checked_add(header_len + 1).is_some_and(|end| end <= scan.len()) {
+                    if scan[index..].starts_with(&header[0..header_len]) {
                         let tag = scan[index + header_len];
                         let (record_len, termination) = match tag {
                             b'B' => (header_len + 1, None),
                             b'E' if index + header_len + 9 <= scan.len() => {
-                                let bytes: [u8; 8] = scan[
-                                    index + header_len + 1..index + header_len + 9
-                                ].try_into().map_err(|_| HostLocalRunError::Capture)?;
+                                let bytes: [u8; 8] = scan[index + header_len + 1..index + header_len
+                                    + 9].try_into().map_err(|_| HostLocalRunError::Capture)?;
                                 (
                                     header_len + 9,
                                     Some(LocalTermination::ExitCode(i64::from_be_bytes(bytes))),
                                 )
                             },
                             b'S' if index + header_len + 6 <= scan.len() => {
-                                let bytes: [u8; 4] = scan[
-                                    index + header_len + 1..index + header_len + 5
-                                ].try_into().map_err(|_| HostLocalRunError::Capture)?;
+                                let bytes: [u8; 4] = scan[index + header_len + 1..index + header_len
+                                    + 5].try_into().map_err(|_| HostLocalRunError::Capture)?;
                                 let signal = i32::from_be_bytes(bytes);
                                 let core = scan[index + header_len + 5];
                                 if signal <= 0 || signal >= 128 || core > 1 {
@@ -1787,10 +2347,12 @@ fn host_local_run_action(
                                 }
                                 (
                                     header_len + 6,
-                                    Some(LocalTermination::UnixSignal {
-                                        signal,
-                                        core_dumped: core == 1,
-                                    }),
+                                    Some(
+                                        LocalTermination::UnixSignal {
+                                            signal,
+                                            core_dumped: core == 1,
+                                        },
+                                    ),
                                 )
                             },
                             _ => {
@@ -1824,8 +2386,8 @@ fn host_local_run_action(
             }
 
             let accepted_end = match (start_range, end_record) {
-                (Some((_, start_end)), Some((position, end, termination)))
-                    if position >= start_end => Some((position, end, termination)),
+                (Some((_, start_end)), Some((position, end, termination))) if position
+                    >= start_end => Some((position, end, termination)),
                 _ => None,
             };
             let mut ranges = Vec::new();
@@ -1835,9 +2397,11 @@ fn host_local_run_action(
             if let Some((start, end, _)) = &accepted_end {
                 ranges.push((*start, *end));
             }
-            let removed = ranges.iter().try_fold(0_u64, |sum, (start, end)| {
-                sum.checked_add(end - start).ok_or(HostLocalRunError::Capture)
-            })?;
+            let removed = ranges.iter().try_fold(
+                0_u64,
+                |sum, (start, end)|
+                    { sum.checked_add(end - start).ok_or(HostLocalRunError::Capture) },
+            )?;
             let target_total = total.checked_sub(removed).ok_or(HostLocalRunError::Capture)?;
             let mut retained = Vec::new();
             for (index, byte) in raw_retained.into_iter().enumerate() {
@@ -1871,12 +2435,14 @@ fn host_local_run_action(
                 Some(LocalTermination::Timeout) | None => {},
                 Some(_) => return Err(HostLocalRunError::Capture),
             }
-            Ok(CapturedSupervisorStream {
-                target_output: CapturedOutput::new(retained, discarded),
-                control_status,
-                target_started: start_range.is_some(),
-                target_termination,
-            })
+            Ok(
+                CapturedSupervisorStream {
+                    target_output: CapturedOutput::new(retained, discarded),
+                    control_status,
+                    target_started: start_range.is_some(),
+                    target_termination,
+                },
+            )
         }
 
         struct TemporaryControlStatus {
@@ -2146,12 +2712,7 @@ fn host_local_run_action(
                         runs.as_path(),
                         "probe-status",
                     )?;
-                    let mut command = execution_command(
-                        plan,
-                        control.descriptor(),
-                        None,
-                        None,
-                    )?;
+                    let mut command = execution_command(plan, control.descriptor(), None, None)?;
                     command.stdout(Stdio::null()).stderr(Stdio::null());
                     let status = command.status().map_err(
                         |_| HostLocalRunError::CapabilityUnavailable,
@@ -2239,7 +2800,7 @@ fn host_local_run_action(
                 runs.as_path(),
                 "target-status",
             )?;
-            let mut nonce = [0_u8; 32];
+            let mut nonce = [0_u8;32];
             std::fs::File::open("/dev/urandom").and_then(
                 |mut source| source.read_exact(&mut nonce),
             ).map_err(|_| HostLocalRunError::TargetPreparation)?;
@@ -2316,13 +2877,10 @@ fn host_local_run_action(
                     return Err(HostLocalRunError::Capture);
                 },
             };
-            if transport.write_all(&nonce).is_err()
-                || transport.write_all(target_argument_wire).is_err()
-                || transport.flush().is_err() {
-                let _ = rustix::process::kill_process_group(
-                    group,
-                    rustix::process::Signal::KILL,
-                );
+            if transport.write_all(&nonce).is_err() || transport.write_all(
+                target_argument_wire,
+            ).is_err() || transport.flush().is_err() {
+                let _ = rustix::process::kill_process_group(group, rustix::process::Signal::KILL);
                 let _ = child.wait();
                 let _ = stdout_thread.join();
                 let _ = stderr_thread.join();
@@ -2361,9 +2919,7 @@ fn host_local_run_action(
                 }
             };
             let stdout = stdout_thread.join().map_err(|_| HostLocalRunError::Capture)??;
-            let supervisor_capture = stderr_thread.join().map_err(
-                |_| HostLocalRunError::Capture,
-            )??;
+            let supervisor_capture = stderr_thread.join().map_err(|_| HostLocalRunError::Capture)??;
             let stderr = supervisor_capture.target_output;
             let elapsed = started.elapsed();
             let wrapper_termination = if timed_out {
@@ -2468,6 +3024,9 @@ fn host_run_store_action(
     completion_tag: u16,
     termination_tag: u16,
     failure_kind: &str,
+    project_name: &[u32],
+    retention_policy: PersistenceRetentionPolicy,
+    oracle_verdict: LocalOracleVerdict,
 ) -> (result: Result<HostRunStoreOutcome, HostRunStoreError>)
     ensures
         host_run_store_result_shape_spec(action, &result),
@@ -2595,6 +3154,100 @@ fn host_run_store_action(
         rusqlite::TransactionBehavior::Immediate,
     ).map_err(|_| HostRunStoreError::Persist)?;
     let outcome = match action {
+        HostRunStoreAction::RecordBuild => {
+            let effective_configuration = effective_configuration.ok_or(
+                HostRunStoreError::Persist,
+            )?;
+            let capability_manifest = capability_manifest.ok_or(HostRunStoreError::Persist)?;
+            let target_artifact = target_artifact.ok_or(HostRunStoreError::Persist)?;
+            let target_manifest = target_manifest.ok_or(HostRunStoreError::Persist)?;
+            if configuration_digest.len() != 71 || project_name.is_empty() || project_name.len()
+                > 4_096 {
+                return Err(HostRunStoreError::Persist);
+            }
+            let mut decoded_project_name = String::new();
+            for code_point in project_name {
+                decoded_project_name.push(
+                    char::from_u32(*code_point).ok_or(HostRunStoreError::Persist)?,
+                );
+            }
+            transaction.execute(
+                "INSERT INTO capability_manifests(artifact_id, backend, platform)
+                 VALUES (?1, 'linux-bubblewrap-prlimit-v1', 'linux')
+                 ON CONFLICT(artifact_id) DO NOTHING",
+                [capability_manifest.id.as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let project_id = format!("project-{configuration_digest}");
+            transaction.execute(
+                "INSERT INTO projects(id, name, configuration_artifact_id)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(name) DO NOTHING",
+                params![project_id, decoded_project_name, effective_configuration.id.as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let persisted_project_id: String = transaction.query_row(
+                "SELECT id FROM projects WHERE name = ?1",
+                [decoded_project_name.as_str()],
+                |row| row.get(0),
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let target_build_id = format!("target-build-{}", target_manifest.id.as_str());
+            let target_id = format!("target-{target_build_id}");
+            transaction.execute(
+                "INSERT INTO targets(id, project_id, adapter, configuration_artifact_id)
+                 VALUES (?1, ?2, 'cli', ?3)
+                 ON CONFLICT(id) DO NOTHING",
+                params![target_id, persisted_project_id, effective_configuration.id.as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            transaction.execute(
+                "INSERT INTO target_builds(
+                    id, target_artifact_id, manifest_artifact_id, identity_digest
+                 ) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO NOTHING",
+                params![
+                    target_build_id,
+                    target_artifact.id.as_str(),
+                    target_manifest.id.as_str(),
+                    target_manifest.id.as_str(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let source_snapshot_id = format!("source-snapshot-{}", target_artifact.id.as_str());
+            transaction.execute(
+                "INSERT INTO source_snapshots(id, project_id, artifact_id, identity_digest)
+                 VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(id) DO NOTHING",
+                params![
+                    source_snapshot_id,
+                    persisted_project_id,
+                    target_artifact.id.as_str(),
+                    target_artifact.id.as_str(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let recipe_id = format!("build-recipe-{}", target_manifest.id.as_str());
+            transaction.execute(
+                "INSERT INTO build_recipes(
+                    id, target_id, source_snapshot_id, recipe_artifact_id, identity_digest
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO NOTHING",
+                params![
+                    recipe_id,
+                    target_id,
+                    source_snapshot_id,
+                    effective_configuration.id.as_str(),
+                    configuration_digest,
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let execution_sequence = next_sequence(&transaction, "build-execution")?;
+            if execution_sequence <= 0 {
+                return Err(HostRunStoreError::Persist);
+            }
+            let execution_id = format!("build-execution-{execution_sequence:020}");
+            transaction.execute(
+                "INSERT INTO build_executions(
+                    id, build_recipe_id, status, log_artifact_id, output_target_build_id
+                 ) VALUES (?1, ?2, 'succeeded', NULL, ?3)",
+                params![execution_id, recipe_id, target_build_id],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            HostRunStoreOutcome::Updated
+        },
         HostRunStoreAction::Reserve => {
             let configuration_source = configuration_source.ok_or(HostRunStoreError::Persist)?;
             let effective_configuration = effective_configuration.ok_or(
@@ -2726,13 +3379,140 @@ fn host_run_store_action(
             }
             HostRunStoreOutcome::Updated
         },
+        HostRunStoreAction::AggregateSuccess => {
+            let reservation = reservation.ok_or(HostRunStoreError::Persist)?;
+            if retention_policy != PersistenceRetentionPolicy::HighThroughput || oracle_verdict
+                != LocalOracleVerdict::Pass || project_name.is_empty() || project_name.len()
+                > 4_096 {
+                return Err(HostRunStoreError::Persist);
+            }
+            if admit_persisted_transition(
+                &transaction,
+                reservation,
+                RunStoreTransition::RecordObservation,
+            )? != RunAttemptStatus::Observed {
+                return Err(HostRunStoreError::Conflict);
+            }
+            let mut decoded_project_name = String::new();
+            for code_point in project_name {
+                decoded_project_name.push(
+                    char::from_u32(*code_point).ok_or(HostRunStoreError::Persist)?,
+                );
+            }
+            let run_identity: (String, String, String, String) = transaction.query_row(
+                "SELECT effective_configuration_artifact_id, seed, target_build_id,
+                        configuration_digest
+                 FROM runs WHERE id = ?1",
+                [reservation.run_id().as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let campaign_seed = run_identity.1.parse::<u64>().map_err(
+                |_| HostRunStoreError::Persist,
+            )?;
+            let replay_seeds = derive_replay_seeds(campaign_seed);
+            let project_id = format!("project-{}", run_identity.3);
+            transaction.execute(
+                "INSERT INTO projects(id, name, configuration_artifact_id)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(name) DO NOTHING",
+                params![project_id, decoded_project_name, run_identity.0],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let persisted_project_id: String = transaction.query_row(
+                "SELECT id FROM projects WHERE name = ?1",
+                [decoded_project_name.as_str()],
+                |row| row.get(0),
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let target_id = format!("target-{}", run_identity.2);
+            transaction.execute(
+                "INSERT INTO targets(id, project_id, adapter, configuration_artifact_id)
+                 VALUES (?1, ?2, 'cli', ?3)
+                 ON CONFLICT(id) DO NOTHING",
+                params![target_id, persisted_project_id, run_identity.0],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let campaign_id = format!("campaign-{}", reservation.run_id().as_str());
+            transaction.execute(
+                "INSERT INTO campaigns(
+                    id, project_id, configuration_artifact_id, retention_policy, status,
+                    campaign_seed, scheduling_seed, fault_seed
+                 ) VALUES (?1, ?2, ?3, 'aggregate-checkpoints', 'completed', ?4, ?5, ?6)",
+                params![
+                    campaign_id,
+                    persisted_project_id,
+                    run_identity.0,
+                    replay_seeds.campaign.to_string(),
+                    replay_seeds.scheduling.to_string(),
+                    replay_seeds.fault.to_string(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let experiment_id = format!("experiment-{}", reservation.run_id().as_str());
+            transaction.execute(
+                "INSERT INTO experiments(id, campaign_id, kind, experiment_seed, status)
+                 VALUES (?1, ?2, 'fuzz', ?3, 'completed')",
+                params![experiment_id, campaign_id, replay_seeds.experiment.to_string()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let engine_allocations = [
+                ("coverage-fuzzing", 35_i64),
+                ("property-testing", 20_i64),
+                ("stateful-testing", 15_i64),
+                ("metamorphic-testing", 10_i64),
+                ("fault-injection", 10_i64),
+                ("symbolic-testing", 5_i64),
+                ("miscellaneous", 5_i64),
+            ];
+            for (engine_class, allocated_slots) in engine_allocations {
+                let executions = if engine_class == "coverage-fuzzing" {
+                    1_i64
+                } else {
+                    0_i64
+                };
+                transaction.execute(
+                    "INSERT INTO engine_stats(
+                        campaign_id, epoch, engine_class, engine_seed, executions,
+                        cpu_seconds, cpu_nanoseconds, new_coverage, new_findings,
+                        unique_states, minimized_findings, mutation_score_improvement,
+                        new_oracle_failures, corpus_quality_improvement, provenance_credit,
+                        allocated_slots
+                     ) VALUES (?1, 0, ?2, ?3, ?4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?5)",
+                    params![
+                        campaign_id,
+                        engine_class,
+                        replay_seeds.engine.to_string(),
+                        executions,
+                        allocated_slots,
+                    ],
+                ).map_err(|_| HostRunStoreError::Persist)?;
+            }
+            let attempt_deletes = transaction.execute(
+                "DELETE FROM run_attempts WHERE id = ?1 AND run_id = ?2
+                 AND status = 'target_prepared'",
+                params![reservation.attempt_id().as_str(), reservation.run_id().as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let control_deletes = transaction.execute(
+                "DELETE FROM run_effective_controls WHERE run_id = ?1",
+                [reservation.run_id().as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let run_deletes = transaction.execute(
+                "DELETE FROM runs WHERE id = ?1",
+                [reservation.run_id().as_str()],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            if attempt_deletes != 1 || control_deletes != 1 || run_deletes != 1 {
+                return Err(HostRunStoreError::Conflict);
+            }
+            HostRunStoreOutcome::Updated
+        },
         HostRunStoreAction::RecordObservation => {
             let reservation = reservation.ok_or(HostRunStoreError::Persist)?;
             let observation = observation_artifact.ok_or(HostRunStoreError::Persist)?;
             let stdout = stdout_artifact.ok_or(HostRunStoreError::Persist)?;
             let stderr = stderr_artifact.ok_or(HostRunStoreError::Persist)?;
-            if completion_tag == 0 || termination_tag == 0 {
+            if completion_tag == 0 || termination_tag == 0 || project_name.is_empty()
+                || project_name.len() > 4_096 {
                 return Err(HostRunStoreError::Persist);
+            }
+            let mut decoded_project_name = String::new();
+            for code_point in project_name {
+                let scalar = char::from_u32(*code_point).ok_or(HostRunStoreError::Persist)?;
+                decoded_project_name.push(scalar);
             }
             if admit_persisted_transition(
                 &transaction,
@@ -2764,6 +3544,225 @@ fn host_run_store_action(
             ).map_err(|_| HostRunStoreError::Persist)?;
             if updates != 1 {
                 return Err(HostRunStoreError::Conflict);
+            }
+            let run_identity: (String, String, String, String, String) = transaction.query_row(
+                "SELECT effective_configuration_artifact_id,
+                        capability_manifest_artifact_id, seed, target_build_id,
+                        configuration_digest
+                 FROM runs WHERE id = ?1",
+                [reservation.run_id().as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let campaign_seed = run_identity.2.parse::<u64>().map_err(
+                |_| HostRunStoreError::Persist,
+            )?;
+            let replay_seeds = derive_replay_seeds(campaign_seed);
+            let retention = match retention_policy {
+                PersistenceRetentionPolicy::ManagedReplay => "retain-every-run",
+                PersistenceRetentionPolicy::HighThroughput => "aggregate-checkpoints",
+            };
+
+            let project_id = format!("project-{}", run_identity.4);
+            transaction.execute(
+                "INSERT INTO projects(id, name, configuration_artifact_id)
+                 VALUES (?1, ?2, ?3)
+                 ON CONFLICT(name) DO NOTHING",
+                params![project_id, decoded_project_name, run_identity.0],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let persisted_project_id: String = transaction.query_row(
+                "SELECT id FROM projects WHERE name = ?1",
+                [decoded_project_name.as_str()],
+                |row| row.get(0),
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let target_id = format!("target-{}", run_identity.3);
+            transaction.execute(
+                "INSERT INTO targets(id, project_id, adapter, configuration_artifact_id)
+                 VALUES (?1, ?2, 'cli', ?3)
+                 ON CONFLICT(id) DO NOTHING",
+                params![target_id, persisted_project_id, run_identity.0],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+
+            let campaign_id = format!("campaign-{}", reservation.run_id().as_str());
+            transaction.execute(
+                "INSERT INTO campaigns(
+                    id, project_id, configuration_artifact_id, retention_policy, status,
+                    campaign_seed, scheduling_seed, fault_seed
+                 ) VALUES (?1, ?2, ?3, ?4, 'completed', ?5, ?6, ?7)",
+                params![
+                    campaign_id,
+                    persisted_project_id,
+                    run_identity.0,
+                    retention,
+                    replay_seeds.campaign.to_string(),
+                    replay_seeds.scheduling.to_string(),
+                    replay_seeds.fault.to_string(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            let experiment_id = format!("experiment-{}", reservation.run_id().as_str());
+            let experiment_kind = if retention_policy
+                == PersistenceRetentionPolicy::HighThroughput {
+                "fuzz"
+            } else {
+                "local-run"
+            };
+            transaction.execute(
+                "INSERT INTO experiments(id, campaign_id, kind, experiment_seed, status)
+                 VALUES (?1, ?2, ?3, ?4, 'completed')",
+                params![
+                    experiment_id,
+                    campaign_id,
+                    experiment_kind,
+                    replay_seeds.experiment.to_string(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+            transaction.execute(
+                "INSERT INTO run_replay_metadata(
+                    run_id, schema_version, campaign_seed, engine_seed, experiment_seed,
+                    scheduling_seed, fault_seed, engine_seed_status,
+                    engine_checkpoint_artifact_id, generated_schedule_artifact_id,
+                    fault_trace_artifact_id, environment_artifact_id,
+                    failure_predicate_artifact_id, engine_version
+                 ) VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6, 'supported', NULL, NULL, NULL,
+                    ?7, ?8, 'crucible-local-run-v1')",
+                params![
+                    reservation.run_id().as_str(),
+                    replay_seeds.campaign.to_string(),
+                    replay_seeds.engine.to_string(),
+                    replay_seeds.experiment.to_string(),
+                    replay_seeds.scheduling.to_string(),
+                    replay_seeds.fault.to_string(),
+                    run_identity.1,
+                    run_identity.0,
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+
+            let engine_allocations = [
+                ("coverage-fuzzing", 35_i64),
+                ("property-testing", 20_i64),
+                ("stateful-testing", 15_i64),
+                ("metamorphic-testing", 10_i64),
+                ("fault-injection", 10_i64),
+                ("symbolic-testing", 5_i64),
+                ("miscellaneous", 5_i64),
+            ];
+            for (engine_class, allocated_slots) in engine_allocations {
+                transaction.execute(
+                    "INSERT INTO engine_stats(
+                        campaign_id, epoch, engine_class, engine_seed, executions,
+                        cpu_seconds, cpu_nanoseconds, new_coverage, new_findings,
+                        unique_states, minimized_findings, mutation_score_improvement,
+                        new_oracle_failures, corpus_quality_improvement, provenance_credit,
+                        allocated_slots
+                     ) VALUES (?1, 0, ?2, ?3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ?4)",
+                    params![
+                        campaign_id,
+                        engine_class,
+                        replay_seeds.engine.to_string(),
+                        allocated_slots,
+                    ],
+                ).map_err(|_| HostRunStoreError::Persist)?;
+            }
+
+            let oracle_id = format!("oracle-{}", reservation.attempt_id().as_str());
+            let verdict = match oracle_verdict {
+                LocalOracleVerdict::Pass => "pass",
+                LocalOracleVerdict::Fail => "fail",
+            };
+            transaction.execute(
+                "INSERT INTO oracle_verdicts(
+                    id, attempt_id, oracle_id, verdict, facts_artifact_id,
+                    hypothesis_artifact_id
+                 ) VALUES (?1, ?2, 'process-exit-predicate-v1', ?3, ?4, NULL)",
+                params![
+                    oracle_id,
+                    reservation.attempt_id().as_str(),
+                    verdict,
+                    observation.id.as_str(),
+                ],
+            ).map_err(|_| HostRunStoreError::Persist)?;
+
+            if oracle_verdict == LocalOracleVerdict::Fail {
+                let existing_finding = transaction.query_row(
+                    "SELECT id FROM findings
+                     WHERE project_id = ?1 AND kind = 'target-defect/process-exit'
+                       AND canonical_predicate_artifact_id = ?2
+                     ORDER BY id LIMIT 1",
+                    params![persisted_project_id, run_identity.0],
+                    |row| row.get::<_, String>(0),
+                ).optional().map_err(|_| HostRunStoreError::Persist)?;
+                let (finding_id, is_original) = match existing_finding {
+                    Some(id) => (id, 0_i64),
+                    None => {
+                        let finding_sequence = next_sequence(&transaction, "finding")?;
+                        if finding_sequence <= 0 {
+                            return Err(HostRunStoreError::Persist);
+                        }
+                        let id = format!("BUG-{finding_sequence:06}");
+                        transaction.execute(
+                            "INSERT INTO findings(
+                                id, project_id, kind, status, canonical_predicate_artifact_id
+                             ) VALUES (?1, ?2, 'target-defect/process-exit', 'open', ?3)",
+                            params![id, persisted_project_id, run_identity.0],
+                        ).map_err(|_| HostRunStoreError::Persist)?;
+                        (id, 1_i64)
+                    },
+                };
+                let instance_sequence = next_sequence(&transaction, "finding-instance")?;
+                if instance_sequence <= 0 {
+                    return Err(HostRunStoreError::Persist);
+                }
+                let instance_id = format!("finding-instance-{instance_sequence:020}");
+                transaction.execute(
+                    "INSERT INTO finding_instances(
+                        id, finding_id, run_attempt_id, observation_id,
+                        predicate_artifact_id, is_original
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        instance_id,
+                        finding_id,
+                        reservation.attempt_id().as_str(),
+                        observation_id,
+                        run_identity.0,
+                        is_original,
+                    ],
+                ).map_err(|_| HostRunStoreError::Persist)?;
+                transaction.execute(
+                    "INSERT INTO finding_campaigns(finding_id, campaign_id, first_instance_id)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(finding_id, campaign_id) DO NOTHING",
+                    params![finding_id, campaign_id, instance_id],
+                ).map_err(|_| HostRunStoreError::Persist)?;
+
+                let generation_id: i64 = transaction.query_row(
+                    "SELECT id FROM storage_generations WHERE status = 'open'
+                     ORDER BY id DESC LIMIT 1",
+                    [],
+                    |row| row.get(0),
+                ).map_err(|_| HostRunStoreError::Persist)?;
+                let target_artifacts: (String, String) = transaction.query_row(
+                    "SELECT target_artifact_id, manifest_artifact_id
+                     FROM target_builds WHERE id = ?1",
+                    [run_identity.3.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                ).map_err(|_| HostRunStoreError::Persist)?;
+                let rooted_artifacts = [
+                    observation.id.as_str(),
+                    stdout.id.as_str(),
+                    stderr.id.as_str(),
+                    run_identity.0.as_str(),
+                    run_identity.1.as_str(),
+                    target_artifacts.0.as_str(),
+                    target_artifacts.1.as_str(),
+                ];
+                for artifact_id in rooted_artifacts {
+                    transaction.execute(
+                        "INSERT INTO artifact_roots(
+                            artifact_id, root_kind, root_id, generation_id
+                         ) VALUES (?1, 'original-finding', ?2, ?3)
+                         ON CONFLICT(artifact_id, root_kind, root_id) DO NOTHING",
+                        params![artifact_id, finding_id, generation_id],
+                    ).map_err(|_| HostRunStoreError::Persist)?;
+                }
             }
             HostRunStoreOutcome::Updated
         },
@@ -2799,6 +3798,1659 @@ fn host_run_store_action(
     transaction.commit().map_err(|_| HostRunStoreError::Persist)?;
     connection.close().map_err(|_| HostRunStoreError::Persist)?;
     Ok(outcome)
+}
+
+// CRUCIBLE-TCB: CLI-HOST-INSPECT-001
+#[verifier::external_body]
+fn host_inspection_snapshot(root: &str, requested_run_id: &str) -> (result: Result<
+    RunInspectionSnapshot,
+    HostInspectionError,
+>) {
+    fn lexical_absolute(path: &Path) -> Result<PathBuf, HostInspectionError> {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|_| HostInspectionError::Workspace)?.join(path)
+        };
+        let mut normalized = PathBuf::new();
+        for component in candidate.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                    normalized.push(component.as_os_str());
+                },
+                Component::CurDir => {},
+                Component::ParentDir => {
+                    if !normalized.pop() {
+                        return Err(HostInspectionError::Workspace);
+                    }
+                },
+            }
+        }
+        if normalized.is_absolute() {
+            Ok(normalized)
+        } else {
+            Err(HostInspectionError::Workspace)
+        }
+    }
+
+    fn safe_directory(path: &Path) -> Result<(), HostInspectionError> {
+        let mut cursor = PathBuf::new();
+        for component in path.components() {
+            cursor.push(component.as_os_str());
+            if matches!(component, Component::Prefix(_) | Component::RootDir) {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(&cursor).map_err(
+                |_| HostInspectionError::Workspace,
+            )?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(HostInspectionError::Workspace);
+            }
+        }
+        Ok(())
+    }
+
+    fn artifact(row: &rusqlite::Row<'_>, start: usize) -> rusqlite::Result<ArtifactRef> {
+        let raw_size: i64 = row.get(start + 1)?;
+        let size_bytes = u64::try_from(raw_size).map_err(
+            |_| rusqlite::Error::IntegralValueOutOfRange(start + 1, raw_size),
+        )?;
+        Ok(
+            ArtifactRef {
+                id: ArtifactId::new(row.get(start)?),
+                size_bytes,
+                media_type: row.get(start + 2)?,
+            },
+        )
+    }
+
+    fn optional_artifact(row: &rusqlite::Row<'_>, start: usize) -> rusqlite::Result<
+        Option<ArtifactRef>,
+    > {
+        match row.get::<_, Option<String>>(start)? {
+            Some(id) => {
+                let raw_size: i64 = row.get(start + 1)?;
+                let size_bytes = u64::try_from(raw_size).map_err(
+                    |_| rusqlite::Error::IntegralValueOutOfRange(start + 1, raw_size),
+                )?;
+                Ok(
+                    Some(
+                        ArtifactRef {
+                            id: ArtifactId::new(id),
+                            size_bytes,
+                            media_type: row.get(start + 2)?,
+                        },
+                    ),
+                )
+            },
+            None => Ok(None),
+        }
+    }
+
+    let root = lexical_absolute(Path::new(root))?;
+    safe_directory(&root)?;
+    let state = root.join(".crucible");
+    safe_directory(&state)?;
+    let database = state.join("database.sqlite");
+    let metadata = std::fs::symlink_metadata(&database).map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err(HostInspectionError::Workspace);
+    }
+    let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let connection = Connection::open_with_flags(database, flags).map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    connection.busy_timeout(std::time::Duration::from_secs(5)).map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    connection.set_limit(Limit::SQLITE_LIMIT_LENGTH, 1_048_576).map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA query_only = ON;").map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    let application_id: i64 = connection.query_row(
+        "PRAGMA application_id",
+        [],
+        |row| row.get(0),
+    ).map_err(|_| HostInspectionError::Workspace)?;
+    let version: i64 = connection.query_row("PRAGMA user_version", [], |row| row.get(0)).map_err(
+        |_| HostInspectionError::Workspace,
+    )?;
+    if application_id != WORKSPACE_APPLICATION_ID || version != WORKSPACE_SCHEMA_VERSION {
+        return Err(HostInspectionError::Workspace);
+    }
+    let run_count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM runs WHERE id = ?1",
+        [requested_run_id],
+        |row| row.get(0),
+    ).map_err(|_| HostInspectionError::InvalidEvidence)?;
+    if run_count == 0 {
+        return Err(HostInspectionError::NotFound);
+    }
+    if run_count != 1 {
+        return Err(HostInspectionError::InvalidEvidence);
+    }
+    let attempt_count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM run_attempts WHERE run_id = ?1",
+        [requested_run_id],
+        |row| row.get(0),
+    ).map_err(|_| HostInspectionError::InvalidEvidence)?;
+    if attempt_count != 1 {
+        return Err(HostInspectionError::InvalidEvidence);
+    }
+    let snapshot = connection.query_row(
+        "SELECT
+            r.id, a.id, a.status,
+            source.id, source.size_bytes, source.media_type,
+            effective.id, effective.size_bytes, effective.media_type,
+            r.configuration_digest, r.target_build_id,
+            target.id, target.size_bytes, target.media_type,
+            target_manifest.id, target_manifest.size_bytes, target_manifest.media_type,
+            b.identity_digest,
+            capability.id, capability.size_bytes, capability.media_type,
+            r.seed,
+            controls.timeout_ms, controls.memory_bytes, controls.max_processes,
+            controls.max_stream_bytes, controls.network_policy, controls.isolation_backend,
+            controls.output_capture_status,
+            observation.id, observation.size_bytes, observation.media_type,
+            stdout.id, stdout.size_bytes, stdout.media_type,
+            stderr.id, stderr.size_bytes, stderr.media_type,
+            o.completion_tag, o.termination_tag,
+            h.kind,
+            detail.id, detail.size_bytes, detail.media_type
+         FROM runs r
+         JOIN run_attempts a ON a.run_id = r.id
+         JOIN run_effective_controls controls ON controls.run_id = r.id
+         JOIN artifacts source ON source.id = r.configuration_source_artifact_id
+         JOIN artifacts effective ON effective.id = r.effective_configuration_artifact_id
+         JOIN artifacts capability ON capability.id = r.capability_manifest_artifact_id
+         LEFT JOIN target_builds b ON b.id = r.target_build_id
+         LEFT JOIN artifacts target ON target.id = b.target_artifact_id
+         LEFT JOIN artifacts target_manifest ON target_manifest.id = b.manifest_artifact_id
+         LEFT JOIN observations o ON o.attempt_id = a.id
+         LEFT JOIN artifacts observation ON observation.id = o.observation_artifact_id
+         LEFT JOIN artifacts stdout ON stdout.id = o.stdout_artifact_id
+         LEFT JOIN artifacts stderr ON stderr.id = o.stderr_artifact_id
+         LEFT JOIN harness_failures h ON h.attempt_id = a.id
+         LEFT JOIN artifacts detail ON detail.id = h.detail_artifact_id
+         WHERE r.id = ?1",
+        [requested_run_id],
+        |row|
+            {
+                let status_text: String = row.get(2)?;
+                let status = match status_text.as_str() {
+                    "reserved" => InspectionStatus::Reserved,
+                    "target_prepared" => InspectionStatus::TargetPrepared,
+                    "observed" => InspectionStatus::Observed,
+                    "harness_failure" => InspectionStatus::HarnessFailure,
+                    _ => return Err(rusqlite::Error::InvalidQuery),
+                };
+                let target = match row.get::<_, Option<String>>(10)? {
+                    Some(build_id) => {
+                        Some(
+                            InspectionTarget {
+                                build_id,
+                                target_artifact: artifact(row, 11)?,
+                                manifest_artifact: artifact(row, 14)?,
+                                identity_digest: row.get(17)?,
+                            },
+                        )
+                    },
+                    None => None,
+                };
+                let observation = match optional_artifact(row, 29)? {
+                    Some(observation_artifact) => {
+                        let raw_completion: i64 = row.get(38)?;
+                        let completion_tag = u16::try_from(raw_completion).map_err(
+                            |_| rusqlite::Error::IntegralValueOutOfRange(38, raw_completion),
+                        )?;
+                        let raw_termination: i64 = row.get(39)?;
+                        let termination_tag = u16::try_from(raw_termination).map_err(
+                            |_| rusqlite::Error::IntegralValueOutOfRange(39, raw_termination),
+                        )?;
+                        Some(
+                            InspectionObservation {
+                                artifact: observation_artifact,
+                                stdout_artifact: artifact(row, 32)?,
+                                stderr_artifact: artifact(row, 35)?,
+                                completion_tag,
+                                termination_tag,
+                            },
+                        )
+                    },
+                    None => None,
+                };
+                let harness_failure = match row.get::<_, Option<String>>(40)? {
+                    Some(kind) => {
+                        Some(
+                            InspectionHarnessFailure {
+                                kind,
+                                detail_artifact: optional_artifact(row, 41)?,
+                            },
+                        )
+                    },
+                    None => None,
+                };
+                Ok(
+                    RunInspectionSnapshot {
+                        run_id: row.get(0)?,
+                        attempt_id: row.get(1)?,
+                        status,
+                        configuration_source: artifact(row, 3)?,
+                        effective_configuration: artifact(row, 6)?,
+                        configuration_digest: row.get(9)?,
+                        target,
+                        capability_manifest: artifact(row, 18)?,
+                        seed: row.get(21)?,
+                        controls: InspectionControls {
+                            timeout_ms: row.get(22)?,
+                            memory_bytes: row.get(23)?,
+                            max_processes: row.get(24)?,
+                            max_stream_bytes: row.get(25)?,
+                            network_policy: row.get(26)?,
+                            isolation_backend: row.get(27)?,
+                            output_capture_status: row.get(28)?,
+                        },
+                        observation,
+                        harness_failure,
+                    },
+                )
+            },
+    ).map_err(|_| HostInspectionError::InvalidEvidence)?;
+    connection.close().map_err(|_| HostInspectionError::Workspace)?;
+    Ok(snapshot)
+}
+
+// CRUCIBLE-TCB: CLI-HOST-DOMAIN-READ-001
+#[verifier::external_body]
+fn host_domain_read(
+    action: HostDomainReadAction,
+    root: &str,
+    subject: &str,
+    format: ReportFormat,
+) -> (result: Result<Vec<u8>, HostDomainReadError>)
+    ensures
+        match &result {
+            Ok(output) => output@.len() <= MAX_DOMAIN_REPORT_BYTES,
+            Err(_) => true,
+        },
+{
+    #[derive(Clone)]
+    struct FindingReport {
+        finding_id: String,
+        project: String,
+        kind: String,
+        status: String,
+        predicate_artifact: String,
+        instance_id: String,
+        attempt_id: String,
+        observation_id: String,
+        run_id: String,
+        target_build_id: String,
+        capability_artifact: String,
+        oracle_id: String,
+        oracle_kind: String,
+        oracle_verdict: String,
+        facts_artifact: String,
+        hypothesis_artifact: Option<String>,
+        campaign_seed: String,
+        engine_seed: String,
+        experiment_seed: String,
+        scheduling_seed: String,
+        fault_seed: String,
+        engine_seed_status: String,
+        engine_version: String,
+        timeout_ms: String,
+        memory_bytes: String,
+        max_processes: String,
+        max_stream_bytes: String,
+        network_policy: String,
+        isolation_backend: String,
+        output_capture_status: String,
+        reproduction: Option<(i64, i64, String, i64, i64, i64)>,
+        rooted_artifacts: Vec<String>,
+    }
+
+    fn lexical_absolute(path: &Path) -> Result<PathBuf, HostDomainReadError> {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|_| HostDomainReadError::Workspace)?.join(path)
+        };
+        let mut normalized = PathBuf::new();
+        for component in candidate.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                    normalized.push(component.as_os_str());
+                },
+                Component::CurDir => {},
+                Component::ParentDir => {
+                    if !normalized.pop() {
+                        return Err(HostDomainReadError::Workspace);
+                    }
+                },
+            }
+        }
+        if normalized.is_absolute() {
+            Ok(normalized)
+        } else {
+            Err(HostDomainReadError::Workspace)
+        }
+    }
+
+    fn require_safe_directory(path: &Path) -> Result<(), HostDomainReadError> {
+        let mut cursor = PathBuf::new();
+        for component in path.components() {
+            cursor.push(component.as_os_str());
+            if matches!(component, Component::Prefix(_) | Component::RootDir) {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(&cursor).map_err(
+                |_| HostDomainReadError::Workspace,
+            )?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(HostDomainReadError::Workspace);
+            }
+        }
+        Ok(())
+    }
+
+    fn open_database(root: &str) -> Result<Connection, HostDomainReadError> {
+        let root = lexical_absolute(Path::new(root))?;
+        require_safe_directory(&root)?;
+        let state = root.join(".crucible");
+        require_safe_directory(&state)?;
+        let database = state.join("database.sqlite");
+        let metadata = std::fs::symlink_metadata(&database).map_err(
+            |_| HostDomainReadError::Workspace,
+        )?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(HostDomainReadError::Workspace);
+        }
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let connection = Connection::open_with_flags(database, flags).map_err(
+            |_| HostDomainReadError::Workspace,
+        )?;
+        connection.set_limit(Limit::SQLITE_LIMIT_LENGTH, 1_048_576).map_err(
+            |_| HostDomainReadError::Workspace,
+        )?;
+        connection.busy_timeout(std::time::Duration::from_secs(5)).map_err(
+            |_| HostDomainReadError::Workspace,
+        )?;
+        connection.execute_batch(
+            "PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL; BEGIN DEFERRED;",
+        ).map_err(|_| HostDomainReadError::Workspace)?;
+        let identity: (i64, i64, String) = connection.query_row(
+            "SELECT (SELECT application_id FROM pragma_application_id),
+                    (SELECT user_version FROM pragma_user_version),
+                    (SELECT quick_check FROM pragma_quick_check)",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).map_err(|_| HostDomainReadError::Workspace)?;
+        if identity.0 != WORKSPACE_APPLICATION_ID || identity.1 != WORKSPACE_SCHEMA_VERSION
+            || identity.2 != "ok" {
+            return Err(HostDomainReadError::Workspace);
+        }
+        Ok(connection)
+    }
+
+    fn bounded(mut output: Vec<u8>) -> Result<Vec<u8>, HostDomainReadError> {
+        if output.len() > MAX_DOMAIN_REPORT_BYTES {
+            Err(HostDomainReadError::OutputLimit)
+        } else {
+            if output.last() != Some(&b'\n') {
+                output.push(b'\n');
+            }
+            if output.len() > MAX_DOMAIN_REPORT_BYTES {
+                Err(HostDomainReadError::OutputLimit)
+            } else {
+                Ok(output)
+            }
+        }
+    }
+
+    fn json_bytes(value: &serde_json::Value) -> Result<Vec<u8>, HostDomainReadError> {
+        serde_json::to_vec(value).map_err(|_| HostDomainReadError::InvalidEvidence).and_then(
+            bounded,
+        )
+    }
+
+    fn json_object(entries: &[(&str, serde_json::Value)]) -> serde_json::Value {
+        let mut object = serde_json::Map::new();
+        for (key, value) in entries {
+            object.insert((*key).to_owned(), value.clone());
+        }
+        serde_json::Value::Object(object)
+    }
+
+    fn json_text(value: &str) -> serde_json::Value {
+        serde_json::Value::String(value.to_owned())
+    }
+
+    fn json_array(values: Vec<serde_json::Value>) -> serde_json::Value {
+        serde_json::Value::Array(values)
+    }
+
+    fn json_fact_node(id: &str, kind: &str) -> serde_json::Value {
+        let mut node = serde_json::Map::new();
+        node.insert("id".to_owned(), json_text(id));
+        node.insert("kind".to_owned(), json_text(kind));
+        node.insert("fact".to_owned(), serde_json::Value::Bool(true));
+        serde_json::Value::Object(node)
+    }
+
+    fn json_edge(from: &str, to: &str, relation: &str) -> serde_json::Value {
+        let mut edge = serde_json::Map::new();
+        edge.insert("from".to_owned(), json_text(from));
+        edge.insert("to".to_owned(), json_text(to));
+        edge.insert("relation".to_owned(), json_text(relation));
+        serde_json::Value::Object(edge)
+    }
+
+    fn xml_escape(value: &str) -> String {
+        let mut escaped = String::new();
+        for character in value.chars() {
+            let code_point = character as u32;
+            if code_point == 38 {
+                escaped.push_str("&amp;");
+            } else if code_point == 60 {
+                escaped.push_str("&lt;");
+            } else if code_point == 62 {
+                escaped.push_str("&gt;");
+            } else if code_point == 34 {
+                escaped.push_str("&quot;");
+            } else if code_point == 39 {
+                escaped.push_str("&apos;");
+            } else {
+                escaped.push(character);
+            }
+        }
+        escaped
+    }
+
+    fn load_finding(connection: &Connection, subject: &str) -> Result<
+        FindingReport,
+        HostDomainReadError,
+    > {
+        fn decode_finding(row: &rusqlite::Row<'_>) -> rusqlite::Result<FindingReport> {
+            Ok(
+                FindingReport {
+                    finding_id: row.get(0)?,
+                    project: row.get(1)?,
+                    kind: row.get(2)?,
+                    status: row.get(3)?,
+                    predicate_artifact: row.get(4)?,
+                    instance_id: row.get(5)?,
+                    attempt_id: row.get(6)?,
+                    observation_id: row.get(7)?,
+                    run_id: row.get(8)?,
+                    target_build_id: row.get(9)?,
+                    capability_artifact: row.get(10)?,
+                    oracle_id: row.get(11)?,
+                    oracle_kind: row.get(12)?,
+                    oracle_verdict: row.get(13)?,
+                    facts_artifact: row.get(14)?,
+                    hypothesis_artifact: row.get(15)?,
+                    campaign_seed: row.get(16)?,
+                    engine_seed: row.get(17)?,
+                    experiment_seed: row.get(18)?,
+                    scheduling_seed: row.get(19)?,
+                    fault_seed: row.get(20)?,
+                    engine_seed_status: row.get(21)?,
+                    engine_version: row.get(22)?,
+                    timeout_ms: row.get(23)?,
+                    memory_bytes: row.get(24)?,
+                    max_processes: row.get(25)?,
+                    max_stream_bytes: row.get(26)?,
+                    network_policy: row.get(27)?,
+                    isolation_backend: row.get(28)?,
+                    output_capture_status: row.get(29)?,
+                    reproduction: None,
+                    rooted_artifacts: Vec::new(),
+                },
+            )
+        }
+
+        fn decode_reproduction(row: &rusqlite::Row<'_>) -> rusqlite::Result<
+            (i64, i64, String, i64, i64, i64),
+        > {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
+        }
+
+        fn decode_artifact_id(row: &rusqlite::Row<'_>) -> rusqlite::Result<String> {
+            row.get(0)
+        }
+
+        if subject.is_empty() || subject.len() > 4_096 {
+            return Err(HostDomainReadError::NotFound);
+        }
+        let report_result = connection.query_row(
+            "SELECT f.id, p.name, f.kind, f.status, f.canonical_predicate_artifact_id,
+                    fi.id, fi.run_attempt_id, COALESCE(fi.observation_id, ''),
+                    r.id, r.target_build_id, r.capability_manifest_artifact_id,
+                    ov.id, ov.oracle_id, ov.verdict, ov.facts_artifact_id,
+                    ov.hypothesis_artifact_id,
+                    rm.campaign_seed, rm.engine_seed, rm.experiment_seed,
+                    rm.scheduling_seed, rm.fault_seed, rm.engine_seed_status,
+                    rm.engine_version, c.timeout_ms, c.memory_bytes, c.max_processes,
+                    c.max_stream_bytes, c.network_policy, c.isolation_backend,
+                    c.output_capture_status
+             FROM findings f
+             JOIN projects p ON p.id = f.project_id
+             JOIN finding_instances fi ON fi.finding_id = f.id
+             JOIN run_attempts ra ON ra.id = fi.run_attempt_id
+             JOIN runs r ON r.id = ra.run_id
+             JOIN oracle_verdicts ov ON ov.attempt_id = ra.id
+             JOIN run_replay_metadata rm ON rm.run_id = r.id
+             JOIN run_effective_controls c ON c.run_id = r.id
+             WHERE f.id = ?1
+            ORDER BY fi.is_original DESC, fi.id, ov.id LIMIT 1",
+            [subject],
+            decode_finding,
+        ).optional();
+        let optional_report = report_result.map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        let mut report = optional_report.ok_or(HostDomainReadError::NotFound)?;
+        let reproduction_result = connection.query_row(
+            "SELECT attempt_count, observed_failures, classification,
+                    environment_equivalent, schedule_replayed_exactly,
+                    fault_trace_replayed_exactly
+             FROM reproduction_samples WHERE finding_id = ?1
+            ORDER BY id DESC LIMIT 1",
+            [subject],
+            decode_reproduction,
+        ).optional();
+        report.reproduction = reproduction_result.map_err(
+            |_| HostDomainReadError::InvalidEvidence,
+        )?;
+        let statement_result = connection.prepare(
+            "SELECT artifact_id FROM artifact_roots
+             WHERE root_kind = 'original-finding' AND root_id = ?1
+             ORDER BY artifact_id LIMIT 129",
+        );
+        let mut statement = statement_result.map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        let rows_result = statement.query_map([subject], decode_artifact_id);
+        let rows = rows_result.map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        for row in rows {
+            if report.rooted_artifacts.len() == 128 {
+                return Err(HostDomainReadError::OutputLimit);
+            }
+            report.rooted_artifacts.push(row.map_err(|_| HostDomainReadError::InvalidEvidence)?);
+        }
+        Ok(report)
+    }
+
+    fn facts(report: &FindingReport) -> serde_json::Value {
+        let reproduction = match &report.reproduction {
+            Some((attempts, failures, classification, environment, schedule, faults)) => {
+                json_object(
+                    &[
+                        ("attempts", serde_json::Value::from(*attempts)),
+                        ("observed_failures", serde_json::Value::from(*failures)),
+                        ("classification", json_text(classification)),
+                        ("environment_equivalent", serde_json::Value::Bool(*environment == 1)),
+                        ("schedule_replayed_exactly", serde_json::Value::Bool(*schedule == 1)),
+                        ("fault_trace_replayed_exactly", serde_json::Value::Bool(*faults == 1)),
+                        ("determinism_proven", serde_json::Value::Bool(false)),
+                    ],
+                )
+            },
+            None => json_object(
+                &[
+                    ("attempts", serde_json::Value::from(0)),
+                    ("observed_failures", serde_json::Value::from(0)),
+                    ("classification", json_text("not-sampled")),
+                    ("determinism_proven", serde_json::Value::Bool(false)),
+                ],
+            ),
+        };
+        let hypothesis = match &report.hypothesis_artifact {
+            Some(value) => json_text(value),
+            None => serde_json::Value::Null,
+        };
+        let oracle = json_object(
+            &[
+                ("verdict_id", json_text(&report.oracle_id)),
+                ("identity", json_text(&report.oracle_kind)),
+                ("verdict", json_text(&report.oracle_verdict)),
+                ("facts_artifact_id", json_text(&report.facts_artifact)),
+                ("hypothesis_artifact_id", hypothesis),
+            ],
+        );
+        let controls = json_object(
+            &[
+                ("timeout_ms", json_text(&report.timeout_ms)),
+                ("memory_bytes", json_text(&report.memory_bytes)),
+                ("max_processes", json_text(&report.max_processes)),
+                ("max_stream_bytes", json_text(&report.max_stream_bytes)),
+                ("network_policy", json_text(&report.network_policy)),
+                ("isolation_backend", json_text(&report.isolation_backend)),
+                ("output_capture_status", json_text(&report.output_capture_status)),
+            ],
+        );
+        let seeds = json_object(
+            &[
+                ("campaign", json_text(&report.campaign_seed)),
+                ("engine", json_text(&report.engine_seed)),
+                ("experiment", json_text(&report.experiment_seed)),
+                ("scheduling", json_text(&report.scheduling_seed)),
+                ("fault", json_text(&report.fault_seed)),
+                ("engine_seed_status", json_text(&report.engine_seed_status)),
+                ("engine_version", json_text(&report.engine_version)),
+            ],
+        );
+        json_object(
+            &[
+                ("finding_id", json_text(&report.finding_id)),
+                ("project", json_text(&report.project)),
+                ("class", json_text(&report.kind)),
+                ("status", json_text(&report.status)),
+                ("instance_id", json_text(&report.instance_id)),
+                ("attempt_id", json_text(&report.attempt_id)),
+                ("run_id", json_text(&report.run_id)),
+                ("observation_id", json_text(&report.observation_id)),
+                ("target_build_id", json_text(&report.target_build_id)),
+                ("capability_artifact_id", json_text(&report.capability_artifact)),
+                ("predicate_artifact_id", json_text(&report.predicate_artifact)),
+                ("oracle", oracle),
+                ("controls", controls),
+                ("reproduction", reproduction),
+                ("seeds", seeds),
+                ("scenario_trace", json_array(Vec::new())),
+            ],
+        )
+    }
+
+    fn render_evidence_graph(report: &FindingReport) -> Result<Vec<u8>, HostDomainReadError> {
+        let mut nodes = Vec::new();
+        nodes.push(json_fact_node(&report.finding_id, "finding"));
+        nodes.push(json_fact_node(&report.oracle_id, "oracle-verdict"));
+        nodes.push(json_fact_node(&report.observation_id, "observation"));
+        for id in &report.rooted_artifacts {
+            nodes.push(json_fact_node(id, "artifact"));
+        }
+        let edges =
+            vec![
+            json_edge(&report.observation_id, &report.oracle_id, "evaluated-by"),
+            json_edge(&report.oracle_id, &report.finding_id, "instantiates"),
+        ];
+        let mut graph = serde_json::Map::new();
+        graph.insert("schema".to_owned(), json_text("crucible.evidence-graph.v1"));
+        graph.insert("nodes".to_owned(), json_array(nodes));
+        graph.insert("edges".to_owned(), json_array(edges));
+        graph.insert("hypotheses".to_owned(), json_array(Vec::new()));
+        json_bytes(&serde_json::Value::Object(graph))
+    }
+
+    fn render_bundle_manifest(report: &FindingReport, report_facts: serde_json::Value) -> Result<
+        Vec<u8>,
+        HostDomainReadError,
+    > {
+        let mut artifact_values = Vec::new();
+        for artifact in &report.rooted_artifacts {
+            artifact_values.push(json_text(artifact));
+        }
+        let mut unsigned_object = serde_json::Map::new();
+        unsigned_object.insert("schema".to_owned(), json_text("crucible.evidence-bundle.v1"));
+        unsigned_object.insert("finding_id".to_owned(), json_text(&report.finding_id));
+        unsigned_object.insert("facts".to_owned(), report_facts);
+        unsigned_object.insert("hypotheses".to_owned(), json_array(Vec::new()));
+        unsigned_object.insert("artifacts".to_owned(), json_array(artifact_values));
+        unsigned_object.insert(
+            "signature_scope".to_owned(),
+            json_text("exact-manifest-and-provenance"),
+        );
+        unsigned_object.insert(
+            "hypothesis_truth_attested".to_owned(),
+            serde_json::Value::Bool(false),
+        );
+        let unsigned = serde_json::Value::Object(unsigned_object);
+        let unsigned_bytes = serde_json::to_vec(&unsigned).map_err(
+            |_| HostDomainReadError::InvalidEvidence,
+        )?;
+        let digest = ContentDigest::from_bytes(&unsigned_bytes).map_err(
+            |_| HostDomainReadError::InvalidEvidence,
+        )?.into_artifact_id();
+        let mut artifact_values = Vec::new();
+        for artifact in &report.rooted_artifacts {
+            artifact_values.push(json_text(artifact));
+        }
+        let mut manifest = serde_json::Map::new();
+        manifest.insert("schema".to_owned(), json_text("crucible.evidence-bundle.v1"));
+        manifest.insert("finding_id".to_owned(), json_text(&report.finding_id));
+        manifest.insert("facts".to_owned(), unsigned["facts"].clone());
+        manifest.insert("hypotheses".to_owned(), json_array(Vec::new()));
+        manifest.insert("artifacts".to_owned(), json_array(artifact_values));
+        manifest.insert("seeds".to_owned(), unsigned["facts"]["seeds"].clone());
+        manifest.insert("unsigned_payload_digest".to_owned(), json_text(digest.as_str()));
+        manifest.insert("signature".to_owned(), serde_json::Value::Null);
+        manifest.insert("signature_scope".to_owned(), json_text("exact-manifest-and-provenance"));
+        manifest.insert("hypothesis_truth_attested".to_owned(), serde_json::Value::Bool(false));
+        json_bytes(&serde_json::Value::Object(manifest))
+    }
+
+    fn render_capabilities(connection: &Connection) -> Result<Vec<u8>, HostDomainReadError> {
+        let mut manifests = Vec::new();
+        let mut statement = connection.prepare(
+            "SELECT artifact_id, backend, platform FROM capability_manifests
+             ORDER BY artifact_id LIMIT 1025",
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        let rows = statement.query_map(
+            [],
+            |row|
+                { Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+                },
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        for row in rows {
+            if manifests.len() == 1_024 {
+                return Err(HostDomainReadError::OutputLimit);
+            }
+            let (artifact_id, backend, platform) = row.map_err(
+                |_| HostDomainReadError::InvalidEvidence,
+            )?;
+            manifests.push(
+                json_object(
+                    &[
+                        ("artifact_id", json_text(&artifact_id)),
+                        ("backend", json_text(&backend)),
+                        ("platform", json_text(&platform)),
+                    ],
+                ),
+            );
+        }
+        let platform_status = if cfg!(target_os = "linux") {
+            "supported"
+        } else {
+            "unsupported-by-platform"
+        };
+        let features =
+            vec![
+            json_object(&[
+                ("name", json_text("sqlite-filesystem-storage")),
+                ("status", json_text("supported")),
+            ]),
+            json_object(&[
+                ("name", json_text("transactional-server-remote-storage-identity")),
+                ("status", json_text("specified")),
+            ]),
+            json_object(&[
+                ("name", json_text("linux-cli-execution")),
+                ("status", json_text(platform_status)),
+            ]),
+            json_object(&[
+                ("name", json_text("signed-evidence-bundles")),
+                ("status", json_text("not-configured")),
+                ("reason", json_text("no signing key was supplied")),
+            ]),
+        ];
+        json_bytes(
+            &json_object(
+                &[
+                    ("schema", json_text("crucible.capabilities.v1")),
+                    ("features", json_array(features)),
+                    ("recorded_manifests", json_array(manifests)),
+                ],
+            ),
+        )
+    }
+
+    fn render_proof_report(connection: &Connection) -> Result<Vec<u8>, HostDomainReadError> {
+        let mut rows_output = Vec::new();
+        let mut statement = connection.prepare(
+            "SELECT pa.id, pa.artifact_id, pa.proof_kind,
+                    pa.trusted_boundary_digest, vr.id, vr.status
+             FROM proof_artifacts pa
+             JOIN verification_runs vr ON vr.id = pa.verification_run_id
+             ORDER BY pa.id LIMIT 1025",
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        let rows = statement.query_map(
+            [],
+            |row|
+                {
+                    Ok(
+                        (
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                            row.get::<_, String>(5)?,
+                        ),
+                    )
+                },
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        for row in rows {
+            if rows_output.len() == 1_024 {
+                return Err(HostDomainReadError::OutputLimit);
+            }
+            let (id, artifact_id, kind, boundary_digest, verification_run, status) = row.map_err(
+                |_| HostDomainReadError::InvalidEvidence,
+            )?;
+            rows_output.push(
+                json_object(
+                    &[
+                        ("id", json_text(&id)),
+                        ("artifact_id", json_text(&artifact_id)),
+                        ("kind", json_text(&kind)),
+                        ("trusted_boundary_digest", json_text(&boundary_digest)),
+                        ("verification_run_id", json_text(&verification_run)),
+                        ("status", json_text(&status)),
+                    ],
+                ),
+            );
+        }
+        json_bytes(
+            &json_object(
+                &[
+                    ("schema", json_text("crucible.proof-report.v1")),
+                    ("proof_artifacts", json_array(rows_output)),
+                    ("reproduction_command", json_text("cargo xtask verify --all")),
+                ],
+            ),
+        )
+    }
+
+    fn render_tcb_report() -> Result<Vec<u8>, HostDomainReadError> {
+        let policy = json_object(
+            &[
+                ("deny_unregistered", serde_json::Value::Bool(true)),
+                ("deny_unapproved_growth", serde_json::Value::Bool(true)),
+            ],
+        );
+        let boundary_names = [
+            "XTASK-HOST-ARGS-001",
+            "XTASK-HOST-SNAPSHOT-001",
+            "XTASK-HOST-PROBE-001",
+            "XTASK-HOST-COMMAND-001",
+            "XTASK-HOST-REPORTS-001",
+            "XTASK-HOST-WRITE-001",
+            "XTASK-HOST-COMPLETE-001",
+            "CLI-HOST-ARGS-001",
+            "CLI-HOST-INIT-001",
+            "CLI-HOST-ARTIFACT-001",
+            "CLI-HOST-CONFIG-001",
+            "CLI-HOST-LOCAL-SUPERVISOR-001",
+            "CLI-HOST-LOCAL-RUN-001",
+            "CLI-HOST-RUN-STORE-001",
+            "CLI-HOST-INSPECT-001",
+            "CLI-HOST-STORAGE-001",
+            "CLI-HOST-DOMAIN-READ-001",
+            "CLI-HOST-FINDING-001",
+            "CLI-HOST-LOG-001",
+            "CLI-HOST-COMPLETE-001",
+            "CORE-HOST-UTF8-001",
+        ];
+        let mut boundaries = Vec::new();
+        for name in boundary_names {
+            boundaries.push(json_text(name));
+        }
+        json_bytes(
+            &json_object(
+                &[
+                    ("schema", json_text("crucible.tcb-report.v1")),
+                    ("policy", policy),
+                    (
+                        "audit_command",
+                        json_text(
+                            "cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth",
+                        ),
+                    ),
+                    ("boundaries", json_array(boundaries)),
+                ],
+            ),
+        )
+    }
+
+    fn render_plugin_report(connection: &Connection) -> Result<Vec<u8>, HostDomainReadError> {
+        let mut plugins = Vec::new();
+        let mut statement = connection.prepare(
+            "SELECT id, manifest_artifact_id, capability_manifest_artifact_id,
+                    implementation_artifact_id, status
+             FROM plugin_identities ORDER BY id LIMIT 1025",
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        let rows = statement.query_map(
+            [],
+            |row|
+                {
+                    Ok(
+                        (
+                            row.get::<_, String>(0)?,
+                            row.get::<_, String>(1)?,
+                            row.get::<_, String>(2)?,
+                            row.get::<_, String>(3)?,
+                            row.get::<_, String>(4)?,
+                        ),
+                    )
+                },
+        ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+        for row in rows {
+            if plugins.len() == 1_024 {
+                return Err(HostDomainReadError::OutputLimit);
+            }
+            let (id, manifest, capabilities, implementation, status) = row.map_err(
+                |_| HostDomainReadError::InvalidEvidence,
+            )?;
+            plugins.push(
+                json_object(
+                    &[
+                        ("id", json_text(&id)),
+                        ("manifest_artifact_id", json_text(&manifest)),
+                        ("capability_manifest_artifact_id", json_text(&capabilities)),
+                        ("implementation_artifact_id", json_text(&implementation)),
+                        ("status", json_text(&status)),
+                    ],
+                ),
+            );
+        }
+        json_bytes(
+            &json_object(
+                &[
+                    ("schema", json_text("crucible.plugin-report.v1")),
+                    ("plugins", json_array(plugins)),
+                ],
+            ),
+        )
+    }
+
+    fn render_human_report(report: &FindingReport) -> Result<Vec<u8>, HostDomainReadError> {
+        let reproduction = match &report.reproduction {
+            Some((attempts, failures, classification, _, _, _)) => {
+                let mut text = failures.to_string();
+                text.push('/');
+                text.push_str(&attempts.to_string());
+                text.push_str(" under recorded controls (");
+                text.push_str(classification);
+                text.push_str("; determinism is not proven)");
+                text
+            },
+            None => String::from("not sampled under recorded controls; determinism is not proven"),
+        };
+        let fields = [
+            &report.finding_id,
+            &report.project,
+            &report.target_build_id,
+            &report.kind,
+            &report.status,
+            &reproduction,
+            &report.isolation_backend,
+            &report.network_policy,
+            &report.output_capture_status,
+            &report.oracle_kind,
+            &report.oracle_verdict,
+            &report.predicate_artifact,
+            &report.facts_artifact,
+        ];
+        let labels = [
+            "",
+            "\n\nObserved facts:\n  Target: ",
+            "\n  Target build: ",
+            "\n  Class: ",
+            "\n  Status: ",
+            "\n  Reproduction: ",
+            "\n  Isolation: ",
+            ", ",
+            ", ",
+            "\n  Oracle: ",
+            " / ",
+            "\n  Failure predicate: ",
+            "\n  Facts artifact: ",
+        ];
+        let mut output = String::new();
+        for index in 0..fields.len() {
+            output.push_str(labels[index]);
+            output.push_str(fields[index]);
+        }
+        output.push_str("\n\nHypotheses:\n  none recorded\n");
+        bounded(output.into_bytes())
+    }
+
+    fn render_json_report(report_facts: serde_json::Value) -> Result<Vec<u8>, HostDomainReadError> {
+        json_bytes(
+            &json_object(
+                &[
+                    ("schema", json_text("crucible.finding-report.v1")),
+                    ("facts", report_facts),
+                    ("hypotheses", json_array(Vec::new())),
+                ],
+            ),
+        )
+    }
+
+    fn render_json_lines_report(report_facts: serde_json::Value) -> Result<
+        Vec<u8>,
+        HostDomainReadError,
+    > {
+        let fact_record = json_object(
+            &[
+                ("schema", json_text("crucible.finding-report.v1")),
+                ("record", json_text("facts")),
+                ("value", report_facts),
+            ],
+        );
+        let mut output = serde_json::to_vec(&fact_record).map_err(
+            |_| HostDomainReadError::InvalidEvidence,
+        )?;
+        output.push(b'\n');
+        let hypothesis_record = json_object(
+            &[
+                ("schema", json_text("crucible.finding-report.v1")),
+                ("record", json_text("hypotheses")),
+                ("value", json_array(Vec::new())),
+            ],
+        );
+        output.extend_from_slice(
+            &serde_json::to_vec(&hypothesis_record).map_err(
+                |_| HostDomainReadError::InvalidEvidence,
+            )?,
+        );
+        bounded(output)
+    }
+
+    fn render_sarif_report(report: &FindingReport, report_facts: serde_json::Value) -> Result<
+        Vec<u8>,
+        HostDomainReadError,
+    > {
+        let driver = json_object(
+            &[
+                ("name", json_text("Crucible")),
+                ("semanticVersion", json_text(env!("CARGO_PKG_VERSION"))),
+            ],
+        );
+        let tool = json_object(&[("driver", driver)]);
+        let mut message_text = report.oracle_verdict.clone();
+        message_text.push_str(" observed for ");
+        message_text.push_str(&report.finding_id);
+        let message = json_object(&[("text", json_text(&message_text))]);
+        let properties = json_object(
+            &[("facts", report_facts), ("hypotheses", json_array(Vec::new()))],
+        );
+        let result = json_object(
+            &[
+                ("ruleId", json_text(&report.kind)),
+                ("level", json_text("error")),
+                ("message", message),
+                ("properties", properties),
+            ],
+        );
+        let run = json_object(&[("tool", tool), ("results", json_array(vec![result]))]);
+        let sarif_schema = json_text("https://json.schemastore.org/sarif-2.1.0.json");
+        json_bytes(
+            &json_object(
+                &[
+                    ("$schema", sarif_schema),
+                    ("version", json_text("2.1.0")),
+                    ("runs", json_array(vec![run])),
+                ],
+            ),
+        )
+    }
+
+    fn render_junit_report(report: &FindingReport) -> Result<Vec<u8>, HostDomainReadError> {
+        let id = xml_escape(&report.finding_id);
+        let project = xml_escape(&report.project);
+        let kind = xml_escape(&report.kind);
+        let mut output = String::from(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><testsuites tests=\"1\" failures=\"1\"><testsuite name=\"Crucible\" tests=\"1\" failures=\"1\"><testcase classname=\"",
+        );
+        output.push_str(&project);
+        output.push_str("\" name=\"");
+        output.push_str(&id);
+        output.push_str("\"><failure type=\"");
+        output.push_str(&kind);
+        output.push_str(
+            "\">observed oracle failure; hypotheses: none recorded; determinism is not proven</failure></testcase></testsuite></testsuites>",
+        );
+        bounded(output.into_bytes())
+    }
+
+    let connection = open_database(root)?;
+    let output = match action {
+        HostDomainReadAction::Findings => {
+            let mut statement = connection.prepare(
+                "SELECT f.id, p.name, f.kind, f.status, COUNT(fi.id)
+                 FROM findings f JOIN projects p ON p.id = f.project_id
+                 LEFT JOIN finding_instances fi ON fi.finding_id = f.id
+                 GROUP BY f.id, p.name, f.kind, f.status
+                 ORDER BY f.id LIMIT 1025",
+            ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+            let rows = statement.query_map(
+                [],
+                |row|
+                    {
+                        Ok(
+                            (
+                                row.get::<_, String>(0)?,
+                                row.get::<_, String>(1)?,
+                                row.get::<_, String>(2)?,
+                                row.get::<_, String>(3)?,
+                                row.get::<_, i64>(4)?,
+                            ),
+                        )
+                    },
+            ).map_err(|_| HostDomainReadError::InvalidEvidence)?;
+            let mut output = Vec::new();
+            let mut count = 0usize;
+            for row in rows {
+                if count == 1_024 {
+                    return Err(HostDomainReadError::OutputLimit);
+                }
+                let (id, project, kind, status, instances) = row.map_err(
+                    |_| HostDomainReadError::InvalidEvidence,
+                )?;
+                output.extend_from_slice(
+                    format!("{id}\t{status}\t{kind}\t{project}\tinstances={instances}\n").as_bytes(),
+                );
+                count += 1;
+            }
+            if count == 0 {
+                output.extend_from_slice(b"no findings\n");
+            }
+            bounded(output)?
+        },
+        HostDomainReadAction::Report => {
+            let report = load_finding(&connection, subject)?;
+            let report_facts = facts(&report);
+            match format {
+                ReportFormat::Human => render_human_report(&report)?,
+                ReportFormat::Json => render_json_report(report_facts)?,
+                ReportFormat::JsonLines => render_json_lines_report(report_facts)?,
+                ReportFormat::Sarif => render_sarif_report(&report, report_facts)?,
+                ReportFormat::Junit => render_junit_report(&report)?,
+                ReportFormat::EvidenceGraph => render_evidence_graph(&report)?,
+                ReportFormat::BundleManifest => { render_bundle_manifest(&report, report_facts)? },
+            }
+        },
+        HostDomainReadAction::Capabilities => render_capabilities(&connection)?,
+        HostDomainReadAction::Proof => render_proof_report(&connection)?,
+        HostDomainReadAction::Tcb => render_tcb_report()?,
+        HostDomainReadAction::Plugins => render_plugin_report(&connection)?,
+    };
+    connection.execute_batch("COMMIT;").map_err(|_| HostDomainReadError::Workspace)?;
+    connection.close().map_err(|_| HostDomainReadError::Workspace)?;
+    Ok(output)
+}
+
+// CRUCIBLE-TCB: CLI-HOST-FINDING-001
+#[verifier::external_body]
+fn host_finding_action(
+    action: HostFindingAction,
+    root: &str,
+    subject: &str,
+    patch: Option<&ArtifactRef>,
+) -> (result: Result<Vec<u8>, HostFindingError>)
+    ensures
+        match &result {
+            Ok(output) => output@.len() <= MAX_DOMAIN_REPORT_BYTES,
+            Err(_) => true,
+        },
+{
+    fn lexical_absolute(path: &Path) -> Result<PathBuf, HostFindingError> {
+        let candidate = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().map_err(|_| HostFindingError::Workspace)?.join(path)
+        };
+        let mut normalized = PathBuf::new();
+        for component in candidate.components() {
+            match component {
+                Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                    normalized.push(component.as_os_str());
+                },
+                Component::CurDir => {},
+                Component::ParentDir => {
+                    if !normalized.pop() {
+                        return Err(HostFindingError::Workspace);
+                    }
+                },
+            }
+        }
+        if normalized.is_absolute() {
+            Ok(normalized)
+        } else {
+            Err(HostFindingError::Workspace)
+        }
+    }
+
+    fn require_safe_directory(path: &Path) -> Result<(), HostFindingError> {
+        let mut cursor = PathBuf::new();
+        for component in path.components() {
+            cursor.push(component.as_os_str());
+            if matches!(component, Component::Prefix(_) | Component::RootDir) {
+                continue;
+            }
+            let metadata = std::fs::symlink_metadata(&cursor).map_err(
+                |_| HostFindingError::Workspace,
+            )?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(HostFindingError::Workspace);
+            }
+        }
+        Ok(())
+    }
+
+    fn open_database(root: &Path, read_only: bool) -> Result<Connection, HostFindingError> {
+        require_safe_directory(root)?;
+        let state = root.join(".crucible");
+        require_safe_directory(&state)?;
+        let database = state.join("database.sqlite");
+        let metadata = std::fs::symlink_metadata(&database).map_err(
+            |_| HostFindingError::Workspace,
+        )?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(HostFindingError::Workspace);
+        }
+        let connection = if read_only {
+            Connection::open_with_flags(
+                database,
+                OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+            )
+        } else {
+            Connection::open(database)
+        }.map_err(|_| HostFindingError::Workspace)?;
+        connection.set_limit(Limit::SQLITE_LIMIT_LENGTH, 1_048_576).map_err(
+            |_| HostFindingError::Workspace,
+        )?;
+        connection.busy_timeout(std::time::Duration::from_secs(5)).map_err(
+            |_| HostFindingError::Workspace,
+        )?;
+        connection.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = FULL;").map_err(
+            |_| HostFindingError::Workspace,
+        )?;
+        let application_id: i64 = connection.query_row(
+            "PRAGMA application_id",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| HostFindingError::Workspace)?;
+        let version: i64 = connection.query_row(
+            "PRAGMA user_version",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| HostFindingError::Workspace)?;
+        let quick: String = connection.query_row(
+            "PRAGMA quick_check",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| HostFindingError::Workspace)?;
+        if application_id != WORKSPACE_APPLICATION_ID || version != WORKSPACE_SCHEMA_VERSION
+            || quick != "ok" {
+            return Err(HostFindingError::Workspace);
+        }
+        Ok(connection)
+    }
+
+    fn next_sequence(transaction: &rusqlite::Transaction<'_>, name: &str) -> Result<
+        i64,
+        HostFindingError,
+    > {
+        transaction.query_row(
+            "INSERT INTO id_sequences(name, next_value) VALUES (?1, 1)
+             ON CONFLICT(name) DO UPDATE SET next_value = next_value + 1
+             RETURNING next_value",
+            [name],
+            |row| row.get(0),
+        ).map_err(|_| HostFindingError::Persist)
+    }
+
+    fn bounded(mut output: Vec<u8>) -> Result<Vec<u8>, HostFindingError> {
+        if output.last() != Some(&b'\n') {
+            output.push(b'\n');
+        }
+        if output.len() > MAX_DOMAIN_REPORT_BYTES {
+            Err(HostFindingError::OutputLimit)
+        } else {
+            Ok(output)
+        }
+    }
+
+    if subject.is_empty() || subject.len() > 4_096 {
+        return Err(HostFindingError::NotFound);
+    }
+    let root = lexical_absolute(Path::new(root))?;
+    match action {
+        HostFindingAction::Replay => {
+            let connection = open_database(&root, true)?;
+            let original: (String, i64, String, Option<String>, Option<String>, String) =
+                connection.query_row(
+                "SELECT r.effective_configuration_artifact_id, a.size_bytes,
+                            rm.environment_artifact_id, rm.generated_schedule_artifact_id,
+                            rm.fault_trace_artifact_id, fi.run_attempt_id
+                     FROM findings f
+                     JOIN finding_instances fi ON fi.finding_id = f.id AND fi.is_original = 1
+                     JOIN run_attempts ra ON ra.id = fi.run_attempt_id
+                     JOIN runs r ON r.id = ra.run_id
+                     JOIN artifacts a ON a.id = r.effective_configuration_artifact_id
+                     JOIN run_replay_metadata rm ON rm.run_id = r.id
+                     WHERE f.id = ?1 ORDER BY fi.id LIMIT 1",
+                [subject],
+                |row|
+                    Ok(
+                        (
+                            row.get(0)?,
+                            row.get(1)?,
+                            row.get(2)?,
+                            row.get(3)?,
+                            row.get(4)?,
+                            row.get(5)?,
+                        ),
+                    ),
+            ).optional().map_err(|_| HostFindingError::Integrity)?.ok_or(
+                HostFindingError::NotFound,
+            )?;
+            connection.close().map_err(|_| HostFindingError::Workspace)?;
+            if original.1 < 0 || original.1 as u64 > MAX_CONFIGURATION_SOURCE_BYTES {
+                return Err(HostFindingError::Integrity);
+            }
+            let artifact_id = ArtifactId::new(original.0.clone());
+            let address = object_address_for_artifact(&artifact_id).map_err(
+                |_| HostFindingError::Integrity,
+            )?;
+            let object_directory = root.join(".crucible").join("objects").join(
+                &address.algorithm,
+            ).join(&address.first).join(&address.second);
+            require_safe_directory(&object_directory)?;
+            let object_path = object_directory.join(&address.object_name);
+            let metadata = std::fs::symlink_metadata(&object_path).map_err(
+                |_| HostFindingError::Integrity,
+            )?;
+            if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len()
+                != original.1 as u64 {
+                return Err(HostFindingError::Integrity);
+            }
+            use std::io::{Read, Write};
+            let file = std::fs::File::open(&object_path).map_err(|_| HostFindingError::Integrity)?;
+            let mut contents = Vec::new();
+            file.take(MAX_CONFIGURATION_SOURCE_BYTES + 1).read_to_end(&mut contents).map_err(
+                |_| HostFindingError::Integrity,
+            )?;
+            if contents.len() as u64 != original.1 as u64 || ContentDigest::from_bytes(
+                &contents,
+            ).map_err(|_| HostFindingError::Integrity)?.into_artifact_id().as_str() != original.0 {
+                return Err(HostFindingError::Integrity);
+            }
+            let replay_name =
+                format!(
+                ".crucible-replay-{}-{}.yaml",
+                std::process::id(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(
+                    |_| HostFindingError::Execution,
+                )?.as_nanos(),
+            );
+            let replay_path = root.join(replay_name);
+            let mut replay_file = std::fs::OpenOptions::new().write(true).create_new(true).open(
+                &replay_path,
+            ).map_err(|_| HostFindingError::Execution)?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                replay_file.set_permissions(std::fs::Permissions::from_mode(0o600)).map_err(
+                    |_| HostFindingError::Execution,
+                )?;
+            }
+            replay_file.write_all(&contents).and_then(|()| replay_file.sync_all()).map_err(
+                |_| HostFindingError::Execution,
+            )?;
+            drop(replay_file);
+            drop(contents);
+            let executable = std::env::current_exe().map_err(|_| HostFindingError::Execution)?;
+            let status_result = std::process::Command::new(executable).arg("run").arg(
+                &replay_path,
+            ).current_dir(&root).stdin(std::process::Stdio::null()).stdout(
+                std::process::Stdio::null(),
+            ).stderr(std::process::Stdio::inherit()).status();
+            let removed = std::fs::remove_file(&replay_path);
+            if removed.is_err() {
+                return Err(HostFindingError::Execution);
+            }
+            let status = status_result.map_err(|_| HostFindingError::Execution)?;
+            if !status.success() {
+                return Err(HostFindingError::Execution);
+            }
+            let mut connection = open_database(&root, false)?;
+            let transaction = connection.transaction_with_behavior(
+                rusqlite::TransactionBehavior::Immediate,
+            ).map_err(|_| HostFindingError::Persist)?;
+            let replayed: (String, String, String, Option<String>, Option<String>) =
+                transaction.query_row(
+                "SELECT fi.run_attempt_id, ov.verdict, rm.environment_artifact_id,
+                            rm.generated_schedule_artifact_id, rm.fault_trace_artifact_id
+                     FROM finding_instances fi
+                     JOIN run_attempts ra ON ra.id = fi.run_attempt_id
+                     JOIN runs r ON r.id = ra.run_id
+                     JOIN oracle_verdicts ov ON ov.attempt_id = ra.id
+                     JOIN run_replay_metadata rm ON rm.run_id = r.id
+                     WHERE fi.finding_id = ?1
+                     ORDER BY fi.id DESC LIMIT 1",
+                [subject],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            ).map_err(|_| HostFindingError::Integrity)?;
+            if replayed.0 == original.5 {
+                return Err(HostFindingError::Execution);
+            }
+            let observed = if replayed.1 == "fail" {
+                1_i64
+            } else {
+                0_i64
+            };
+            let environment_equivalent = if replayed.2 == original.2 {
+                1_i64
+            } else {
+                0_i64
+            };
+            let schedule_exact = if original.3.is_some() && replayed.3 == original.3 {
+                1_i64
+            } else {
+                0_i64
+            };
+            let fault_exact = if original.4.is_some() && replayed.4 == original.4 {
+                1_i64
+            } else {
+                0_i64
+            };
+            let sample_id = format!("reproduction-{subject}");
+            let prior: Option<(i64, i64, i64, i64, i64)> = transaction.query_row(
+                "SELECT attempt_count, observed_failures, environment_equivalent,
+                        schedule_replayed_exactly, fault_trace_replayed_exactly
+                 FROM reproduction_samples WHERE id = ?1",
+                [sample_id.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            ).optional().map_err(|_| HostFindingError::Persist)?;
+            let (attempts, failures, environments, schedules, faults) = match prior {
+                Some((attempts, failures, environments, schedules, faults)) => (
+                    attempts.checked_add(1).ok_or(HostFindingError::Persist)?,
+                    failures.checked_add(observed).ok_or(HostFindingError::Persist)?,
+                    environments.min(environment_equivalent),
+                    schedules.min(schedule_exact),
+                    faults.min(fault_exact),
+                ),
+                None => (1_i64, observed, environment_equivalent, schedule_exact, fault_exact),
+            };
+            if attempts > 1_000_000 {
+                return Err(HostFindingError::Persist);
+            }
+            let classification = if failures == attempts {
+                "stable-under-recorded-controls"
+            } else if failures == 0 {
+                "not-observed-in-sample"
+            } else {
+                "intermittent-under-recorded-controls"
+            };
+            let evidence_artifact: String = transaction.query_row(
+                "SELECT ov.facts_artifact_id FROM oracle_verdicts ov
+                 WHERE ov.attempt_id = ?1 ORDER BY ov.id LIMIT 1",
+                [replayed.0.as_str()],
+                |row| row.get(0),
+            ).map_err(|_| HostFindingError::Integrity)?;
+            transaction.execute(
+                "INSERT INTO reproduction_samples(
+                    id, finding_id, promise, attempt_count, observed_failures,
+                    environment_equivalent, schedule_replayed_exactly,
+                    fault_trace_replayed_exactly, classification, evidence_artifact_id
+                 ) VALUES (?1, ?2, 'finding', ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                 ON CONFLICT(id) DO UPDATE SET
+                    attempt_count = excluded.attempt_count,
+                    observed_failures = excluded.observed_failures,
+                    environment_equivalent = excluded.environment_equivalent,
+                    schedule_replayed_exactly = excluded.schedule_replayed_exactly,
+                    fault_trace_replayed_exactly = excluded.fault_trace_replayed_exactly,
+                    classification = excluded.classification,
+                    evidence_artifact_id = excluded.evidence_artifact_id",
+                params![
+                    sample_id,
+                    subject,
+                    attempts,
+                    failures,
+                    environments,
+                    schedules,
+                    faults,
+                    classification,
+                    evidence_artifact,
+                ],
+            ).map_err(|_| HostFindingError::Persist)?;
+            transaction.commit().map_err(|_| HostFindingError::Persist)?;
+            connection.close().map_err(|_| HostFindingError::Persist)?;
+            bounded(
+                format!(
+                "{subject}: {failures}/{attempts} under recorded controls ({classification}; determinism is not proven)"
+            ).into_bytes(),
+            )
+        },
+        HostFindingAction::Minimize => {
+            let connection = open_database(&root, true)?;
+            let finding_exists: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM findings WHERE id = ?1",
+                [subject],
+                |row| row.get(0),
+            ).map_err(|_| HostFindingError::Integrity)?;
+            if finding_exists != 1 {
+                return Err(HostFindingError::NotFound);
+            }
+            let inputs: i64 = connection.query_row(
+                "SELECT COUNT(*) FROM corpus_entries ce
+                 JOIN finding_campaigns fc ON fc.campaign_id = ce.campaign_id
+                 WHERE fc.finding_id = ?1 AND ce.state IN ('seed','interesting','coverage','regression','minimized')",
+                [subject],
+                |row| row.get(0),
+            ).map_err(|_| HostFindingError::Integrity)?;
+            connection.close().map_err(|_| HostFindingError::Workspace)?;
+            if inputs == 0 {
+                Err(HostFindingError::NoMinimizableInput)
+            } else {
+                Err(HostFindingError::Execution)
+            }
+        },
+        HostFindingAction::RegisterPatch => {
+            let patch = patch.ok_or(HostFindingError::Integrity)?;
+            let mut connection = open_database(&root, false)?;
+            let transaction = connection.transaction_with_behavior(
+                rusqlite::TransactionBehavior::Immediate,
+            ).map_err(|_| HostFindingError::Persist)?;
+            let finding: Option<String> = transaction.query_row(
+                "SELECT rm.campaign_seed
+                 FROM findings f
+                 JOIN finding_instances fi ON fi.finding_id = f.id AND fi.is_original = 1
+                 JOIN run_attempts ra ON ra.id = fi.run_attempt_id
+                 JOIN run_replay_metadata rm ON rm.run_id = ra.run_id
+                 WHERE f.id = ?1 ORDER BY fi.id LIMIT 1",
+                [subject],
+                |row| row.get(0),
+            ).optional().map_err(|_| HostFindingError::Integrity)?;
+            let seed = finding.ok_or(HostFindingError::NotFound)?;
+            let patch_sequence = next_sequence(&transaction, "patch")?;
+            let verification_sequence = next_sequence(&transaction, "verification-run")?;
+            if patch_sequence <= 0 || verification_sequence <= 0 {
+                return Err(HostFindingError::Persist);
+            }
+            let patch_id = format!("PATCH-{patch_sequence:05}");
+            let verification_id = format!("verification-{verification_sequence:020}");
+            transaction.execute(
+                "INSERT INTO patches(id, finding_id, patch_artifact_id, producer_identity, status)
+                 VALUES (?1, ?2, ?3, 'crucible-cli-submission-v1', 'candidate')",
+                params![patch_id, subject, patch.id.as_str()],
+            ).map_err(|_| HostFindingError::Persist)?;
+            transaction.execute(
+                "INSERT INTO verification_runs(id, patch_id, status, evidence_artifact_id, seed)
+                 VALUES (?1, ?2, 'inconclusive', ?3, ?4)",
+                params![verification_id, patch_id, patch.id.as_str(), seed],
+            ).map_err(|_| HostFindingError::Persist)?;
+            let generation: i64 = transaction.query_row(
+                "SELECT id FROM storage_generations WHERE status = 'open'
+                 ORDER BY id DESC LIMIT 1",
+                [],
+                |row| row.get(0),
+            ).map_err(|_| HostFindingError::Persist)?;
+            transaction.execute(
+                "INSERT INTO artifact_roots(artifact_id, root_kind, root_id, generation_id)
+                 VALUES (?1, 'manual', ?2, ?3)
+                 ON CONFLICT(artifact_id, root_kind, root_id) DO NOTHING",
+                params![patch.id.as_str(), patch_id, generation],
+            ).map_err(|_| HostFindingError::Persist)?;
+            transaction.commit().map_err(|_| HostFindingError::Persist)?;
+            connection.close().map_err(|_| HostFindingError::Persist)?;
+            Err(HostFindingError::VerificationInconclusive)
+        },
+    }
+}
+
+// CRUCIBLE-TCB: CLI-HOST-LOG-001
+#[verifier::external_body]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the structured event boundary receives every correlation identity explicitly"
+)]
+fn host_structured_log(
+    action: HostLogAction,
+    event: &str,
+    campaign_id: &str,
+    engine_id: &str,
+    experiment_id: &str,
+    run_id: &str,
+    run_attempt_id: &str,
+    target_id: &str,
+    target_build_id: &str,
+    worker_id: &str,
+    finding_id: &str,
+) {
+    match action {
+        HostLogAction::Initialize => {
+            if std::env::var_os("CRUCIBLE_LOG").as_deref() == Some(std::ffi::OsStr::new("json")) {
+                let initialized = tracing_subscriber::fmt().json().with_ansi(false).with_target(
+                    true,
+                ).with_writer(std::io::stderr).with_max_level(tracing::Level::INFO).try_init();
+                if initialized.is_ok() {
+                    tracing::event!(
+                        target: "crucible",
+                        tracing::Level::INFO,
+                        event = "process-started",
+                        severity = "INFO",
+                    );
+                }
+            }
+        },
+        HostLogAction::Event => {
+            tracing::event!(
+                target: "crucible",
+                tracing::Level::INFO,
+                event = event,
+                campaign_id = campaign_id,
+                engine_id = engine_id,
+                experiment_id = experiment_id,
+                run_id = run_id,
+                run_attempt_id = run_attempt_id,
+                scenario_id = "",
+                scenario_step_id = "",
+                participant_id = "",
+                target_id = target_id,
+                target_build_id = target_build_id,
+                worker_id = worker_id,
+                finding_id = finding_id,
+                proof_artifact_id = "",
+                trusted_boundary_id = "",
+                severity = "INFO",
+            );
+        },
+    }
 }
 
 // CRUCIBLE-TCB: CLI-HOST-COMPLETE-001
@@ -2851,7 +5503,8 @@ fn complete_workspace_migration(root: &str, action: HostWorkspaceAction) -> (res
         Ok(InitializationDecision::Reuse) => Ok(()),
         Ok(InitializationDecision::Create)
         | Ok(InitializationDecision::MigrateV1)
-        | Ok(InitializationDecision::MigrateV2) => Err(InitCommandError::Publish),
+        | Ok(InitializationDecision::MigrateV2)
+        | Ok(InitializationDecision::MigrateV3) => Err(InitCommandError::Publish),
         Err(error) => Err(map_policy_error(error)),
     }
 }
@@ -2866,6 +5519,9 @@ fn initialize_workspace(root: &str) -> (result: Result<(), InitCommandError>) {
         },
         Ok(InitializationDecision::MigrateV2) => {
             complete_workspace_migration(root, HostWorkspaceAction::MigrateV2)
+        },
+        Ok(InitializationDecision::MigrateV3) => {
+            complete_workspace_migration(root, HostWorkspaceAction::MigrateV3)
         },
         Ok(InitializationDecision::Create) => {
             match host_workspace_action(root, HostWorkspaceAction::Publish) {
@@ -2885,7 +5541,8 @@ fn initialize_workspace(root: &str) -> (result: Result<(), InitCommandError>) {
                 Ok(InitializationDecision::Reuse) => Ok(()),
                 Ok(InitializationDecision::Create)
                 | Ok(InitializationDecision::MigrateV1)
-                | Ok(InitializationDecision::MigrateV2) => Err(InitCommandError::Publish),
+                | Ok(InitializationDecision::MigrateV2)
+                | Ok(InitializationDecision::MigrateV3) => Err(InitCommandError::Publish),
                 Err(error) => Err(map_policy_error(error)),
             }
         },
@@ -2899,9 +5556,9 @@ fn artifact_workspace_is_ready(root: &str) -> (ready: bool) {
     };
     match decide_workspace_initialization(&snapshot) {
         Ok(InitializationDecision::Reuse) => true,
-        Ok(InitializationDecision::MigrateV1) | Ok(InitializationDecision::MigrateV2) => {
-            initialize_workspace(root).is_ok()
-        },
+        Ok(InitializationDecision::MigrateV1)
+        | Ok(InitializationDecision::MigrateV2)
+        | Ok(InitializationDecision::MigrateV3) => { initialize_workspace(root).is_ok() },
         Ok(InitializationDecision::Create) | Err(_) => false,
     }
 }
@@ -3067,6 +5724,173 @@ fn verify_artifact(id: String, root: &str) -> (result: Result<ArtifactId, Artifa
     }
 }
 
+fn inspection_artifact_snapshot(root: &str, artifact: &ArtifactRef) -> (result: Result<
+    StoredArtifactSnapshot,
+    InspectionCommandError,
+>) {
+    let address = object_address_for_artifact(&artifact.id).map_err(
+        |_error| InspectionCommandError::ArtifactIntegrity,
+    )?;
+    match host_artifact_action(
+        HostArtifactAction::Load,
+        root,
+        "",
+        Some(&address),
+        Some(artifact),
+        &[],
+    ) {
+        Ok(HostArtifactOutcome::Snapshot(snapshot)) => Ok(snapshot),
+        Ok(HostArtifactOutcome::Source(_, _)) | Ok(HostArtifactOutcome::Published) => {
+            Err(InspectionCommandError::ArtifactIntegrity)
+        },
+        Err(HostArtifactError::Workspace) => Err(InspectionCommandError::Workspace),
+        Err(HostArtifactError::UnsafeSource)
+        | Err(HostArtifactError::TooLarge)
+        | Err(HostArtifactError::Publish)
+        | Err(HostArtifactError::Load) => Err(InspectionCommandError::ArtifactIntegrity),
+    }
+}
+
+fn inspection_preview(root: &str, artifact: &ArtifactRef) -> (result: Result<
+    crucible_cli::AuthenticatedArtifactPreview,
+    InspectionCommandError,
+>) {
+    let snapshot = inspection_artifact_snapshot(root, artifact)?;
+    authenticate_artifact_preview(artifact, snapshot).map_err(
+        |error|
+            match error {
+                InspectionArtifactError::TooLarge | InspectionArtifactError::Integrity => {
+                    InspectionCommandError::ArtifactIntegrity
+                },
+            },
+    )
+}
+
+fn authenticate_inspection_artifact(root: &str, artifact: &ArtifactRef, limit: u64) -> Result<
+    Vec<u8>,
+    InspectionCommandError,
+> {
+    if artifact.size_bytes > limit {
+        return Err(InspectionCommandError::ArtifactIntegrity);
+    }
+    let snapshot = inspection_artifact_snapshot(root, artifact)?;
+    authenticate_artifact_contents(artifact, snapshot, limit).map_err(
+        |error|
+            match error {
+                InspectionArtifactError::TooLarge | InspectionArtifactError::Integrity => {
+                    InspectionCommandError::ArtifactIntegrity
+                },
+            },
+    )
+}
+
+fn inspect_run(run_id: &str, root: &str) -> (result: Result<Vec<u8>, InspectionCommandError>) {
+    if !artifact_workspace_is_ready(root) {
+        return Err(InspectionCommandError::Workspace);
+    }
+    let host_snapshot = host_inspection_snapshot(root, run_id).map_err(
+        |error|
+            match error {
+                HostInspectionError::Workspace => InspectionCommandError::Workspace,
+                HostInspectionError::NotFound => InspectionCommandError::NotFound,
+                HostInspectionError::InvalidEvidence => InspectionCommandError::InvalidEvidence,
+            },
+    )?;
+    let inspection = validate_run_inspection(run_id, host_snapshot).map_err(
+        |error|
+            match error {
+                InspectionValidationError::IdentityMismatch
+                | InspectionValidationError::InvalidMetadata
+                | InspectionValidationError::InvalidState => InspectionCommandError::InvalidEvidence,
+            },
+    )?;
+    let snapshot = inspection.snapshot();
+
+    let configuration_source = inspection_preview(root, &snapshot.configuration_source)?;
+    let effective_configuration = inspection_preview(root, &snapshot.effective_configuration)?;
+    {
+        let _capability = authenticate_inspection_artifact(
+            root,
+            &snapshot.capability_manifest,
+            MAX_LOCAL_ARTIFACT_BYTES,
+        )?;
+    }
+    if let Some(target) = &snapshot.target {
+        {
+            let _target_contents = authenticate_inspection_artifact(
+                root,
+                &target.target_artifact,
+                MAX_LOCAL_ARTIFACT_BYTES,
+            )?;
+        }
+        {
+            let _manifest_contents = authenticate_inspection_artifact(
+                root,
+                &target.manifest_artifact,
+                MAX_LOCAL_ARTIFACT_BYTES,
+            )?;
+        }
+    }
+    if let Some(failure) = &snapshot.harness_failure {
+        if let Some(artifact) = &failure.detail_artifact {
+            let _detail = authenticate_inspection_artifact(
+                root,
+                artifact,
+                MAX_LOCAL_ARTIFACT_BYTES,
+            )?;
+        }
+    }
+    let (decoded_observation, stdout, stderr) = match &snapshot.observation {
+        Some(record) => {
+            let encoded = authenticate_inspection_artifact(
+                root,
+                &record.artifact,
+                MAX_INSPECTION_OBSERVATION_BYTES,
+            )?;
+            let decoded = decode_raw_observation(
+                encoded,
+                inspection_observation_codec_limits(),
+            ).map_err(|_error| InspectionCommandError::Observation)?;
+            let stdout = inspection_preview(root, &record.stdout_artifact)?;
+            let stderr = inspection_preview(root, &record.stderr_artifact)?;
+            (Some(decoded), Some(stdout), Some(stderr))
+        },
+        None => (None, None, None),
+    };
+    let previews = InspectionPreviews {
+        configuration_source,
+        effective_configuration,
+        stdout,
+        stderr,
+    };
+    render_run_inspection_report(&inspection, decoded_observation.as_ref(), &previews).map_err(
+        |error|
+            match error {
+                InspectionReportError::EvidenceMismatch => InspectionCommandError::InvalidEvidence,
+                InspectionReportError::ReportTooLarge => InspectionCommandError::Report,
+            },
+    )
+}
+
+fn complete_inspection_error(error: InspectionCommandError) {
+    let message: &[u8] = match error {
+        InspectionCommandError::Workspace => {
+            b"crucible inspect: workspace is missing, incompatible, or unsafe\n"
+        },
+        InspectionCommandError::NotFound => b"crucible inspect: run was not found\n",
+        InspectionCommandError::InvalidEvidence => {
+            b"crucible inspect: persisted evidence is inconsistent\n"
+        },
+        InspectionCommandError::ArtifactIntegrity => {
+            b"crucible inspect: artifact integrity failure\n"
+        },
+        InspectionCommandError::Observation => { b"crucible inspect: observation decoding failed\n"
+        },
+        InspectionCommandError::Report => b"crucible inspect: report limit exceeded\n",
+    };
+    host_complete(false, message)
+}
+
 fn artifact_output(prefix: &[u8], id: &ArtifactId) -> (output: Vec<u8>) {
     let mut output = vstd::slice::slice_to_vec(prefix);
     let bytes = id.as_str().as_bytes_vec();
@@ -3081,6 +5905,13 @@ fn artifact_output(prefix: &[u8], id: &ArtifactId) -> (output: Vec<u8>) {
     }
     output.push(b'\n');
     output
+}
+
+fn prefixed_identifier(prefix: &str, value: &str) -> (result: String) {
+    let mut result = String::new();
+    result.push_str(prefix);
+    result.push_str(value);
+    result
 }
 
 fn complete_artifact_error(error: ArtifactCommandError) {
@@ -3140,6 +5971,46 @@ fn append_decimal_u64(output: &mut Vec<u8>, mut value: u64) {
     {
         index -= 1;
         output.push(reversed[index]);
+    }
+}
+
+fn storage_maintenance_output(report: StorageMaintenanceReport) -> (output: Vec<u8>) {
+    let mut output = Vec::new();
+    append_bytes(&mut output, b"verified=");
+    append_decimal_u64(&mut output, report.verified);
+    append_bytes(&mut output, b" orphaned=");
+    append_decimal_u64(&mut output, report.orphaned);
+    append_bytes(&mut output, b" temporary=");
+    append_decimal_u64(&mut output, report.temporary);
+    append_bytes(&mut output, b" collected=");
+    append_decimal_u64(&mut output, report.collected);
+    append_bytes(&mut output, b" preserved=");
+    append_decimal_u64(&mut output, report.preserved);
+    output.push(b'\n');
+    output
+}
+
+fn run_storage_maintenance(root: &str, action: HostStorageAction) {
+    match host_storage_maintenance(root, action) {
+        Ok(report) => {
+            let output = storage_maintenance_output(report);
+            host_complete(true, output.as_slice());
+        },
+        Err(HostStorageError::UnsafeWorkspace) => {
+            host_complete(false, b"crucible artifact: unsafe workspace\n");
+        },
+        Err(HostStorageError::Integrity) => {
+            host_complete(false, b"crucible artifact: storage integrity failure\n");
+        },
+        Err(HostStorageError::WorkLimit) => {
+            host_complete(false, b"crucible artifact: storage scan exceeds the 4096-entry limit\n");
+        },
+        Err(HostStorageError::ActiveLease) => {
+            host_complete(false, b"crucible artifact gc: active publication lease\n");
+        },
+        Err(HostStorageError::Persistence) => {
+            host_complete(false, b"crucible artifact: storage maintenance failed\n");
+        },
     }
 }
 
@@ -3227,6 +6098,42 @@ fn publish_run_generated_artifact(root: &str, contents: &[u8]) -> (result: Resul
     Ok(publication)
 }
 
+fn record_build(
+    root: &str,
+    effective_configuration: &ArtifactRef,
+    configuration_digest: &str,
+    capability_manifest: &ArtifactRef,
+    target: &ArtifactRef,
+    target_manifest: &ArtifactRef,
+    project_name: &[u32],
+) -> (result: Result<(), RunCommandError>) {
+    match host_run_store_action(
+        HostRunStoreAction::RecordBuild,
+        root,
+        None,
+        None,
+        Some(effective_configuration),
+        configuration_digest,
+        Some(capability_manifest),
+        None,
+        0,
+        Some(target),
+        Some(target_manifest),
+        None,
+        None,
+        None,
+        0,
+        0,
+        "",
+        project_name,
+        PersistenceRetentionPolicy::ManagedReplay,
+        LocalOracleVerdict::Pass,
+    ) {
+        Ok(HostRunStoreOutcome::Updated) => Ok(()),
+        Ok(HostRunStoreOutcome::Reserved(_)) | Err(_) => Err(RunCommandError::Persistence),
+    }
+}
+
 fn reserve_run(
     root: &str,
     configuration_source: &ArtifactRef,
@@ -3259,6 +6166,9 @@ fn reserve_run(
         0,
         0,
         "",
+        &[],
+        PersistenceRetentionPolicy::ManagedReplay,
+        LocalOracleVerdict::Pass,
     ) {
         Ok(HostRunStoreOutcome::Reserved(reservation)) => Ok(reservation),
         Ok(HostRunStoreOutcome::Updated) | Err(_) => Err(RunCommandError::Persistence),
@@ -3289,6 +6199,9 @@ fn attach_run_target(
         0,
         0,
         "",
+        &[],
+        PersistenceRetentionPolicy::ManagedReplay,
+        LocalOracleVerdict::Pass,
     ) {
         Ok(HostRunStoreOutcome::Updated) => Ok(()),
         Ok(HostRunStoreOutcome::Reserved(_)) | Err(_) => Err(RunCommandError::Persistence),
@@ -3317,12 +6230,50 @@ fn record_run_harness_failure(root: &str, reservation: &ReservedRun, kind: &str)
         0,
         0,
         kind,
+        &[],
+        PersistenceRetentionPolicy::ManagedReplay,
+        LocalOracleVerdict::Pass,
     ) {
         Ok(HostRunStoreOutcome::Updated) => Ok(()),
         Ok(HostRunStoreOutcome::Reserved(_)) | Err(_) => Err(RunCommandError::Persistence),
     }
 }
 
+fn record_fuzz_success(root: &str, reservation: &ReservedRun, project_name: &[u32]) -> Result<
+    (),
+    RunCommandError,
+> {
+    match host_run_store_action(
+        HostRunStoreAction::AggregateSuccess,
+        root,
+        Some(reservation),
+        None,
+        None,
+        "",
+        None,
+        None,
+        0,
+        None,
+        None,
+        None,
+        None,
+        None,
+        0,
+        0,
+        "",
+        project_name,
+        PersistenceRetentionPolicy::HighThroughput,
+        LocalOracleVerdict::Pass,
+    ) {
+        Ok(HostRunStoreOutcome::Updated) => Ok(()),
+        Ok(HostRunStoreOutcome::Reserved(_)) | Err(_) => Err(RunCommandError::Persistence),
+    }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "this boundary forwards one complete authenticated observation without an intermediate duplicate"
+)]
 fn record_run_observation(
     root: &str,
     reservation: &ReservedRun,
@@ -3331,6 +6282,9 @@ fn record_run_observation(
     stderr: &ArtifactRef,
     completion_tag: u16,
     termination_tag: u16,
+    project_name: &[u32],
+    retention_policy: PersistenceRetentionPolicy,
+    oracle_verdict: LocalOracleVerdict,
 ) -> (result: Result<(), RunCommandError>) {
     match host_run_store_action(
         HostRunStoreAction::RecordObservation,
@@ -3350,6 +6304,9 @@ fn record_run_observation(
         completion_tag,
         termination_tag,
         "",
+        project_name,
+        retention_policy,
+        oracle_verdict,
     ) {
         Ok(HostRunStoreOutcome::Updated) => Ok(()),
         Ok(HostRunStoreOutcome::Reserved(_)) | Err(_) => Err(RunCommandError::Persistence),
@@ -3360,6 +6317,14 @@ fn run_id_output(reservation: &ReservedRun) -> (output: Vec<u8>) {
     let bytes = reservation.run_id().as_str().as_bytes_vec();
     let mut output = Vec::new();
     append_bytes(&mut output, bytes.as_slice());
+    output.push(b'\n');
+    output
+}
+
+fn campaign_id_output(reservation: &ReservedRun) -> (output: Vec<u8>) {
+    let mut output = Vec::new();
+    append_bytes(&mut output, b"campaign-");
+    append_bytes(&mut output, reservation.run_id().as_str().as_bytes_vec().as_slice());
     output.push(b'\n');
     output
 }
@@ -3394,7 +6359,279 @@ fn persist_failure_then_complete(
     }
 }
 
-fn run_local_configuration(path: &str) {
+fn complete_build_error(error: RunCommandError) {
+    let message: &[u8] = match error {
+        RunCommandError::Workspace => {
+            b"crucible build: workspace is missing, incompatible, or unsafe\n"
+        },
+        RunCommandError::Artifact => b"crucible build: artifact publication failed\n",
+        RunCommandError::TargetPreparation => b"crucible build: target preparation failed\n",
+        RunCommandError::CapabilityUnavailable => {
+            b"crucible build: required build capability is unavailable\n"
+        },
+        RunCommandError::Persistence => b"crucible build: build persistence failed\n",
+        RunCommandError::Execution | RunCommandError::Observation => {
+            b"crucible build: build identity construction failed\n"
+        },
+    };
+    host_complete(false, message);
+}
+
+fn build_local_configuration(path: &str) {
+    let contents = match host_read_configuration(path) {
+        Ok(value) => value,
+        Err(HostConfigError::UnsafeSource) => {
+            host_complete(false, b"crucible build: unsafe configuration source\n");
+            return;
+        },
+        Err(HostConfigError::TooLarge) => {
+            host_complete(false, b"crucible build: configuration exceeds the source limit\n");
+            return;
+        },
+        Err(HostConfigError::Read) => {
+            host_complete(false, b"crucible build: could not read configuration\n");
+            return;
+        },
+        #[cfg(not(unix))]
+        Err(HostConfigError::UnsupportedPlatform) => {
+            complete_build_error(RunCommandError::CapabilityUnavailable);
+            return;
+        },
+    };
+    let validated = match validate_configuration(
+        contents.as_slice(),
+        canonical_configuration_limits(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_configuration_error(error);
+            return;
+        },
+    };
+    let plan = match prepare_local_execution(validated.execution()) {
+        Ok(plan) => plan,
+        Err(_) => {
+            complete_build_error(RunCommandError::CapabilityUnavailable);
+            return;
+        },
+    };
+    let root = match host_local_run_action(
+        HostLocalRunAction::ResolveWorkspace,
+        path,
+        "",
+        &plan,
+        &[],
+        &[],
+    ) {
+        Ok(HostLocalRunOutcome::WorkspaceRoot(root)) => root,
+        Ok(_) | Err(_) => {
+            complete_build_error(RunCommandError::Workspace);
+            return;
+        },
+    };
+    if !artifact_workspace_is_ready(root.as_str()) {
+        complete_build_error(RunCommandError::Workspace);
+        return;
+    }
+    let (probe_report, host_runtime) = match host_local_run_action(
+        HostLocalRunAction::ProbeCapabilities,
+        path,
+        root.as_str(),
+        &plan,
+        &[],
+        &[],
+    ) {
+        Ok(HostLocalRunOutcome::CapabilityProbe(report, runtime)) => (report, runtime),
+        Ok(_) | Err(_) => {
+            complete_build_error(RunCommandError::CapabilityUnavailable);
+            return;
+        },
+    };
+    let probe = match validate_local_capability_probe(&plan, probe_report) {
+        Ok(value) if value.available() => value,
+        Ok(_) | Err(_) => {
+            complete_build_error(RunCommandError::CapabilityUnavailable);
+            return;
+        },
+    };
+    let host_runtime = match host_runtime {
+        Some(runtime) => runtime,
+        None => {
+            complete_build_error(RunCommandError::CapabilityUnavailable);
+            return;
+        },
+    };
+    let probe_publication = match publish_run_generated_artifact(root.as_str(), probe.report()) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let source_publication = match prepare_run_artifact(contents.as_slice()) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    if publish_artifact(root.as_str(), path, &source_publication, contents.as_slice()).is_err() {
+        complete_build_error(RunCommandError::Artifact);
+        return;
+    }
+    let effective_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        validated.canonical_bytes(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let capability_bytes = local_capability_manifest(&plan, &probe, &probe_publication.artifact);
+    let capability_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        capability_bytes.as_slice(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let harness_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        host_runtime.harness_contents.as_slice(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let bubblewrap_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        host_runtime.bubblewrap_contents.as_slice(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let prlimit_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        host_runtime.prlimit_contents.as_slice(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let runtime_identity = match LocalRuntimeIdentity::new(
+        host_runtime.platform,
+        host_runtime.architecture,
+        host_runtime.kernel_release,
+        host_runtime.bubblewrap_version,
+        host_runtime.prlimit_version,
+        harness_publication.artifact,
+        bubblewrap_publication.artifact,
+        prlimit_publication.artifact,
+    ) {
+        Ok(value) => value,
+        Err(_) => {
+            complete_build_error(RunCommandError::Execution);
+            return;
+        },
+    };
+    let (target_contents, target_provenance) = match host_local_run_action(
+        HostLocalRunAction::ReadTarget,
+        path,
+        root.as_str(),
+        &plan,
+        &[],
+        &[],
+    ) {
+        Ok(HostLocalRunOutcome::Target(contents, provenance)) => (contents, provenance),
+        Ok(_) | Err(_) => {
+            complete_build_error(RunCommandError::TargetPreparation);
+            return;
+        },
+    };
+    let target_publication = match prepare_run_artifact(target_contents.as_slice()) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    if publish_artifact(
+        root.as_str(),
+        target_provenance.as_str(),
+        &target_publication,
+        target_contents.as_slice(),
+    ).is_err() {
+        complete_build_error(RunCommandError::Artifact);
+        return;
+    }
+    let target_manifest_bytes = target_build_manifest(
+        &target_publication.artifact,
+        &runtime_identity,
+    );
+    let target_manifest_publication = match publish_run_generated_artifact(
+        root.as_str(),
+        target_manifest_bytes.as_slice(),
+    ) {
+        Ok(value) => value,
+        Err(error) => {
+            complete_build_error(error);
+            return;
+        },
+    };
+    let configuration_identity = ContentDigest::Sha256(validated.digest()).into_artifact_id();
+    if record_build(
+        root.as_str(),
+        &effective_publication.artifact,
+        configuration_identity.as_str(),
+        &capability_publication.artifact,
+        &target_publication.artifact,
+        &target_manifest_publication.artifact,
+        validated.execution().project_name(),
+    ).is_err() {
+        complete_build_error(RunCommandError::Persistence);
+        return;
+    }
+    let target_build_id = prefixed_identifier(
+        "target-build-",
+        target_manifest_publication.artifact.id.as_str(),
+    );
+    let target_id = prefixed_identifier("target-", target_build_id.as_str());
+    host_structured_log(
+        HostLogAction::Event,
+        "build-completed",
+        "",
+        "local-cli",
+        "",
+        "",
+        "",
+        target_id.as_str(),
+        target_build_id.as_str(),
+        "local-process",
+        "",
+    );
+    let mut output = Vec::new();
+    append_bytes(&mut output, b"target-build-");
+    append_bytes(
+        &mut output,
+        target_manifest_publication.artifact.id.as_str().as_bytes_vec().as_slice(),
+    );
+    output.push(b'\n');
+    host_complete(true, output.as_slice());
+}
+
+fn run_local_configuration(path: &str, retention_policy: PersistenceRetentionPolicy) {
     let contents = match host_read_configuration(path) {
         Ok(value) => value,
         Err(HostConfigError::UnsafeSource) => {
@@ -3793,6 +7030,50 @@ fn run_local_configuration(path: &str) {
             return;
         },
     };
+    let oracle_verdict = evaluate_process_exit_oracle(
+        evidence.termination(),
+        validated.execution().allowed_exit_codes(),
+        validated.execution().timeout_is_failure(),
+    );
+    if retention_policy == PersistenceRetentionPolicy::HighThroughput && oracle_verdict
+        == LocalOracleVerdict::Pass {
+        if record_fuzz_success(
+            root.as_str(),
+            &reservation,
+            validated.execution().project_name(),
+        ).is_err() {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "EvidencePersistence",
+                RunCommandError::Persistence,
+            );
+            return;
+        }
+        let output = campaign_id_output(&reservation);
+        let campaign_id = prefixed_identifier("campaign-", reservation.run_id().as_str());
+        let experiment_id = prefixed_identifier("experiment-", reservation.run_id().as_str());
+        let target_build_id = prefixed_identifier(
+            "target-build-",
+            target_manifest_publication.artifact.id.as_str(),
+        );
+        let target_id = prefixed_identifier("target-", target_build_id.as_str());
+        host_structured_log(
+            HostLogAction::Event,
+            "fuzz-success-aggregated",
+            campaign_id.as_str(),
+            "coverage-fuzzing",
+            experiment_id.as_str(),
+            reservation.run_id().as_str(),
+            reservation.attempt_id().as_str(),
+            target_id.as_str(),
+            target_build_id.as_str(),
+            "local-process",
+            "",
+        );
+        host_complete(true, output.as_slice());
+        return;
+    }
     let stdout_publication = match publish_run_generated_artifact(
         root.as_str(),
         evidence.stdout().retained(),
@@ -3893,6 +7174,9 @@ fn run_local_configuration(path: &str) {
         raw.stderr().artifact(),
         completion_tag,
         termination_tag,
+        validated.execution().project_name(),
+        retention_policy,
+        oracle_verdict,
     ).is_err() {
         persist_failure_then_complete(
             root.as_str(),
@@ -3902,6 +7186,26 @@ fn run_local_configuration(path: &str) {
         );
         return;
     }
+    let campaign_id = prefixed_identifier("campaign-", reservation.run_id().as_str());
+    let experiment_id = prefixed_identifier("experiment-", reservation.run_id().as_str());
+    let target_build_id = prefixed_identifier(
+        "target-build-",
+        target_manifest_publication.artifact.id.as_str(),
+    );
+    let target_id = prefixed_identifier("target-", target_build_id.as_str());
+    host_structured_log(
+        HostLogAction::Event,
+        "run-observed",
+        campaign_id.as_str(),
+        "local-cli",
+        experiment_id.as_str(),
+        reservation.run_id().as_str(),
+        reservation.attempt_id().as_str(),
+        target_id.as_str(),
+        target_build_id.as_str(),
+        "local-process",
+        "",
+    );
     let output = run_id_output(&reservation);
     host_complete(true, output.as_slice());
 }
@@ -3945,7 +7249,145 @@ fn run_configuration(path: &str, canonicalize: bool) {
     }
 }
 
+fn complete_domain_read_error(command: &[u8], error: HostDomainReadError) {
+    let detail: &[u8] = match error {
+        HostDomainReadError::Workspace => b": workspace is missing, incompatible, or unsafe\n",
+        HostDomainReadError::NotFound => b": finding not found\n",
+        HostDomainReadError::InvalidEvidence => b": stored evidence is invalid\n",
+        HostDomainReadError::OutputLimit => b": report exceeds the bounded output limit\n",
+    };
+    let mut output = Vec::new();
+    append_bytes(&mut output, b"crucible ");
+    append_bytes(&mut output, command);
+    append_bytes(&mut output, detail);
+    host_complete(false, output.as_slice());
+}
+
+fn run_domain_read(
+    action: HostDomainReadAction,
+    root: &str,
+    subject: &str,
+    format: ReportFormat,
+    command: &[u8],
+) {
+    match host_domain_read(action, root, subject, format) {
+        Ok(output) => host_complete(true, output.as_slice()),
+        Err(error) => complete_domain_read_error(command, error),
+    }
+}
+
+fn complete_finding_error(action: HostFindingAction, error: HostFindingError) {
+    let message: &[u8] = match error {
+        HostFindingError::Workspace => {
+            b"crucible: workspace is missing, incompatible, or unsafe\n"
+        },
+        HostFindingError::NotFound => b"crucible: finding not found\n",
+        HostFindingError::Integrity => b"crucible: finding evidence integrity failure\n",
+        HostFindingError::Execution => match action {
+            HostFindingAction::Replay => b"crucible replay: recorded execution failed\n",
+            HostFindingAction::Minimize => {
+                b"crucible minimize: recorded input delivery cannot preserve the predicate\n"
+            },
+            HostFindingAction::RegisterPatch => {
+                b"crucible verify: verification execution failed\n"
+            },
+        },
+        HostFindingError::NoMinimizableInput => {
+            b"crucible minimize: finding has no minimizable input artifact\n"
+        },
+        HostFindingError::Persist => b"crucible: finding evidence persistence failed\n",
+        HostFindingError::VerificationInconclusive => {
+            b"crucible verify: verification inconclusive: finding has no recorded source snapshot and build recipe\n"
+        },
+        HostFindingError::OutputLimit => b"crucible: command output exceeds the bounded limit\n",
+    };
+    host_complete(false, message);
+}
+
+fn run_finding_action(action: HostFindingAction, root: &str, subject: &str) {
+    match host_finding_action(action, root, subject, None) {
+        Ok(output) => {
+            host_structured_log(
+                HostLogAction::Event,
+                "finding-operation-completed",
+                "",
+                "local-cli",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "local-process",
+                subject,
+            );
+            host_complete(true, output.as_slice());
+        },
+        Err(error) => complete_finding_error(action, error),
+    }
+}
+
+fn verify_finding(subject: &str, patch_path: &str, root: &str) {
+    if let Err(error) = host_domain_read(
+        HostDomainReadAction::Report,
+        root,
+        subject,
+        ReportFormat::Human,
+    ) {
+        let mapped = match error {
+            HostDomainReadError::NotFound => HostFindingError::NotFound,
+            HostDomainReadError::Workspace => HostFindingError::Workspace,
+            HostDomainReadError::InvalidEvidence => HostFindingError::Integrity,
+            HostDomainReadError::OutputLimit => HostFindingError::OutputLimit,
+        };
+        complete_finding_error(HostFindingAction::RegisterPatch, mapped);
+        return;
+    }
+    let publication = match import_artifact(patch_path, root) {
+        Ok(publication) => publication,
+        Err(error) => {
+            complete_artifact_error(error);
+            return;
+        },
+    };
+    match host_finding_action(
+        HostFindingAction::RegisterPatch,
+        root,
+        subject,
+        Some(&publication.artifact),
+    ) {
+        Ok(output) => host_complete(true, output.as_slice()),
+        Err(error) => complete_finding_error(HostFindingAction::RegisterPatch, error),
+    }
+}
+
+fn complete_usage() {
+    host_complete(
+        false,
+        b"usage: crucible init [path]\n\
+       crucible artifact import <file> [workspace]\n\
+       crucible artifact verify <artifact-id> [workspace]\n\
+       crucible artifact check [workspace]\n\
+       crucible artifact gc [workspace]\n\
+       crucible build <configuration>\n\
+       crucible run <configuration>\n\
+       crucible fuzz <configuration>\n\
+       crucible replay <finding-id> [workspace]\n\
+       crucible minimize <finding-id> [workspace]\n\
+       crucible findings [workspace]\n\
+       crucible inspect <run-id> [workspace]\n\
+       crucible verify <finding-id> --patch <file> [workspace]\n\
+       crucible report <finding-id> --format <human|json|jsonl|sarif|junit|evidence|bundle> [workspace]\n\
+       crucible config validate <file>\n\
+       crucible config canonicalize <file>\n\
+       crucible capabilities [workspace]\n\
+       crucible proof [workspace]\n\
+       crucible tcb [workspace]\n\
+       crucible plugins [workspace]\n",
+    );
+}
+
 fn main() {
+    host_structured_log(HostLogAction::Initialize, "", "", "", "", "", "", "", "", "", "");
     let arguments = match host_cli_args() {
         Ok(arguments) => arguments,
         Err(HostArgumentError::NonUtf8) => {
@@ -3953,10 +7395,7 @@ fn main() {
             return;
         },
         Err(HostArgumentError::TooMany) => {
-            host_complete(
-                false,
-                b"usage: crucible init [path]\n       crucible run <configuration>\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n       crucible config validate <file>\n       crucible config canonicalize <file>\n",
-            );
+            complete_usage();
             return;
         },
         Err(HostArgumentError::TooLong) => {
@@ -3967,10 +7406,7 @@ fn main() {
     let action = match parse_cli_args(&arguments) {
         Ok(action) => action,
         Err(CliParseError::UnsupportedArguments) => {
-            host_complete(
-                false,
-                b"usage: crucible init [path]\n       crucible run <configuration>\n       crucible artifact import <file> [workspace]\n       crucible artifact verify <artifact-id> [workspace]\n       crucible config validate <file>\n       crucible config canonicalize <file>\n",
-            );
+            complete_usage();
             return;
         },
     };
@@ -3994,7 +7430,80 @@ fn main() {
                 host_complete(false, b"crucible init: could not publish workspace\n")
             },
         },
-        CliAction::Run(path) => run_local_configuration(path.as_str()),
+        CliAction::Build(path) => build_local_configuration(path.as_str()),
+        CliAction::Run(path) => {
+            run_local_configuration(path.as_str(), PersistenceRetentionPolicy::ManagedReplay)
+        },
+        CliAction::Fuzz(path) => {
+            run_local_configuration(path.as_str(), PersistenceRetentionPolicy::HighThroughput)
+        },
+        CliAction::Replay(subject, root) => run_finding_action(
+            HostFindingAction::Replay,
+            root.as_str(),
+            subject.as_str(),
+        ),
+        CliAction::Minimize(subject, root) => run_finding_action(
+            HostFindingAction::Minimize,
+            root.as_str(),
+            subject.as_str(),
+        ),
+        CliAction::VerifyFinding(subject, patch, root) => verify_finding(
+            subject.as_str(),
+            patch.as_str(),
+            root.as_str(),
+        ),
+        CliAction::Findings(root) => run_domain_read(
+            HostDomainReadAction::Findings,
+            root.as_str(),
+            "",
+            ReportFormat::Human,
+            b"findings",
+        ),
+        CliAction::Report(subject, format, root) => run_domain_read(
+            HostDomainReadAction::Report,
+            root.as_str(),
+            subject.as_str(),
+            format,
+            b"report",
+        ),
+        CliAction::Capabilities(root) => run_domain_read(
+            HostDomainReadAction::Capabilities,
+            root.as_str(),
+            "",
+            ReportFormat::Json,
+            b"capabilities",
+        ),
+        CliAction::Proof(root) => run_domain_read(
+            HostDomainReadAction::Proof,
+            root.as_str(),
+            "",
+            ReportFormat::Json,
+            b"proof",
+        ),
+        CliAction::Tcb(root) => run_domain_read(
+            HostDomainReadAction::Tcb,
+            root.as_str(),
+            "",
+            ReportFormat::Json,
+            b"tcb",
+        ),
+        CliAction::Plugins(root) => run_domain_read(
+            HostDomainReadAction::Plugins,
+            root.as_str(),
+            "",
+            ReportFormat::Json,
+            b"plugins",
+        ),
+        CliAction::ArtifactCheck(root) => {
+            run_storage_maintenance(root.as_str(), HostStorageAction::Check)
+        },
+        CliAction::ArtifactGc(root) => {
+            run_storage_maintenance(root.as_str(), HostStorageAction::Collect)
+        },
+        CliAction::Inspect(run_id, root) => match inspect_run(run_id.as_str(), root.as_str()) {
+            Ok(report) => host_complete(true, report.as_slice()),
+            Err(error) => complete_inspection_error(error),
+        },
         CliAction::ArtifactImport(source, root) => {
             match import_artifact(source.as_str(), root.as_str()) {
                 Ok(publication) => {

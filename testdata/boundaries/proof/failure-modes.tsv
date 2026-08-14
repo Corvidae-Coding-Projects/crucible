@@ -1,0 +1,4 @@
+mode	expected-classification
+timeout	proof-timeout
+solver-exit	proof-solver-failure
+stale-cache	proof-cache-identity-mismatch

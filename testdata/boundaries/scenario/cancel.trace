@@ -1,0 +1,5 @@
+scenario=scenario-fixture
+participant=worker-a
+step=running
+event=cancel
+expected=participant-cleaned

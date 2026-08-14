@@ -18,6 +18,9 @@ pub mod execution_codec;
 pub mod observation;
 pub mod observation_codec;
 pub mod provenance;
+pub mod replay;
+pub mod scheduler;
+pub mod storage;
 
 pub use artifact::{
     parse_artifact_id, sha256, ArtifactIdParseError, ArtifactIdentityError, ArtifactRef,
@@ -59,6 +62,24 @@ pub use provenance::{
     EvidenceGraph, EvidenceGraphError, EvidenceKind, EvidenceNode, EvidenceValidationError,
     GraphInsertOutcome, ProducerIdentity, ProvenanceEdge, ProvenanceRelation, SchemaIdentity,
     TimestampError, TransformationConfiguration, TransformationIdentity, UtcTimestamp,
+};
+pub use replay::{
+    derive_replay_seeds, ReplaySeeds, ENGINE_SEED_DOMAIN, EXPERIMENT_SEED_DOMAIN,
+    FAULT_SEED_DOMAIN, SCHEDULING_SEED_DOMAIN,
+};
+pub use scheduler::{
+    schedule_campaign, EngineAllocation, EngineClass, EngineStats, ProvenanceCredit,
+    SchedulerError, SchedulerPolicy, ENGINE_CLASS_COUNT, MAX_SCHEDULER_CREDITS,
+    MAX_SCHEDULER_METRIC, MAX_SCHEDULER_SLOTS,
+};
+pub use storage::{
+    admit_persistence_item, admit_verified_bundle_signature, advance_publication,
+    conservative_gc_plan, ArtifactObjectStore, BundleSignatureAlgorithm, BundleSignatureError,
+    BundleSignatureScope, GcCandidate, GcPlan, GcRootKind, GenerationLease, MetadataBackend,
+    MetadataTransaction, ObjectBackend, PersistenceDecision, PersistenceItem, PersistenceItemKind,
+    PersistenceRetentionPolicy, PublicationState, PublicationTransition, StoragePolicyError,
+    StorageTopology, TransactionalMetadataStore, VerifiedBundleSignature, MAX_GC_CANDIDATES,
+    MAX_GC_LEASES, MAX_PERSISTENCE_BATCH_BYTES, MAX_PERSISTENCE_BATCH_ITEMS,
 };
 
 verus! {

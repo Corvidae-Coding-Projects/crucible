@@ -6,7 +6,7 @@ fixtures, adapters, documentation, and adversarial review.
 
 ## Before contributing
 
-1. Read the [README](README.md), [design specification](crucible.md),
+1. Read the [README](README.md), [design specification index](crucible.md),
    [roadmap](ROADMAP.md), and [governance model](GOVERNANCE.md).
 2. Search existing issues and discussions before opening a new thread.
 3. Use the appropriate issue form for a reproducible defect, capability proposal, or design
@@ -89,9 +89,10 @@ For every code change, run the mandatory project interfaces:
 cargo xtask format --check
 cargo xtask verify --all
 cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth
-cargo fmt --check
+cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
-cargo test --all
+cargo test --all --locked -- --test-threads=1
+actionlint .github/workflows/*.yml
 ```
 
 The xtask commands consume `tools/verus-toolchain.lock`, resolve absolute tools, validate exact

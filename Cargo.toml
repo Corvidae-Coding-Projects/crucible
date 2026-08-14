@@ -15,8 +15,10 @@ repository = "https://github.com/Corvidae-Coding-Projects/crucible"
 rust-version = "1.97.1"
 
 [workspace.dependencies]
-rusqlite = { version = "0.40.2", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled", "limits"] }
 rustix = { version = "1.1.4", features = ["fs", "process"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt", "json"] }
 vstd = { git = "https://github.com/verus-lang/verus.git", rev = "92f466f247f45128c630d1c843fd6e27d2115587" }
 
 [workspace.lints.rust]

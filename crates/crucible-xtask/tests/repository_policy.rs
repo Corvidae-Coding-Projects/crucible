@@ -200,3 +200,75 @@ fn canonical_verification_is_single_threaded_and_reports_the_cap() {
     assert!(separator < thread_flag && thread_flag < thread_count);
     assert!(verify.contains("--num-threads 1"));
 }
+
+#[test]
+fn all_ci_tiers_are_explicit_resource_bounded_and_fail_closed() {
+    let root = workspace_root();
+    let every_commit =
+        fs::read_to_string(root.join(".github/workflows/code.yml")).expect("every-commit workflow");
+    let nightly =
+        fs::read_to_string(root.join(".github/workflows/nightly.yml")).expect("nightly workflow");
+    let weekly =
+        fs::read_to_string(root.join(".github/workflows/weekly.yml")).expect("weekly workflow");
+
+    for (name, workflow) in [
+        ("every commit", every_commit.as_str()),
+        ("nightly", nightly.as_str()),
+        ("weekly", weekly.as_str()),
+    ] {
+        assert!(
+            workflow.contains("CARGO_BUILD_JOBS: 1"),
+            "{name} build jobs"
+        );
+        assert!(
+            workflow.contains("RUST_TEST_THREADS: 1"),
+            "{name} test threads"
+        );
+        assert!(workflow.contains("timeout-minutes:"), "{name} timeout");
+        assert!(
+            !workflow.contains("continue-on-error"),
+            "{name} must fail closed"
+        );
+    }
+
+    for required in [
+        "cargo xtask verify --all",
+        "cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth",
+        "cargo clippy --all-targets --all-features -- -D warnings",
+        "cargo test --all --locked -- --test-threads=1",
+        "cargo test -p crucible-cli --test harness_selftest -- --test-threads=1",
+        "cargo test -p crucible-cli --test build_fuzz_cli -- --test-threads=1",
+        "cargo test -p crucible-core --locked -- --test-threads=1",
+        "cargo test -p crucible-yaml --locked -- --test-threads=1",
+    ] {
+        assert!(every_commit.contains(required), "Tier 1 omitted {required}");
+    }
+
+    assert!(nightly.contains("cron: '17 3 * * *'"));
+    for required in [
+        "sanitizer",
+        "extended_campaign",
+        "metamorphic",
+        "differential",
+        "mutation",
+        "storage_maintenance",
+        "boundary_corpus",
+        "cargo xtask verify --all",
+    ] {
+        assert!(nightly.contains(required), "Tier 2 omitted {required}");
+    }
+
+    assert!(weekly.contains("cron: '29 4 * * 0'"));
+    for required in [
+        "symbolic",
+        "concurrency",
+        "extended_campaign",
+        "soak",
+        "aarch64-unknown-linux-gnu",
+        "cargo xtask verify --all",
+        "cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth",
+        "scenario_topology",
+    ] {
+        assert!(weekly.contains(required), "Tier 3 omitted {required}");
+    }
+}

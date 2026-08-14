@@ -62,6 +62,80 @@ pub enum LocalTermination {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LocalOracleVerdict {
+    Pass,
+    Fail,
+}
+
+pub open spec fn allowed_exit_code_spec(allowed: Seq<i64>, code: i64) -> bool {
+    exists|index: int| 0 <= index < allowed.len() && allowed[index] == code
+}
+
+pub open spec fn process_exit_oracle_spec(
+    termination: LocalTermination,
+    allowed_exit_codes: Seq<i64>,
+    timeout_is_failure: bool,
+) -> LocalOracleVerdict {
+    match termination {
+        LocalTermination::ExitCode(code) => if allowed_exit_code_spec(allowed_exit_codes, code) {
+            LocalOracleVerdict::Pass
+        } else {
+            LocalOracleVerdict::Fail
+        },
+        LocalTermination::UnixSignal { .. } => LocalOracleVerdict::Fail,
+        LocalTermination::Timeout => if timeout_is_failure {
+            LocalOracleVerdict::Fail
+        } else {
+            LocalOracleVerdict::Pass
+        },
+    }
+}
+
+fn allowed_exit_code(allowed: &[i64], code: i64) -> (accepted: bool)
+    ensures
+        accepted == allowed_exit_code_spec(allowed@, code),
+{
+    let mut index = 0usize;
+    while index < allowed.len()
+        invariant
+            index <= allowed.len(),
+            forall|prior: int| 0 <= prior < index ==> allowed@[prior] != code,
+        decreases allowed.len() - index,
+    {
+        if allowed[index] == code {
+            assert(allowed_exit_code_spec(allowed@, code));
+            return true;
+        }
+        index += 1;
+    }
+    assert(!allowed_exit_code_spec(allowed@, code));
+    false
+}
+
+pub fn evaluate_process_exit_oracle(
+    termination: LocalTermination,
+    allowed_exit_codes: &[i64],
+    timeout_is_failure: bool,
+) -> (verdict: LocalOracleVerdict)
+    ensures
+        verdict == process_exit_oracle_spec(termination, allowed_exit_codes@, timeout_is_failure),
+{
+    match termination {
+        LocalTermination::ExitCode(code) => if allowed_exit_code(allowed_exit_codes, code) {
+            LocalOracleVerdict::Pass
+        } else {
+            LocalOracleVerdict::Fail
+        },
+        LocalTermination::UnixSignal { .. } => LocalOracleVerdict::Fail,
+        LocalTermination::Timeout => if timeout_is_failure {
+            LocalOracleVerdict::Fail
+        } else {
+            LocalOracleVerdict::Pass
+        },
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LocalExecutionEvidenceError {
     RetainedOutputTooLarge,

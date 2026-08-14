@@ -1,0 +1,4 @@
+operation=read
+path=/host/not-mounted
+payload=none
+expected=not-found

@@ -1,0 +1,108 @@
+name: Nightly depth verification
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-depth-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sanitizer:
+    name: Address sanitizer
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pinned sanitizer toolchain
+        run: rustup toolchain install nightly-2026-08-10 --profile minimal --component rust-src
+      - name: Run core tests under AddressSanitizer
+        env:
+          RUSTFLAGS: -Zsanitizer=address
+          RUSTDOCFLAGS: -Zsanitizer=address
+        run: >-
+          cargo +nightly-2026-08-10 test -Zbuild-std
+          --target x86_64-unknown-linux-gnu
+          -p crucible-core --tests -- --test-threads=1
+
+  depth:
+    name: Engines, parsers, mutation, and faults
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal
+      - name: Install Linux isolation tools
+        run: sudo apt-get update && sudo apt-get install --yes bubblewrap
+      - name: Run the extended seeded fuzz campaign
+        run: >-
+          cargo test -p crucible-cli --test build_fuzz_cli
+          extended_campaign -- --ignored --exact --test-threads=1
+      - name: Run metamorphic and differential scheduler checks
+        run: >-
+          cargo test -p crucible-core --test scheduler
+          nightly_ -- --test-threads=1
+      - name: Run checked-in mutation adequacy operators
+        run: >-
+          cargo test -p crucible-core --test mutation_adequacy
+          -- --test-threads=1
+      - name: Inject interrupted-publication and corruption faults
+        run: >-
+          cargo test -p crucible-cli --test storage_maintenance
+          -- --test-threads=1
+      - name: Exercise every untrusted boundary corpus
+        run: >-
+          cargo test -p crucible-cli --test boundary_corpus
+          -- --test-threads=1
+
+  proof-reproducibility:
+    name: Rotating proof shard and full reproducibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 1
+      RUST_TEST_THREADS: 1
+      CARGO_INCREMENTAL: 0
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.97.1-x86_64-unknown-linux-gnu --profile minimal --component rustfmt
+      - name: Install digest-checked Verus toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          tool_root="$RUNNER_TEMP/crucible-tools"
+          mkdir -p "$tool_root/verus" "$tool_root/verusfmt"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/verus.zip" \
+            https://github.com/verus-lang/verus/releases/download/release/0.2026.08.09.92f466f/verus-0.2026.08.09.92f466f-x86-linux.zip
+          printf '%s  %s\n' \
+            2f5a41c553f424aacdd732339e9d125563716a0b003c27730f75d6f81a282cef \
+            "$RUNNER_TEMP/verus.zip" | sha256sum --check --strict
+          unzip -q "$RUNNER_TEMP/verus.zip" -d "$tool_root/verus"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/verusfmt.tar.xz" \
+            https://github.com/verus-lang/verusfmt/releases/download/v0.7.2/verusfmt-x86_64-unknown-linux-gnu.tar.xz
+          printf '%s  %s\n' \
+            c5e0a8e07337055b2469d2878ddcc589da1f4be91348bb1917ce122ea46d4015 \
+            "$RUNNER_TEMP/verusfmt.tar.xz" | sha256sum --check --strict
+          tar -xJf "$RUNNER_TEMP/verusfmt.tar.xz" -C "$tool_root/verusfmt" --strip-components=1
+          printf '%s\n' "$tool_root/verus/verus-x86-linux" >> "$GITHUB_PATH"
+          printf '%s\n' "$tool_root/verusfmt" >> "$GITHUB_PATH"
+      - name: Reproduce the complete proof set
+        run: cargo xtask verify --all

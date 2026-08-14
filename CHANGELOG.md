@@ -10,6 +10,15 @@ begin.
 
 ### Added
 
+- Completed the §§71–80 control-plane slice: a verified bounded scheduler; portable storage
+  interfaces and conservative collection; schema-version-4 domain, replay, scenario, and
+  persistence records; the full initial CLI grammar; fact-separated portable reports; five-seed
+  replay evidence; structured tracing; known-defect and untrusted-boundary corpora; and explicit
+  every-commit, nightly, and weekly CI tiers. The work is decomposed in a checked acceptance ledger
+  and recorded by ADR-0005.
+- Split the normative design specification into concern-oriented authoritative slices behind a
+  stable index, with documentation checks that reject missing, duplicated, reordered, or
+  incorrectly owned numbered sections.
 - Added the first production `crucible` binary and `crucible init [path]`, creating the documented
   workspace layout plus an application-identified, versioned, integrity-checked SQLite database;
   initialization is idempotent, refuses incompatible or symlinked state, and is covered through
