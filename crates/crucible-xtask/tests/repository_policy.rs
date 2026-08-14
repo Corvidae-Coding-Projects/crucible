@@ -231,6 +231,23 @@ fn all_ci_tiers_are_explicit_resource_bounded_and_fail_closed() {
         );
     }
 
+    for (name, workflow) in [
+        ("every commit", every_commit.as_str()),
+        ("nightly", nightly.as_str()),
+        ("weekly", weekly.as_str()),
+    ] {
+        assert!(
+            workflow.contains("apt-get install --yes bubblewrap"),
+            "{name} bubblewrap"
+        );
+        assert!(
+            workflow.contains(
+                "echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns"
+            ),
+            "{name} Ubuntu user-namespace admission"
+        );
+    }
+
     for required in [
         "cargo xtask verify --all",
         "cargo xtask tcb-audit --deny-unregistered --deny-unapproved-growth",
