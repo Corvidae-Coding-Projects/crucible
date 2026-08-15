@@ -32,11 +32,32 @@ spec_files=(
   docs/spec/12-expansion-and-completion-standard.md
 )
 
-required_files+=("${spec_files[@]}")
+work_slice_files=(
+  docs/work-slices/phase-1-execution-core.md
+  docs/work-slices/scheduling-storage-cli-reporting.md
+)
+
+required_files+=("${spec_files[@]}" "${work_slice_files[@]}")
 
 for path in "${required_files[@]}"; do
   if [[ ! -s "$path" ]]; then
     echo "required repository file is missing or empty: $path" >&2
+    exit 1
+  fi
+done
+
+if ! grep -Fq \
+  '(docs/work-slices/phase-1-execution-core.md)' \
+  ROADMAP.md; then
+  echo "roadmap must link the Phase 1 execution-core work-slice ledger" >&2
+  exit 1
+fi
+
+phase_one_slices=(P1-A P1-B P1-C P1-D P1-E P1-F P1-G P1-H P1-I)
+for slice in "${phase_one_slices[@]}"; do
+  if ! grep -Eq "^\\| ${slice} \\|.*\\| (Accepted|Planned) \\|$" \
+    docs/work-slices/phase-1-execution-core.md; then
+    echo "Phase 1 work-slice ledger must own ${slice} with an accepted or planned state" >&2
     exit 1
   fi
 done

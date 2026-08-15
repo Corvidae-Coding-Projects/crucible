@@ -23,6 +23,13 @@ streaming corpus ingestion, native fuzzers, minimization reducers, additional pl
 scenario execution remain governed by their owning specification sections. Delivery order changes
 do not remove an acceptance criterion or later capability.
 
+Phase 1 execution-core breadth and exit acceptance are divided into the all-or-nothing units in
+[the Phase 1 work-slice ledger](docs/work-slices/phase-1-execution-core.md). The existing Linux
+direct-argument boundary and common exclusive adapter lifecycle are accepted; all input-delivery
+modes, cancellation and terminal-path cleanup, executor identity completion, macOS and Windows
+backends, architecture conformance, and corpus-level phase acceptance remain planned until their
+complete evidence gates pass.
+
 Current work establishes and extends:
 
 - public project governance and contribution processes;

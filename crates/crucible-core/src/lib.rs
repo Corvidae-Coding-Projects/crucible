@@ -21,6 +21,7 @@ pub mod provenance;
 pub mod replay;
 pub mod scheduler;
 pub mod storage;
+pub mod target_adapter;
 
 pub use artifact::{
     parse_artifact_id, sha256, ArtifactIdParseError, ArtifactIdentityError, ArtifactRef,
@@ -80,6 +81,11 @@ pub use storage::{
     PersistenceRetentionPolicy, PublicationState, PublicationTransition, StoragePolicyError,
     StorageTopology, TransactionalMetadataStore, VerifiedBundleSignature, MAX_GC_CANDIDATES,
     MAX_GC_LEASES, MAX_PERSISTENCE_BATCH_BYTES, MAX_PERSISTENCE_BATCH_ITEMS,
+};
+pub use target_adapter::{
+    advance_target_instance_lifecycle, TargetAdapterIdentity, TargetAdapterIdentityView,
+    TargetAdapterKind, TargetInstanceLifecycle, TargetInstanceLifecycleView, TargetLifecycleAction,
+    TargetLifecycleError, TargetLifecycleState, MAX_TARGET_INSTANCE_ORDINAL,
 };
 
 verus! {

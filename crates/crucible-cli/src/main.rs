@@ -12,27 +12,28 @@ use crucible_cli::{
     inspection_observation_codec_limits, local_capability_manifest, metadata_table_sql,
     migration_checksum, migration_table_sql, object_address_for_artifact,
     object_address_matches_id, parse_cli_args, prepare_artifact_publication,
-    prepare_local_execution, render_run_inspection_report, run_migration_checksum,
-    run_migration_name, run_migration_sql, stored_artifact_is_exact, target_build_manifest,
-    validate_configuration, validate_local_capability_probe, validate_run_inspection,
-    ArtifactStoreError, CapturedOutput, CliAction, CliParseError, ConfigurationError,
-    ConfigurationErrorKind, DatabaseSnapshot, InitializationDecision, InitializationError,
-    InspectionArtifactError, InspectionControls, InspectionHarnessFailure, InspectionObservation,
-    InspectionPreviews, InspectionReportError, InspectionStatus, InspectionTarget,
-    InspectionValidationError, LocalExecutionClassificationError, LocalExecutionPlan,
-    LocalNetworkPolicy, LocalOracleVerdict, LocalRunPlanError, LocalRuntimeIdentity,
-    LocalTermination, MigrationRecord, ObjectAddress, PathKind, PreparedArtifactPublication,
-    RawLocalExecution, ReportFormat, ReservedRun, RunAttemptStatus, RunInspectionSnapshot,
-    RunStoreTransition, StoredArtifactSnapshot, WorkspaceMetadata, WorkspaceSnapshot,
-    MAX_CLI_ARGUMENTS, MAX_CLI_ARGUMENT_BYTES, MAX_CONFIGURATION_SOURCE_BYTES,
+    prepare_local_cli_target_instance, prepare_local_execution, render_run_inspection_report,
+    run_migration_checksum, run_migration_name, run_migration_sql, stored_artifact_is_exact,
+    target_build_manifest, validate_configuration, validate_local_capability_probe,
+    validate_run_inspection, ArtifactStoreError, CapturedOutput, CliAction, CliParseError,
+    ConfigurationError, ConfigurationErrorKind, DatabaseSnapshot, InitializationDecision,
+    InitializationError, InspectionArtifactError, InspectionControls, InspectionHarnessFailure,
+    InspectionObservation, InspectionPreviews, InspectionReportError, InspectionStatus,
+    InspectionTarget, InspectionValidationError, LocalExecutionClassificationError,
+    LocalExecutionPlan, LocalNetworkPolicy, LocalOracleVerdict, LocalRunPlanError,
+    LocalRuntimeIdentity, LocalTermination, MigrationRecord, ObjectAddress, PathKind,
+    PreparedArtifactPublication, RawLocalExecution, ReportFormat, ReservedRun, RunAttemptStatus,
+    RunInspectionSnapshot, RunStoreTransition, StoredArtifactSnapshot, WorkspaceMetadata,
+    WorkspaceSnapshot, MAX_CLI_ARGUMENTS, MAX_CLI_ARGUMENT_BYTES, MAX_CONFIGURATION_SOURCE_BYTES,
     MAX_INSPECTION_OBSERVATION_BYTES, MAX_LOCAL_ARGUMENT_WIRE_BYTES, MAX_LOCAL_ARTIFACT_BYTES,
     MAX_LOCAL_CONTROL_STATUS_BYTES, MAX_LOCAL_RUNTIME_IDENTITY_TEXT_BYTES,
     WORKSPACE_APPLICATION_ID, WORKSPACE_SCHEMA_VERSION,
 };
 use crucible_core::{
-    decode_raw_observation, derive_replay_seeds, encode_raw_observation, ArtifactId, ArtifactRef,
-    ContentDigest, PersistenceRetentionPolicy, MAX_GC_CANDIDATES, MAX_PERSISTENCE_BATCH_BYTES,
-    MAX_PERSISTENCE_BATCH_ITEMS,
+    advance_target_instance_lifecycle, decode_raw_observation, derive_replay_seeds,
+    encode_raw_observation, ArtifactId, ArtifactRef, ContentDigest, PersistenceRetentionPolicy,
+    TargetBuildId, TargetId, TargetLifecycleAction, TargetLifecycleState, MAX_GC_CANDIDATES,
+    MAX_PERSISTENCE_BATCH_BYTES, MAX_PERSISTENCE_BATCH_ITEMS,
 };
 use rusqlite::limits::Limit;
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
@@ -6959,14 +6960,136 @@ fn run_local_configuration(path: &str, retention_policy: PersistenceRetentionPol
         );
         return;
     }
-    let raw_execution = match host_local_run_action(
+    let target_build_id = prefixed_identifier(
+        "target-build-",
+        target_manifest_publication.artifact.id.as_str(),
+    );
+    let target_id = prefixed_identifier("target-", target_build_id.as_str());
+    let lifecycle = match prepare_local_cli_target_instance(
+        &plan,
+        TargetId::new(target_id),
+        TargetBuildId::new(target_build_id),
+        reservation.attempt_id().clone(),
+        1,
+    ) {
+        Ok(value) => value,
+        Err(_) => {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "TargetLifecycle",
+                RunCommandError::Execution,
+            );
+            return;
+        },
+    };
+    host_structured_log(
+        HostLogAction::Event,
+        "target-instance-prepared",
+        "",
+        "local-cli",
+        "",
+        reservation.run_id().as_str(),
+        reservation.attempt_id().as_str(),
+        lifecycle.target_id().as_str(),
+        lifecycle.target_build_id().as_str(),
+        "local-process",
+        "",
+    );
+    let lifecycle = match advance_target_instance_lifecycle(
+        lifecycle,
+        TargetLifecycleAction::BeginExecute,
+    ) {
+        Ok(value) => value,
+        Err(_) => {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "TargetLifecycle",
+                RunCommandError::Execution,
+            );
+            return;
+        },
+    };
+    host_structured_log(
+        HostLogAction::Event,
+        "target-instance-executing",
+        "",
+        "local-cli",
+        "",
+        reservation.run_id().as_str(),
+        reservation.attempt_id().as_str(),
+        lifecycle.target_id().as_str(),
+        lifecycle.target_build_id().as_str(),
+        "local-process",
+        "",
+    );
+    let execution_result = host_local_run_action(
         HostLocalRunAction::Execute,
         path,
         root.as_str(),
         &plan,
         target_contents.as_slice(),
         target_argument_wire.as_slice(),
+    );
+    let lifecycle = match advance_target_instance_lifecycle(
+        lifecycle,
+        TargetLifecycleAction::FinishExecute,
     ) {
+        Ok(value) => value,
+        Err(_) => {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "TargetLifecycle",
+                RunCommandError::Execution,
+            );
+            return;
+        },
+    };
+    let cleanup_action = match &execution_result {
+        Err(HostLocalRunError::Cleanup) => TargetLifecycleAction::CleanupUncertain,
+        _ => TargetLifecycleAction::CleanupSucceeded,
+    };
+    let lifecycle = match advance_target_instance_lifecycle(lifecycle, cleanup_action) {
+        Ok(value) => value,
+        Err(_) => {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "TargetLifecycle",
+                RunCommandError::Execution,
+            );
+            return;
+        },
+    };
+    let lifecycle_event = match lifecycle.state() {
+        TargetLifecycleState::Cleaned => "target-instance-cleaned",
+        TargetLifecycleState::Discarded => "target-instance-discarded",
+        _ => {
+            persist_failure_then_complete(
+                root.as_str(),
+                &reservation,
+                "TargetLifecycle",
+                RunCommandError::Execution,
+            );
+            return;
+        },
+    };
+    host_structured_log(
+        HostLogAction::Event,
+        lifecycle_event,
+        "",
+        "local-cli",
+        "",
+        reservation.run_id().as_str(),
+        reservation.attempt_id().as_str(),
+        lifecycle.target_id().as_str(),
+        lifecycle.target_build_id().as_str(),
+        "local-process",
+        "",
+    );
+    let raw_execution = match execution_result {
         Ok(HostLocalRunOutcome::Executed(raw)) => raw,
         Ok(HostLocalRunOutcome::WorkspaceRoot(_))
         | Ok(HostLocalRunOutcome::CapabilityProbe(_, _))

@@ -10,6 +10,10 @@ begin.
 
 ### Added
 
+- Added a verified, non-cloneable target-instance lifecycle that binds adapter, target-build,
+  owner-attempt, and bounded instance identity; admits only typed prepare, execute, reset, cleanup,
+  and discard transitions; prevents execution reuse before a confident reset; and now surrounds
+  the real Linux CLI adapter with correlated prepared, executing, and cleaned/discarded events.
 - Completed the §§71–80 control-plane slice: a verified bounded scheduler; portable storage
   interfaces and conservative collection; schema-version-4 domain, replay, scenario, and
   persistence records; the full initial CLI grammar; fact-separated portable reports; five-seed
