@@ -33,3 +33,4 @@ a new record and cross-links both documents; it does not rewrite the original ra
 - [ADR-0003: Raw execution outcome and UTF-8 boundary](0003-raw-execution-outcome-utf8-boundary.md)
 - [ADR-0004: Linux local run and immutable evidence boundaries](0004-linux-local-run-and-immutable-evidence-boundaries.md)
 - [ADR-0005: Scheduler, storage, reporting, replay, and tiered-CI boundaries](0005-scheduler-storage-reporting-and-ci-boundaries.md)
+- [ADR-0006: Exclusive target-instance lifecycle](0006-exclusive-target-instance-lifecycle.md)

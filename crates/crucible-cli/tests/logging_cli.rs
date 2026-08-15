@@ -84,5 +84,33 @@ verification: {{verus: {{required: true, deny_unregistered_assumptions: true, de
     assert_eq!(correlated["fields"]["severity"], "INFO");
     assert!(correlated["fields"]["target_build_id"].is_string());
 
+    let lifecycle = records
+        .iter()
+        .filter_map(|record| {
+            let event = record["fields"]["event"].as_str()?;
+            event.starts_with("target-instance-").then_some((
+                event,
+                record["fields"]["target_id"].as_str(),
+                record["fields"]["target_build_id"].as_str(),
+                record["fields"]["worker_id"].as_str(),
+            ))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        lifecycle.iter().map(|entry| entry.0).collect::<Vec<_>>(),
+        [
+            "target-instance-prepared",
+            "target-instance-executing",
+            "target-instance-cleaned",
+        ]
+    );
+    assert!(lifecycle.iter().all(|entry| {
+        entry.1.is_some()
+            && entry.2.is_some()
+            && entry.3 == Some("local-process")
+            && entry.1 == lifecycle[0].1
+            && entry.2 == lifecycle[0].2
+    }));
+
     std::fs::remove_dir_all(root).expect("remove workspace");
 }

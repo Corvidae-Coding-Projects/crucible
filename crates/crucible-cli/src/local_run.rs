@@ -3,8 +3,9 @@ use crate::{EffectiveExecutionConfiguration, MAX_LOCAL_ARTIFACT_BYTES};
 use crucible_core::{
     canonical_raw_observation_limits, validate_raw_observation, ArtifactRef, CapturedStreamRef,
     CompletionDisposition, HarnessTerminationReason, RawExecutionEvent, RawExecutionOutcome,
-    RawObservation, RecordedDuration, ResourceSnapshot, RunAttemptId, RunId, TerminationRecord,
-    ValidatedRawObservation,
+    RawObservation, RecordedDuration, ResourceSnapshot, RunAttemptId, RunId, TargetAdapterIdentity,
+    TargetAdapterKind, TargetBuildId, TargetId, TargetInstanceLifecycle, TargetLifecycleAction,
+    TargetLifecycleError, TerminationRecord, ValidatedRawObservation,
 };
 #[expect(
     unused_imports,
@@ -1861,6 +1862,45 @@ pub fn build_local_raw_observation(
         },
         Err(_) => Err(LocalObservationError::InvalidObservation),
     }
+}
+
+pub fn prepare_local_cli_target_instance(
+    plan: &LocalExecutionPlan,
+    target_id: TargetId,
+    target_build_id: TargetBuildId,
+    owner_attempt_id: RunAttemptId,
+    instance_ordinal: u64,
+) -> (result: Result<TargetInstanceLifecycle, TargetLifecycleError>)
+    requires
+        local_execution_plan_well_formed_spec(plan@),
+    ensures
+        match &result {
+            Ok(instance) => {
+                crucible_core::target_adapter::target_instance_lifecycle_well_formed_spec(instance@)
+                    && instance@.adapter.kind == TargetAdapterKind::Cli && instance@.adapter.version
+                    == 1 && instance@.target_id == target_id@ && instance@.target_build_id
+                    == target_build_id@ && instance@.owner_attempt_id == owner_attempt_id@
+                    && instance@.instance_ordinal == instance_ordinal && instance@.state
+                    == crucible_core::TargetLifecycleState::Prepared
+            },
+            Err(_) => true,
+        },
+{
+    let adapter_kind = match plan.backend() {
+        LocalExecutionBackend::LinuxBubblewrapPrlimitV1 => TargetAdapterKind::Cli,
+    };
+    let adapter = TargetAdapterIdentity::new(adapter_kind, 1)?;
+    let allocated = TargetInstanceLifecycle::new(
+        adapter,
+        target_id,
+        target_build_id,
+        owner_attempt_id,
+        instance_ordinal,
+    )?;
+    crucible_core::advance_target_instance_lifecycle(
+        allocated,
+        TargetLifecycleAction::PrepareSucceeded,
+    )
 }
 
 } // verus!
